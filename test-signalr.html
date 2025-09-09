@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SignalR Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <div id="messages"></div>
+    <button onclick="sendTest()">Send Test</button>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://192.168.68.103:8080/hub")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        connection.start().then(function () {
+            console.log("SignalR connected successfully!");
+            document.getElementById("messages").innerHTML += "<p>✅ Connected to SignalR</p>";
+        }).catch(function (err) {
+            console.error("SignalR connection error:", err);
+            document.getElementById("messages").innerHTML += "<p>❌ Connection failed: " + err + "</p>";
+        });
+
+        connection.on("ReceivePriceUpdate", function (data) {
+            console.log("Received price update:", data);
+            document.getElementById("messages").innerHTML += "<p>📈 Price update: " + JSON.stringify(data) + "</p>";
+        });
+
+        function sendTest() {
+            fetch('http://192.168.68.103:8080/api/market/test-signalr', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            }).then(r => r.json()).then(data => {
+                console.log('Test sent:', data);
+                document.getElementById("messages").innerHTML += "<p>📤 Test sent: " + data.message + "</p>";
+            });
+        }
+    </script>
+</body>
+</html>

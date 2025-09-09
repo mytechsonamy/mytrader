@@ -1,0 +1,35 @@
+# Build artifacts
+backend/**/bin/
+backend/**/obj/
+backend/**/.vs/
+
+# Node/Expo
+frontend/**/node_modules/
+frontend/**/.expo/
+frontend/**/.expo-shared/
+frontend/**/dist/
+frontend/**/.next/
+frontend/**/build/
+
+# Env & secrets
+.env
+.env.*
+*.key
+*.pem
+
+# OS/editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Tooling
+.claude/
+
+# Logs
+*.log
+logs/
+
+# Misc
+Thumbs.db
