@@ -1,0 +1,225 @@
+{
+  "info": {
+    "name": "myTrader Agent Pack - Admin & Symbols & Users",
+    "_postman_id": "b8f6c4ed-1f11-4f7a-8f46-aaa000111222",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Users - Me",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Users - Patch Me",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"displayName\":\"Musti\",\"baseCurrency\":\"USD\",\"theme\":\"dark\"}"
+        }
+      }
+    },
+    {
+      "name": "Symbols - Get Tracked",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/symbols/tracked",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "symbols",
+            "tracked"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Symbols - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/symbols",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "symbols"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"ticker\":\"BTCUSDT\",\"venue\":\"BINANCE\"}"
+        }
+      }
+    },
+    {
+      "name": "Symbols - Patch Track",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/symbols/{{symbolId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "symbols",
+            "{{symbolId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"isTracked\":true}"
+        }
+      }
+    },
+    {
+      "name": "Admin - Track Symbol",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/symbols/track",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "symbols",
+            "track"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"ticker\":\"ETHUSDT\",\"venue\":\"BINANCE\"}"
+        }
+      }
+    },
+    {
+      "name": "Admin - Register Indicator",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/indicators/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "indicators",
+            "register"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"EMA\",\"code\":\"// indicator impl\"}"
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "symbolId",
+      "value": ""
+    }
+  ]
+}

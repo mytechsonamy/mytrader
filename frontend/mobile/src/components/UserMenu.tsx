@@ -25,7 +25,7 @@ export default function UserMenu() {
 
   const fetchUserProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('session_token');
       if (!token) {
         setLoading(false);
         return;
@@ -60,7 +60,7 @@ export default function UserMenu() {
           text: 'Çıkış Yap',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('session_token');
             // Navigate to login screen - this should be handled by the app's navigation
             console.log('User logged out');
           },

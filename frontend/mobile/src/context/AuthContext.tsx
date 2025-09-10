@@ -18,6 +18,7 @@ interface AuthContextType {
   }) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   requireAuth: (callback: () => void) => void;
+  getAuthHeaders: () => Promise<HeadersInit>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -111,6 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     requireAuth,
+    getAuthHeaders: () => apiService.getAuthHeaders(),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

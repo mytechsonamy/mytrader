@@ -55,8 +55,8 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   useEffect(() => {
     const initializeData = async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const token = await AsyncStorage.getItem('session_token');
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         
         // 1) Fetch tracked symbols
         console.log('Fetching tracked symbols from:', API_BASE_URL);
@@ -97,18 +97,22 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
 
     const connect = async () => {
       try {
-        // Get auth token (temporarily disabled for debugging)
-        // const token = await AsyncStorage.getItem('token');
+        // Get auth token if available
+        const token = await AsyncStorage.getItem('session_token');
         
         console.log('Connecting to SignalR hub:', SIGNALR_HUB_URL);
         
-        // Create SignalR connection (without auth for now)
+        // Create SignalR connection (attach token when present)
+        const options: signalR.IHttpConnectionOptions = {
+          skipNegotiation: false,
+          transport: signalR.HttpTransportType.WebSockets,
+        };
+        if (token) {
+          options.accessTokenFactory = () => token;
+        }
+
         hubConnection = new signalR.HubConnectionBuilder()
-          .withUrl(SIGNALR_HUB_URL, {
-            // accessTokenFactory: () => token || '',
-            skipNegotiation: false,
-            transport: signalR.HttpTransportType.WebSockets,
-          })
+          .withUrl(SIGNALR_HUB_URL, options)
           .withAutomaticReconnect([0, 2000, 10000, 30000])
           .configureLogging(signalR.LogLevel.Information)
           .build();

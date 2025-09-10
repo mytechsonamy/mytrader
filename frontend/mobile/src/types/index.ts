@@ -71,14 +71,21 @@ export type RootStackParamList = {
     symbol: string;
     displayName: string;
   };
+  News?: undefined;
 };
 
 export type MainTabParamList = {
   Dashboard: undefined;
   News: undefined;
   Strategies: undefined;
+  Gamification: undefined;
+  Alarms: undefined;
+  Education: undefined;
   Profile: undefined;
 };
+
+// Backward-compatible alias
+export type MainTabsParamList = MainTabParamList;
 
 export type AuthStackParamList = {
   Login: { fromPasswordReset?: boolean; returnTo?: string } | undefined;

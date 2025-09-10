@@ -832,6 +832,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
   },
+  templateDescription: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 6,
+  },
   inputGroup: {
     marginBottom: 20,
   },

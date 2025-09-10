@@ -30,6 +30,10 @@ class ApiService {
     return headers;
   }
 
+  public async getAuthHeaders(): Promise<HeadersInit> {
+    return this.getHeaders();
+  }
+
   private async handleResponse<T>(response: Response): Promise<T> {
     // Clone the response so we can read it multiple times if needed
     const responseClone = response.clone();
@@ -67,7 +71,7 @@ class ApiService {
     console.log('Login attempt:', email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +108,7 @@ class ApiService {
     console.log('Register attempt:', userData.email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +122,7 @@ class ApiService {
         }),
       });
 
-      const result = await this.handleResponse(response);
+      const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
     } catch (error) {
       console.error('Registration error:', error);
@@ -131,7 +135,7 @@ class ApiService {
 
   async verifyEmail(email: string, verificationCode: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/verify-email`, {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +146,7 @@ class ApiService {
         }),
       });
 
-      const result = await this.handleResponse(response);
+      const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
     } catch (error) {
       console.error('Verify email error:', error);
@@ -155,7 +159,7 @@ class ApiService {
 
   async resendVerificationCode(email: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
+      const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,7 +167,7 @@ class ApiService {
         body: JSON.stringify({ email }),
       });
 
-      const result = await this.handleResponse(response);
+      const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
     } catch (error) {
       console.error('Resend verification error:', error);
@@ -177,7 +181,7 @@ class ApiService {
   async logout(): Promise<void> {
     if (this.sessionToken) {
       try {
-        await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+        await fetch(`${API_BASE_URL}/v1/auth/logout`, {
           method: 'POST',
           headers: await this.getHeaders(),
         });
@@ -198,7 +202,7 @@ class ApiService {
     phone?: string;
     telegram_id?: string;
   }): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
       method: 'PUT',
       headers: await this.getHeaders(),
       body: JSON.stringify(partial),
@@ -208,7 +212,7 @@ class ApiService {
 
   // Password reset flow
   async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/request-password-reset`, {
+    const response = await fetch(`${API_BASE_URL}/auth/request-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
@@ -217,21 +221,21 @@ class ApiService {
   }
 
   async verifyPasswordReset(email: string, code: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/verify-password-reset`, {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-password-reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, verification_code: code }),
     });
-    return await this.handleResponse(response);
+    return await this.handleResponse<{ success: boolean; message: string }>(response);
   }
 
   async resetPassword(email: string, newPassword: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, new_password: newPassword }),
     });
-    return await this.handleResponse(response);
+    return await this.handleResponse<{ success: boolean; message: string }>(response);
   }
 
   async getCurrentUser(): Promise<User | null> {
@@ -242,7 +246,7 @@ class ApiService {
 
     try {
       // Verify session is still valid
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: await this.getHeaders(),
       });
 
@@ -261,7 +265,7 @@ class ApiService {
 
   // Strategy APIs
   async createStrategy(strategy: StrategyConfig): Promise<{ success: boolean; message: string; strategy_id?: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/strategies/create`, {
+    const response = await fetch(`${API_BASE_URL}/v1/strategies/create`, {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify(strategy),
@@ -271,7 +275,7 @@ class ApiService {
   }
 
   async testStrategy(strategyId: string, symbol: string): Promise<BacktestResult> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/strategies/${strategyId}/test`, {
+    const response = await fetch(`${API_BASE_URL}/v1/strategies/${strategyId}/test`, {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify({ symbol }),
@@ -280,16 +284,21 @@ class ApiService {
     return await this.handleResponse(response);
   }
 
-  async getUserStrategies(): Promise<StrategyConfig[]> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/strategies/my-strategies`, {
+  async getUserStrategies(): Promise<{ success: boolean; data?: StrategyConfig[]; message?: string }> {
+    const response = await fetch(`${API_BASE_URL}/v1/strategies/my-strategies`, {
       headers: await this.getHeaders(),
     });
 
-    return await this.handleResponse(response);
+    try {
+      const data = await this.handleResponse<StrategyConfig[]>(response);
+      return { success: true, data };
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Failed to load strategies' };
+    }
   }
 
   async activateStrategy(strategyId: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/strategies/${strategyId}/activate`, {
+    const response = await fetch(`${API_BASE_URL}/v1/strategies/${strategyId}/activate`, {
       method: 'POST',
       headers: await this.getHeaders(),
     });
@@ -299,7 +308,7 @@ class ApiService {
 
   // Get real-time market data from dashboard
   async getMarketData(): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/api/symbols`);
+    const response = await fetch(`${API_BASE_URL}/symbols`);
     return await this.handleResponse(response);
   }
 
@@ -307,7 +316,7 @@ class ApiService {
   async getCurrentPrice(symbol: string): Promise<{ price: number; change: number } | null> {
     try {
       // First try to get from dashboard WebSocket data via REST endpoint
-      const marketResponse = await fetch(`${API_BASE_URL}/api/signals/${symbol.replace('USDT', '')}`);
+      const marketResponse = await fetch(`${API_BASE_URL}/signals/${symbol.replace('USDT', '')}`);
       if (marketResponse.ok) {
         const data = await marketResponse.json();
         // If we have recent signal data with price info
@@ -339,7 +348,7 @@ class ApiService {
   }
 
   async getSymbolsConfig(): Promise<{ symbols: Record<string, any>; interval: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/symbols`, {
+    const response = await fetch(`${API_BASE_URL}/symbols`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
@@ -372,7 +381,7 @@ class ApiService {
 
   // User Layout Preferences APIs
   async getUserLayoutPreferences(): Promise<{ asset_order?: string[] }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/user/layout-preferences`, {
+    const response = await fetch(`${API_BASE_URL}/v1/user/layout-preferences`, {
       headers: await this.getHeaders(),
     });
 
@@ -380,7 +389,7 @@ class ApiService {
   }
 
   async saveUserLayoutPreferences(preferences: { asset_order: string[] }): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/user/layout-preferences`, {
+    const response = await fetch(`${API_BASE_URL}/v1/user/layout-preferences`, {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify(preferences),
@@ -400,21 +409,21 @@ class ApiService {
 
   // Gamification APIs
   async getUserAchievements(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/api/gamification/achievements`, {
+    const response = await fetch(`${API_BASE_URL}/gamification/achievements`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async getLeaderboard(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/api/gamification/leaderboard`, {
+    const response = await fetch(`${API_BASE_URL}/gamification/leaderboard`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async getUserLevel(): Promise<{ level: number; points: number; nextLevelPoints: number }> {
-    const response = await fetch(`${API_BASE_URL}/api/gamification/level`, {
+    const response = await fetch(`${API_BASE_URL}/gamification/level`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
@@ -422,14 +431,14 @@ class ApiService {
 
   // Alerts APIs
   async getPriceAlerts(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/api/alerts`, {
+    const response = await fetch(`${API_BASE_URL}/alerts`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async createPriceAlert(alert: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/api/alerts`, {
+    const response = await fetch(`${API_BASE_URL}/alerts`, {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify(alert),
@@ -438,7 +447,7 @@ class ApiService {
   }
 
   async updatePriceAlert(id: string, alert: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/api/alerts/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/alerts/${id}`, {
       method: 'PUT',
       headers: await this.getHeaders(),
       body: JSON.stringify(alert),
@@ -447,7 +456,7 @@ class ApiService {
   }
 
   async deletePriceAlert(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/api/alerts/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/alerts/${id}`, {
       method: 'DELETE',
       headers: await this.getHeaders(),
     });
@@ -455,14 +464,14 @@ class ApiService {
   }
 
   async getNotificationHistory(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/history`, {
+    const response = await fetch(`${API_BASE_URL}/notifications/history`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async markNotificationAsRead(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, {
+    const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
       method: 'POST',
       headers: await this.getHeaders(),
     });
@@ -471,7 +480,7 @@ class ApiService {
 
   // Education APIs
   async getLearningPaths(): Promise<any[]> {
-    const response = await fetch(`${API_BASE_URL}/api/education/paths`, {
+    const response = await fetch(`${API_BASE_URL}/education/paths`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
@@ -479,8 +488,8 @@ class ApiService {
 
   async getLearningModules(category?: string): Promise<any[]> {
     const endpoint = category ? 
-      `${API_BASE_URL}/api/education/modules?category=${encodeURIComponent(category)}` : 
-      `${API_BASE_URL}/api/education/modules`;
+      `${API_BASE_URL}/education/modules?category=${encodeURIComponent(category)}` : 
+      `${API_BASE_URL}/education/modules`;
     const response = await fetch(endpoint, {
       headers: await this.getHeaders(),
     });
@@ -488,14 +497,14 @@ class ApiService {
   }
 
   async getModule(id: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/api/education/modules/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/education/modules/${id}`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async markModuleComplete(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/api/education/modules/${id}/complete`, {
+    const response = await fetch(`${API_BASE_URL}/education/modules/${id}/complete`, {
       method: 'POST',
       headers: await this.getHeaders(),
     });
@@ -503,14 +512,14 @@ class ApiService {
   }
 
   async getQuiz(moduleId: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/api/education/modules/${moduleId}/quiz`, {
+    const response = await fetch(`${API_BASE_URL}/education/modules/${moduleId}/quiz`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }
 
   async submitQuiz(quizId: string, answers: any[]): Promise<{ score: number; passed: boolean }> {
-    const response = await fetch(`${API_BASE_URL}/api/education/quizzes/${quizId}/submit`, {
+    const response = await fetch(`${API_BASE_URL}/education/quizzes/${quizId}/submit`, {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify({ answers }),

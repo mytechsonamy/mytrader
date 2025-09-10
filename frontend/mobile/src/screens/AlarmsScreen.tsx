@@ -49,9 +49,15 @@ const AlarmsScreen = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   
   // Create Alert Form State
-  const [newAlert, setNewAlert] = useState({
+  const [newAlert, setNewAlert] = useState<{
+    symbol: string;
+    alertType: 'PRICE_ABOVE' | 'PRICE_BELOW' | 'PRICE_CHANGE';
+    targetPrice: string;
+    percentageChange: string;
+    message: string;
+  }>({
     symbol: 'BTCUSDT',
-    alertType: 'PRICE_ABOVE' as const,
+    alertType: 'PRICE_ABOVE',
     targetPrice: '',
     percentageChange: '',
     message: '',
