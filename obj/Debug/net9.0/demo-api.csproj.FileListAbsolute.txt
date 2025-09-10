@@ -1,8 +1,0 @@
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.csproj.AssemblyReference.cache
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/rpswa.dswa.cache.json
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.GeneratedMSBuildEditorConfig.editorconfig
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.AssemblyInfoInputs.cache
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.AssemblyInfo.cs
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.csproj.CoreCompileInputs.cache
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.MvcApplicationPartsAssemblyInfo.cache
-/Users/mustafayildirim/Documents/Personal Documents/Projects/Trader/myTrader/obj/Debug/net9.0/demo-api.sourcelink.json
