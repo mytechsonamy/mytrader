@@ -10,7 +10,7 @@ public class Signal
     public Guid StrategyId { get; set; }
     
     [Required]
-    public string Symbol { get; set; } = string.Empty;
+    public Guid SymbolId { get; set; }
     
     [Required]
     public string SignalType { get; set; } = string.Empty; // BUY, SELL, NEUTRAL
@@ -34,4 +34,5 @@ public class Signal
     
     // Navigation properties
     public Strategy Strategy { get; set; } = null!;
+    public Symbol Symbol { get; set; } = null!;
 }

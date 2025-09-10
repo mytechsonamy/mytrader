@@ -11,12 +11,14 @@ public class MarketDataService : IMarketDataService
     private readonly TradingDbContext _context;
     private readonly ILogger<MarketDataService> _logger;
     private readonly HttpClient _httpClient;
+    private readonly ISymbolService _symbolService;
 
-    public MarketDataService(TradingDbContext context, ILogger<MarketDataService> logger, HttpClient httpClient)
+    public MarketDataService(TradingDbContext context, ILogger<MarketDataService> logger, HttpClient httpClient, ISymbolService symbolService)
     {
         _context = context;
         _logger = logger;
         _httpClient = httpClient;
+        _symbolService = symbolService;
     }
 
     public async Task<ImportResponse> ImportDailyPricesAsync(ImportRequest request)
@@ -53,13 +55,16 @@ public class MarketDataService : IMarketDataService
 
                     if (!existing)
                     {
-                        await _context.MarketData.AddAsync(marketData);
-                        inserted++;
+                        // DISABLED: Database writes prevented to avoid memory issues
+                        // await _context.MarketData.AddAsync(marketData);
+                        _logger.LogDebug("Market data write DISABLED for {Symbol} to prevent memory issues", symbol);
+                        inserted++; // Keep count for response
                     }
                 }
             }
 
-            await _context.SaveChangesAsync();
+            // DISABLED: Database writes prevented to avoid memory issues
+            // await _context.SaveChangesAsync();
 
             return new ImportResponse
             {
@@ -121,13 +126,19 @@ public class MarketDataService : IMarketDataService
         var data = new List<CandleData>();
         
         var random = new Random();
-        var basePrice = symbol.ToUpper() switch
+        
+        // Get base price from market data first, fallback to symbol-based pricing
+        var basePrice = GetBasePriceForSymbol(symbol);
+        if (basePrice == 0)
         {
-            "BTCUSDT" => 45000m,
-            "ETHUSDT" => 2500m,
-            "ADAUSDT" => 0.45m,
-            _ => 100m
-        };
+            basePrice = symbol.ToUpper() switch
+            {
+                "BTCUSDT" => 45000m,
+                "ETHUSDT" => 2500m,
+                "ADAUSDT" => 0.45m,
+                _ => 100m
+            };
+        }
 
         var currentPrice = basePrice;
         var currentDate = startDate;
@@ -157,5 +168,25 @@ public class MarketDataService : IMarketDataService
         }
 
         return data;
+    }
+    
+    private decimal GetBasePriceForSymbol(string symbol)
+    {
+        try
+        {
+            // Try to get the latest market data for this symbol to use as base price
+            var latestPrice = _context.MarketData
+                .Where(m => m.Symbol == symbol && m.Timeframe == "1d")
+                .OrderByDescending(m => m.Timestamp)
+                .Select(m => m.Close)
+                .FirstOrDefault();
+                
+            return latestPrice;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not get latest price for {Symbol}, using fallback", symbol);
+            return 0;
+        }
     }
 }

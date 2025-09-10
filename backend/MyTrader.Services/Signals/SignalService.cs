@@ -2,17 +2,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MyTrader.Core.DTOs.Signals;
 using MyTrader.Infrastructure.Data;
+using MyTrader.Services.Market;
 
 namespace MyTrader.Services.Signals;
 
 public class SignalService : ISignalService
 {
     private readonly TradingDbContext _context;
+    private readonly ISymbolService _symbolService;
     private readonly ILogger<SignalService> _logger;
 
-    public SignalService(TradingDbContext context, ILogger<SignalService> logger)
+    public SignalService(TradingDbContext context, ISymbolService symbolService, ILogger<SignalService> logger)
     {
         _context = context;
+        _symbolService = symbolService;
         _logger = logger;
     }
 
@@ -27,13 +30,14 @@ public class SignalService : ISignalService
             var totalCount = await _context.Signals.CountAsync();
             
             var signals = await _context.Signals
+                .Include(s => s.Symbol)
                 .OrderByDescending(s => s.Timestamp)
                 .Skip(cursor)
                 .Take(limit)
                 .Select(s => new SignalResponse
                 {
                     Id = s.Id,
-                    Symbol = s.Symbol,
+                    Symbol = s.Symbol.Ticker,
                     Signal = s.SignalType,
                     Price = s.Price,
                     Rsi = s.Rsi,
@@ -82,7 +86,7 @@ public class SignalService : ISignalService
                 Price = Math.Round(price, 2),
                 CurrentSignal = currentSignal,
                 BbPosition = bbPosition,
-                Indicators = new IndicatorValues
+                Indicators = new MarketIndicatorValues
                 {
                     Rsi = Math.Round(rsi, 1),
                     Macd = Math.Round(macd, 4),

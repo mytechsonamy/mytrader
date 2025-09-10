@@ -91,7 +91,7 @@ The solution uses a clean architecture approach with the following structure:
 - `GET /api/strategies/{symbol}/signals` - Get signals for symbol
 
 ### Real-time
-- `WebSocket /hub` - SignalR connection for real-time updates
+- `WebSocket /hubs/trading` - SignalR connection for real-time updates
 
 ## Configuration
 

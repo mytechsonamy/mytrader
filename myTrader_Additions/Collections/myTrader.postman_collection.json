@@ -1,0 +1,289 @@
+{
+  "info": {
+    "name": "myTrader Smoke Tests",
+    "_postman_id": "d3f7840d-0b0e-4f43-8f6b-1234567890ab",
+    "description": "Smoke tests for auth, sessions, backtests, templates, and market data",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Refresh",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/refresh",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "refresh"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"refreshToken\": \"{{refreshToken}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "let json = pm.response.json();",
+              "if (json && json.accessToken) {",
+              "  pm.environment.set('accessToken', json.accessToken);",
+              "}",
+              "if (json && json.refreshToken) {",
+              "  pm.environment.set('refreshToken', json.refreshToken);",
+              "}",
+              "pm.test('Status 200/202', function(){ pm.expect([200,202]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth - List Sessions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/sessions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "sessions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Auth - Logout All",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout-all",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout-all"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Strategy Templates - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/strategy-templates",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "strategy-templates"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Conservative\", \"version\": \"1.0\", \"parameters\": {\"bb_period\": 20, \"bb_std\": 2.0, \"rsi_period\": 14}, \"is_default\": true}"
+        }
+      }
+    },
+    {
+      "name": "User Strategies - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/user-strategies",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "user-strategies"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"templateId\": \"{{templateId}}\", \"name\": \"My Conservative\", \"parameters\": {\"bb_period\": 20, \"bb_std\": 2.0, \"rsi_period\": 14}}"
+        }
+      }
+    },
+    {
+      "name": "Backtest - Start",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/strategies/{{strategyId}}/backtest",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "strategies",
+            "{{strategyId}}",
+            "backtest"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"symbol\": \"BTCUSDT\", \"timeframe\": \"1h\", \"dateRangeStart\": \"2024-01-01T00:00:00Z\", \"dateRangeEnd\": \"2024-06-01T00:00:00Z\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "let json = pm.response.json();",
+              "if (json && json.backtest_id) pm.environment.set('backtestId', json.backtest_id);",
+              "pm.test('Accepted or OK', function(){ pm.expect([200,202]).to.include(pm.response.code); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backtest - Get Result",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/backtests/{{backtestId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "backtests",
+            "{{backtestId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Market - Candles",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market/candles?symbol=BTCUSDT&tf=1h&from=2024-01-01T00:00:00Z&to=2024-06-01T00:00:00Z",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market",
+            "candles"
+          ],
+          "query": [
+            {
+              "key": "symbol",
+              "value": "BTCUSDT"
+            },
+            {
+              "key": "tf",
+              "value": "1h"
+            },
+            {
+              "key": "from",
+              "value": "2024-01-01T00:00:00Z"
+            },
+            {
+              "key": "to",
+              "value": "2024-06-01T00:00:00Z"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "templateId",
+      "value": ""
+    },
+    {
+      "key": "strategyId",
+      "value": ""
+    },
+    {
+      "key": "backtestId",
+      "value": ""
+    }
+  ]
+}

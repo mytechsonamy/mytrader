@@ -1,9 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using MyTrader.Core.Models;
+using MyTrader.Core.Data;
 
 namespace MyTrader.Infrastructure.Data;
 
-public class TradingDbContext : DbContext
+public class TradingDbContext : DbContext, ITradingDbContext
 {
     public TradingDbContext(DbContextOptions<TradingDbContext> options) : base(options)
     {
@@ -21,6 +22,15 @@ public class TradingDbContext : DbContext
     public DbSet<BacktestResults> BacktestResults { get; set; }
     public DbSet<TradeHistory> TradeHistory { get; set; }
     public DbSet<PasswordReset> PasswordResets { get; set; }
+    public DbSet<Symbol> Symbols { get; set; }
+    public DbSet<UserStrategy> UserStrategies { get; set; }
+    public DbSet<UserNotificationPreferences> UserNotificationPreferences { get; set; }
+    public DbSet<Candle> Candles { get; set; }
+    public DbSet<BacktestQueue> BacktestQueue { get; set; }
+    public DbSet<UserAchievement> UserAchievements { get; set; }
+    public DbSet<StrategyPerformance> StrategyPerformances { get; set; }
+    public DbSet<PriceAlert> PriceAlerts { get; set; }
+    public DbSet<NotificationHistory> NotificationHistory { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,7 +129,10 @@ public class TradingDbContext : DbContext
         {
             entity.ToTable("signals");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Symbol).HasMaxLength(20).IsRequired();
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.Property(e => e.SignalType).HasMaxLength(10).IsRequired();
             entity.Property(e => e.Price).HasPrecision(18, 8);
             entity.Property(e => e.Rsi).HasPrecision(10, 4);
@@ -169,8 +182,11 @@ public class TradingDbContext : DbContext
         {
             entity.ToTable("indicator_values");
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.Symbol, e.Timeframe, e.Timestamp }).IsUnique();
-            entity.Property(e => e.Symbol).HasMaxLength(20).IsRequired();
+            entity.HasIndex(e => new { e.SymbolId, e.Timeframe, e.Timestamp }).IsUnique();
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.Property(e => e.Timeframe).HasMaxLength(10).IsRequired();
             entity.Property(e => e.Open).HasPrecision(18, 8);
             entity.Property(e => e.High).HasPrecision(18, 8);
@@ -186,7 +202,11 @@ public class TradingDbContext : DbContext
         {
             entity.ToTable("backtest_results");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Symbol).HasMaxLength(20).IsRequired();
+            // Symbol is a navigation via SymbolId
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.Property(e => e.Timeframe).HasMaxLength(10).IsRequired();
             entity.Property(e => e.TotalReturn).HasPrecision(18, 8);
             entity.Property(e => e.TotalReturnPercentage).HasPrecision(10, 4);
@@ -216,7 +236,11 @@ public class TradingDbContext : DbContext
         {
             entity.ToTable("trade_history");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Symbol).HasMaxLength(20).IsRequired();
+            // Symbol is a navigation via SymbolId
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.Property(e => e.EntryPrice).HasPrecision(18, 8);
             entity.Property(e => e.Quantity).HasPrecision(18, 8);
             entity.Property(e => e.EntryValue).HasPrecision(18, 8);
@@ -285,6 +309,75 @@ public class TradingDbContext : DbContext
             entity.Property(e => e.DefaultRiskPercentage).HasPrecision(10, 4);
             entity.Property(e => e.Plan).HasMaxLength(20);
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("NOW()");
+        });
+
+        // UserNotificationPreferences configuration
+        modelBuilder.Entity<UserNotificationPreferences>(entity =>
+        {
+            entity.ToTable("user_notification_preferences");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.Property(e => e.AlertMethods).HasColumnType("jsonb");
+            entity.Property(e => e.QuietHoursDays).HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("NOW()");
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Candles configuration
+        modelBuilder.Entity<Candle>(entity =>
+        {
+            entity.ToTable("candles");
+            entity.HasKey(e => e.Id);
+            // FK to symbols
+            entity.Property(e => e.SymbolId).IsRequired();
+            entity.Property(e => e.Timeframe).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Open).HasPrecision(18, 8);
+            entity.Property(e => e.High).HasPrecision(18, 8);
+            entity.Property(e => e.Low).HasPrecision(18, 8);
+            entity.Property(e => e.Close).HasPrecision(18, 8);
+            entity.Property(e => e.Volume).HasPrecision(38, 18);
+            // Map OpenTime -> existing column name (case-sensitive in this schema)
+            entity.Property(e => e.OpenTime).HasColumnName("Timestamp");
+
+            entity.HasIndex(e => e.OpenTime).HasDatabaseName("brin_candles_ts");
+            entity.HasIndex(e => new { e.SymbolId, e.Timeframe, e.OpenTime })
+                  .IsUnique()
+                  .HasDatabaseName("ux_candles_symbol_tf_ts");
+        });
+
+        // BacktestQueue configuration
+        modelBuilder.Entity<BacktestQueue>(entity =>
+        {
+            entity.ToTable("backtest_queue");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired().HasDefaultValue("Queued");
+            entity.Property(e => e.TriggerType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasMaxLength(1000);
+            entity.Property(e => e.Parameters).HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
+            
+            entity.HasIndex(e => new { e.UserId, e.Status });
+            entity.HasIndex(e => new { e.Status, e.Priority, e.CreatedAt });
+            
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(e => e.Strategy)
+                  .WithMany()
+                  .HasForeignKey(e => e.StrategyId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

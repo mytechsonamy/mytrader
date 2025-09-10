@@ -1,19 +1,20 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MyTrader.Core.DTOs.Authentication;
-using MyTrader.Services.Authentication;
+using MyTrader.Core.Services;
+using System.Security;
 using System.Security.Claims;
 
 namespace MyTrader.Api.Controllers;
 
 [ApiController]
-[Route("auth")]
+[Route("api/auth")]
 [Tags("Authentication")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthenticationService _authService;
+    private readonly MyTrader.Services.Authentication.IAuthenticationService _authService;
 
-    public AuthController(IAuthenticationService authService)
+    public AuthController(MyTrader.Services.Authentication.IAuthenticationService authService)
     {
         _authService = authService;
     }
@@ -122,6 +123,75 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.ResetPasswordAsync(request.Email, request.NewPassword);
         return Ok(result);
+    }
+
+    [HttpPost("refresh")]
+    public async Task<ActionResult<TokenResponse>> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            var userAgent = Request.Headers.UserAgent.ToString();
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+            
+            var result = await _authService.RefreshTokenAsync(request, userAgent, ipAddress);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { code = "TOKEN_INVALID", message = ex.Message });
+        }
+        catch (SecurityException ex)
+        {
+            return Unauthorized(new { code = "TOKEN_REUSE", message = "Token reuse detected. All sessions revoked." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { code = "REFRESH_ERROR", message = ex.Message });
+        }
+    }
+
+    [HttpGet("sessions")]
+    [Authorize]
+    public async Task<ActionResult<SessionListResponse>> GetSessions()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value;
+        var jwtId = User.FindFirst("jti")?.Value;
+        
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var sessions = await _authService.GetUserSessionsAsync(userId, jwtId);
+        return Ok(sessions);
+    }
+
+    [HttpDelete("logout-all")]
+    [Authorize]
+    public async Task<ActionResult> LogoutAll()
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        await _authService.LogoutAllAsync(userId);
+        return Ok(new { message = "All sessions terminated successfully" });
+    }
+
+    [HttpDelete("sessions/{sessionId}")]
+    [Authorize]
+    public async Task<ActionResult> LogoutSession(Guid sessionId)
+    {
+        var userIdClaim = User.FindFirst("user_id")?.Value;
+        if (!Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        await _authService.LogoutSessionAsync(userId, sessionId);
+        return Ok(new { message = "Session terminated successfully" });
     }
 }
 

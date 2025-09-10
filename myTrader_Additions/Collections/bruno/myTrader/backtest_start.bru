@@ -1,0 +1,19 @@
+meta {
+  name: Backtest - Start
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/strategies/{{strategyId}}/backtest
+  headers: {
+    Content-Type: application/json
+    Authorization: Bearer {{accessToken}}
+  }
+  body: json({
+    "symbol": "BTCUSDT",
+    "timeframe": "1h",
+    "dateRangeStart": "2024-01-01T00:00:00Z",
+    "dateRangeEnd": "2024-06-01T00:00:00Z"
+  })
+}

@@ -7,7 +7,7 @@ public class IndicatorValues
     public Guid Id { get; set; } = Guid.NewGuid();
     
     [Required]
-    public string Symbol { get; set; } = string.Empty;
+    public Guid SymbolId { get; set; }
     
     [Required]
     public string Timeframe { get; set; } = string.Empty;
@@ -92,4 +92,7 @@ public class IndicatorValues
     
     // Additional custom indicators as JSON
     public string? CustomIndicators { get; set; } = "{}";
+    
+    // Navigation properties
+    public Symbol Symbol { get; set; } = null!;
 }

@@ -8,14 +8,38 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Versioning" Version="5.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Versioning.ApiExplorer" Version="5.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.9" />
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Grafana.Loki" Version="8.3.1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.9.11" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MyTrader.Core\MyTrader.Core.csproj" />
     <ProjectReference Include="..\MyTrader.Services\MyTrader.Services.csproj" />
     <ProjectReference Include="..\MyTrader.Infrastructure\MyTrader.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Temporarily exclude controllers/hubs that depend on disabled services -->
+  <ItemGroup>
+    <Compile Remove="Controllers/AuthController.cs" />
+    <Compile Remove="Controllers/IndicatorsController.cs" />
+    <Compile Remove="Controllers/NotificationsController.cs" />
+    <Compile Remove="Controllers/AnalyticsController.cs" />
+    <Compile Remove="Controllers/EducationController.cs" />
+    <Compile Remove="Controllers/StrategiesController.cs" />
+    <Compile Remove="Hubs/DashboardHub.cs" />
+    <Compile Remove="Services/PriceBroadcastService.cs" />
   </ItemGroup>
 
 </Project>

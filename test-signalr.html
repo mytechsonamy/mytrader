@@ -1,41 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SignalR Test</title>
+    <title>MyTrader Real-Time Test</title>
     <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
 </head>
 <body>
-    <div id="messages"></div>
-    <button onclick="sendTest()">Send Test</button>
+    <h1>MyTrader Real-Time Data Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="prices"></div>
+    <div id="signals"></div>
 
     <script>
         const connection = new signalR.HubConnectionBuilder()
-            .withUrl("http://192.168.68.103:8080/hub")
-            .configureLogging(signalR.LogLevel.Information)
+            .withUrl("http://localhost:5245/hubs/trading")
             .build();
 
         connection.start().then(function () {
-            console.log("SignalR connected successfully!");
-            document.getElementById("messages").innerHTML += "<p>✅ Connected to SignalR</p>";
+            document.getElementById("status").innerHTML = "✅ Connected to MyTrader API";
+            console.log("Connected to SignalR hub");
         }).catch(function (err) {
-            console.error("SignalR connection error:", err);
-            document.getElementById("messages").innerHTML += "<p>❌ Connection failed: " + err + "</p>";
+            document.getElementById("status").innerHTML = "❌ Failed to connect: " + err.toString();
+            console.error(err.toString());
         });
 
+        // Listen for price updates
         connection.on("ReceivePriceUpdate", function (data) {
-            console.log("Received price update:", data);
-            document.getElementById("messages").innerHTML += "<p>📈 Price update: " + JSON.stringify(data) + "</p>";
+            console.log("Price update:", data);
+            const pricesDiv = document.getElementById("prices");
+            const priceElement = document.createElement("div");
+            priceElement.innerHTML = `
+                <strong>${data.symbol}</strong>: $${data.price} 
+                (${data.change > 0 ? '+' : ''}${data.change}%) 
+                Vol: ${data.volume} 
+                <small>${new Date(data.timestamp).toLocaleTimeString()}</small>
+            `;
+            priceElement.style.padding = "5px";
+            priceElement.style.margin = "2px";
+            priceElement.style.border = "1px solid #ccc";
+            priceElement.style.backgroundColor = data.change >= 0 ? "#e8f5e8" : "#ffe8e8";
+            
+            pricesDiv.insertBefore(priceElement, pricesDiv.firstChild);
+            
+            // Keep only last 10 price updates
+            while (pricesDiv.children.length > 10) {
+                pricesDiv.removeChild(pricesDiv.lastChild);
+            }
         });
 
-        function sendTest() {
-            fetch('http://192.168.68.103:8080/api/market/test-signalr', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            }).then(r => r.json()).then(data => {
-                console.log('Test sent:', data);
-                document.getElementById("messages").innerHTML += "<p>📤 Test sent: " + data.message + "</p>";
-            });
+        // Listen for signal updates
+        connection.on("ReceiveSignalUpdate", function (data) {
+            console.log("Signal update:", data);
+            const signalsDiv = document.getElementById("signals");
+            const signalElement = document.createElement("div");
+            signalElement.innerHTML = `
+                <strong>${data.symbol}</strong> - Signal: <strong style="color: ${getSignalColor(data.signal)}">${data.signal}</strong> 
+                | Trend: ${data.trend} 
+                | RSI: ${data.indicators.rsi || 'N/A'} 
+                | MACD: ${data.indicators.macd || 'N/A'}
+                <small>${new Date(data.timestamp).toLocaleTimeString()}</small>
+            `;
+            signalElement.style.padding = "5px";
+            signalElement.style.margin = "2px";
+            signalElement.style.border = "1px solid #999";
+            signalElement.style.backgroundColor = "#f9f9f9";
+            
+            signalsDiv.insertBefore(signalElement, signalsDiv.firstChild);
+            
+            // Keep only last 5 signal updates
+            while (signalsDiv.children.length > 5) {
+                signalsDiv.removeChild(signalsDiv.lastChild);
+            }
+        });
+
+        function getSignalColor(signal) {
+            switch(signal) {
+                case 'BUY': return 'green';
+                case 'SELL': return 'red';
+                case 'HOLD': return 'orange';
+                default: return 'black';
+            }
         }
+
+        // Handle connection errors
+        connection.onclose(function () {
+            document.getElementById("status").innerHTML = "❌ Connection lost";
+        });
     </script>
 </body>
 </html>

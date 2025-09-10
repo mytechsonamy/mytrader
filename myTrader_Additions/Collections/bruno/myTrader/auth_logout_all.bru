@@ -1,0 +1,12 @@
+meta {
+  name: Auth - Logout All
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/auth/logout-all
+  headers: {
+    Authorization: Bearer {{accessToken}}
+  }
+}

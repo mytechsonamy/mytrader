@@ -6,6 +6,7 @@ using MyTrader.Core.DTOs.Authentication;
 using MyTrader.Core.Models;
 using MyTrader.Infrastructure.Data;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -255,9 +256,14 @@ public class AuthenticationService : IAuthenticationService
                 throw new UnauthorizedAccessException("Geçersiz email veya şifre");
             }
 
-            // Generate JWT token
-            var token = GenerateJwtToken(user);
-            var expiresAt = DateTime.UtcNow.AddHours(24);
+            // Generate tokens with new system
+            var jwtId = Guid.NewGuid().ToString();
+            var accessToken = GenerateJwtToken(user, jwtId);
+            var refreshToken = GenerateRefreshToken();
+            var refreshTokenHash = HashRefreshToken(refreshToken);
+            
+            var accessTokenExpiry = DateTime.UtcNow.AddMinutes(15); // Short-lived access token
+            var refreshTokenExpiry = DateTime.UtcNow.AddDays(30); // Long-lived refresh token
 
             // Update last login and create session
             user.LastLogin = DateTime.UtcNow;
@@ -265,8 +271,11 @@ public class AuthenticationService : IAuthenticationService
             var session = new UserSession
             {
                 UserId = user.Id,
-                SessionToken = token,
-                ExpiresAt = expiresAt
+                SessionToken = accessToken, // Keep this for backward compatibility, but use JwtId for new logic
+                JwtId = jwtId,
+                RefreshTokenHash = refreshTokenHash,
+                TokenFamilyId = Guid.NewGuid(), // New token family
+                ExpiresAt = refreshTokenExpiry
             };
 
             await _context.UserSessions.AddAsync(session);
@@ -275,7 +284,8 @@ public class AuthenticationService : IAuthenticationService
 
             return new UserSessionResponse
             {
-                SessionToken = token,
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
                 User = new UserResponse
                 {
                     Id = user.Id,
@@ -287,9 +297,14 @@ public class AuthenticationService : IAuthenticationService
                     IsActive = user.IsActive,
                     IsEmailVerified = user.IsEmailVerified,
                     LastLogin = user.LastLogin,
-                    CreatedAt = user.CreatedAt
+                    CreatedAt = user.CreatedAt,
+                    UpdatedAt = user.UpdatedAt,
+                    Plan = user.Plan ?? "free"
                 },
-                ExpiresAt = expiresAt
+                AccessTokenExpiresAt = accessTokenExpiry,
+                RefreshTokenExpiresAt = refreshTokenExpiry,
+                JwtId = jwtId,
+                SessionId = session.Id
             };
         }
         catch (UnauthorizedAccessException)
@@ -655,27 +670,267 @@ public class AuthenticationService : IAuthenticationService
         return number.ToString("D6");
     }
 
-    private string GenerateJwtToken(User user)
-    {
-        var jwtSecret = _configuration["Jwt:Secret"] ?? "your-secret-key-change-in-production";
-        var key = Encoding.ASCII.GetBytes(jwtSecret);
+    // Enhanced Session Management Methods
 
-        var tokenDescriptor = new SecurityTokenDescriptor
+    public async Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request, string? userAgent = null, string? ipAddress = null)
+    {
+        try
         {
-            Subject = new ClaimsIdentity(new[]
+            // Hash the provided refresh token to compare with stored hash
+            var refreshTokenHash = HashRefreshToken(request.RefreshToken);
+            
+            // Find the session with this refresh token hash
+            var session = await _context.UserSessions
+                .Include(s => s.User)
+                .FirstOrDefaultAsync(s => s.RefreshTokenHash == refreshTokenHash && s.RevokedAt == null);
+
+            if (session == null || !session.IsActive)
             {
-                new Claim("user_id", user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}")
-            }),
-            Expires = DateTime.UtcNow.AddHours(24),
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature)
+                _logger.LogWarning("Invalid or expired refresh token used from IP: {IpAddress}", ipAddress);
+                throw new UnauthorizedAccessException("Invalid or expired refresh token");
+            }
+
+            // Check for token reuse - if this token was already used, it's a sign of compromise
+            if (session.LastUsedAt.HasValue)
+            {
+                _logger.LogError("Token reuse detected for user {UserId} from IP {IpAddress}. Revoking token family {TokenFamilyId}", 
+                    session.UserId, ipAddress, session.TokenFamilyId);
+                
+                // Revoke the entire token family
+                await RevokeTokenFamilyAsync(session.TokenFamilyId, "token_reuse");
+                
+                throw new SecurityException("Token reuse detected. All sessions revoked for security.");
+            }
+
+            // Mark this token as used
+            session.LastUsedAt = DateTime.UtcNow;
+
+            // Create new session with rotated tokens
+            var newJwtId = Guid.NewGuid().ToString();
+            var newRefreshToken = GenerateRefreshToken();
+            var newRefreshTokenHash = HashRefreshToken(newRefreshToken);
+
+            var newSession = new UserSession
+            {
+                UserId = session.UserId,
+                SessionToken = "", // Will be set to access token
+                JwtId = newJwtId,
+                RefreshTokenHash = newRefreshTokenHash,
+                TokenFamilyId = session.TokenFamilyId, // Keep same family
+                RotatedFrom = session.Id, // Track rotation chain
+                UserAgent = userAgent,
+                IpAddress = ipAddress,
+                ExpiresAt = DateTime.UtcNow.AddDays(30), // 30-day refresh token expiry
+                CreatedAt = DateTime.UtcNow
+            };
+
+            // Revoke the old session
+            session.RevokedAt = DateTime.UtcNow;
+            session.RevocationReason = "token_rotated";
+
+            // Add new session
+            _context.UserSessions.Add(newSession);
+            
+            // Generate new access token
+            var accessToken = GenerateJwtToken(session.User, newJwtId);
+            var accessTokenExpiry = DateTime.UtcNow.AddMinutes(15); // Short-lived access token
+            
+            // Update the session token for backward compatibility
+            newSession.SessionToken = accessToken;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Token refreshed successfully for user {UserId} from IP {IpAddress}", 
+                session.UserId, ipAddress);
+
+            return new TokenResponse
+            {
+                AccessToken = accessToken,
+                RefreshToken = newRefreshToken,
+                AccessTokenExpiresAt = accessTokenExpiry,
+                RefreshTokenExpiresAt = newSession.ExpiresAt,
+                JwtId = newJwtId,
+                TokenType = "Bearer"
+            };
+        }
+        catch (SecurityException)
+        {
+            throw; // Re-throw security exceptions
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token refresh from IP: {IpAddress}", ipAddress);
+            throw new UnauthorizedAccessException("Token refresh failed");
+        }
+    }
+
+    public async Task<SessionListResponse> GetUserSessionsAsync(Guid userId, string? currentJwtId = null)
+    {
+        var sessions = await _context.UserSessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(s => s.LastUsedAt ?? s.CreatedAt)
+            .Select(s => new SessionInfo
+            {
+                Id = s.Id,
+                JwtId = s.JwtId,
+                DeviceName = ExtractDeviceName(s.UserAgent),
+                UserAgent = s.UserAgent,
+                IpAddress = s.IpAddress,
+                CreatedAt = s.CreatedAt,
+                LastUsedAt = s.LastUsedAt ?? s.CreatedAt,
+                ExpiresAt = s.ExpiresAt,
+                IsCurrentSession = s.JwtId == currentJwtId
+            })
+            .ToListAsync();
+
+        return new SessionListResponse { Sessions = sessions };
+    }
+
+    public async Task LogoutAllAsync(Guid userId)
+    {
+        var activeSessions = await _context.UserSessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var session in activeSessions)
+        {
+            session.RevokedAt = DateTime.UtcNow;
+            session.RevocationReason = "user_logout_all";
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("All sessions revoked for user {UserId} ({SessionCount} sessions)", 
+            userId, activeSessions.Count);
+    }
+
+    public async Task LogoutSessionAsync(Guid userId, Guid sessionId)
+    {
+        var session = await _context.UserSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId && s.RevokedAt == null);
+
+        if (session != null)
+        {
+            session.RevokedAt = DateTime.UtcNow;
+            session.RevocationReason = "user_logout_session";
+            
+            await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("Session {SessionId} revoked for user {UserId}", sessionId, userId);
+        }
+    }
+
+    public async Task<UserResponse?> ValidateTokenAsync(string jwtId, Guid userId)
+    {
+        // Check if the JWT ID is associated with an active session
+        var session = await _context.UserSessions
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.JwtId == jwtId && s.UserId == userId && s.RevokedAt == null && s.ExpiresAt > DateTime.UtcNow);
+
+        if (session?.User == null || !session.User.IsActive)
+        {
+            return null;
+        }
+
+        return new UserResponse
+        {
+            Id = session.User.Id,
+            Email = session.User.Email,
+            FirstName = session.User.FirstName,
+            LastName = session.User.LastName,
+            Phone = session.User.Phone,
+            TelegramId = session.User.TelegramId,
+            IsActive = session.User.IsActive,
+            IsEmailVerified = session.User.IsEmailVerified,
+            CreatedAt = session.User.CreatedAt,
+            UpdatedAt = session.User.UpdatedAt,
+            Plan = session.User.Plan ?? "free"
+        };
+    }
+
+    public async Task RevokeTokenFamilyAsync(Guid tokenFamilyId, string reason = "token_reuse")
+    {
+        var familySessions = await _context.UserSessions
+            .Where(s => s.TokenFamilyId == tokenFamilyId && s.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var session in familySessions)
+        {
+            session.RevokedAt = DateTime.UtcNow;
+            session.RevocationReason = reason;
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogWarning("Token family {TokenFamilyId} revoked. Reason: {Reason}. Sessions affected: {SessionCount}", 
+            tokenFamilyId, reason, familySessions.Count);
+    }
+
+    // Helper Methods for Session Management
+
+    private string GenerateRefreshToken()
+    {
+        var randomBytes = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+        return Convert.ToBase64String(randomBytes);
+    }
+
+    private string HashRefreshToken(string refreshToken)
+    {
+        using var sha256 = SHA256.Create();
+        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(refreshToken));
+        return Convert.ToBase64String(hashedBytes);
+    }
+
+    private string GenerateJwtToken(User user, string jwtId)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()), // Standard subject claim
+            new Claim("sub", user.Id.ToString()), // Explicit sub claim for SignalR
+            new Claim("user_id", user.Id.ToString()),
+            new Claim("email", user.Email),
+            new Claim("first_name", user.FirstName),
+            new Claim("last_name", user.LastName),
+            new Claim("jti", jwtId), // JWT ID for session linking
+            new Claim("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
         };
 
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(15), // Short-lived access token
+            signingCredentials: creds
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private string? ExtractDeviceName(string? userAgent)
+    {
+        if (string.IsNullOrEmpty(userAgent))
+            return "Unknown Device";
+
+        // Simple device name extraction - can be enhanced
+        if (userAgent.Contains("iPhone"))
+            return "iPhone";
+        if (userAgent.Contains("iPad"))
+            return "iPad";
+        if (userAgent.Contains("Android"))
+            return "Android Device";
+        if (userAgent.Contains("Windows"))
+            return "Windows PC";
+        if (userAgent.Contains("Macintosh"))
+            return "Mac";
+        if (userAgent.Contains("Linux"))
+            return "Linux PC";
+
+        return "Web Browser";
     }
 }
 

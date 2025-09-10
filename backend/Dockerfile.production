@@ -1,0 +1,82 @@
+# Multi-stage build for production
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
+WORKDIR /src
+
+# Copy csproj files and restore dependencies (cached layer)
+COPY ["MyTrader.Api/MyTrader.Api.csproj", "MyTrader.Api/"]
+COPY ["MyTrader.Core/MyTrader.Core.csproj", "MyTrader.Core/"]
+COPY ["MyTrader.Infrastructure/MyTrader.Infrastructure.csproj", "MyTrader.Infrastructure/"]
+COPY ["MyTrader.Services/MyTrader.Services.csproj", "MyTrader.Services/"]
+
+# Restore dependencies
+RUN dotnet restore "MyTrader.Api/MyTrader.Api.csproj"
+
+# Copy source code
+COPY . .
+
+# Build application
+WORKDIR "/src/MyTrader.Api"
+RUN dotnet build "MyTrader.Api.csproj" -c Release -o /app/build --no-restore
+
+# Publish application
+FROM build AS publish
+RUN dotnet publish "MyTrader.Api.csproj" -c Release -o /app/publish --no-restore \
+    --runtime linux-musl-x64 \
+    --self-contained false
+
+# Final runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS final
+
+# Install dependencies for health checks and utilities
+RUN apk add --no-cache curl bash tzdata
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S -D -H -u 1001 -s /sbin/nologin -G appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy published application
+COPY --from=publish /app/publish .
+
+# Create directories with proper permissions
+RUN mkdir -p /app/logs /app/data /app/temp && \
+    chown -R appuser:appuser /app
+
+# Set timezone (optional)
+ENV TZ=UTC
+
+# Configure ASP.NET Core for production
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+ENV DOTNET_RUNNING_IN_CONTAINER=true
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+
+# Security: Run as non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health/ready || exit 1
+
+# Entry point
+ENTRYPOINT ["dotnet", "MyTrader.Api.dll"]
+
+# Build metadata
+ARG BUILD_VERSION=unknown
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+
+LABEL \
+    org.opencontainers.image.title="MyTrader API" \
+    org.opencontainers.image.description="Cryptocurrency trading and strategy platform API" \
+    org.opencontainers.image.version=$BUILD_VERSION \
+    org.opencontainers.image.created=$BUILD_DATE \
+    org.opencontainers.image.revision=$VCS_REF \
+    org.opencontainers.image.vendor="MyTrader" \
+    org.opencontainers.image.source="https://github.com/your-org/mytrader" \
+    org.opencontainers.image.licenses="MIT"

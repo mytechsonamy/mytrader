@@ -53,6 +53,7 @@ const StrategiesScreen: React.FC = () => {
   const [strategyName, setStrategyName] = useState('');
   const [strategyDescription, setStrategyDescription] = useState('');
   const [selectedAsset, setSelectedAsset] = useState('BTCUSDT');
+  const [assets, setAssets] = useState<Array<{ symbol: string; name: string; emoji: string }>>([]);
 
   const strategyTemplates: StrategyTemplate[] = [
     {
@@ -89,7 +90,8 @@ const StrategiesScreen: React.FC = () => {
     },
   ];
 
-  const assets = [
+  // Fallback assets if API call fails
+  const fallbackAssets = [
     { symbol: 'BTCUSDT', name: 'Bitcoin', emoji: '₿' },
     { symbol: 'ETHUSDT', name: 'Ethereum', emoji: '⟠' },
     { symbol: 'BNBUSDT', name: 'Binance Coin', emoji: '🟡' },
@@ -134,6 +136,11 @@ const StrategiesScreen: React.FC = () => {
     }
   ];
 
+  // Load assets from API on component mount
+  useEffect(() => {
+    loadAssets();
+  }, []);
+
   // Load strategies on component mount
   useEffect(() => {
     loadStrategies();
@@ -147,6 +154,37 @@ const StrategiesScreen: React.FC = () => {
       }
     }, [user])
   );
+
+  const loadAssets = async () => {
+    try {
+      const symbolsConfig = await apiService.getSymbolsCached();
+      if (symbolsConfig?.symbols && Object.keys(symbolsConfig.symbols).length > 0) {
+        // Convert symbols to assets format with emojis
+        const dynamicAssets = Object.entries(symbolsConfig.symbols).map(([key, config]: [string, any]) => {
+          // Try to find existing emoji or use a default one
+          const existingAsset = fallbackAssets.find(a => a.symbol === config.symbol || a.symbol === key + 'USDT');
+          return {
+            symbol: config.symbol || key + 'USDT',
+            name: config.display_name || key,
+            emoji: existingAsset?.emoji || '🪙'
+          };
+        });
+        
+        setAssets(dynamicAssets);
+        
+        // Set first asset as default selected if current selection is not available
+        if (dynamicAssets.length > 0 && !dynamicAssets.find(a => a.symbol === selectedAsset)) {
+          setSelectedAsset(dynamicAssets[0].symbol);
+        }
+      } else {
+        // Use fallback assets
+        setAssets(fallbackAssets);
+      }
+    } catch (error) {
+      console.warn('Failed to load assets from API, using fallback:', error);
+      setAssets(fallbackAssets);
+    }
+  };
 
   const loadStrategies = async () => {
     if (!user) {

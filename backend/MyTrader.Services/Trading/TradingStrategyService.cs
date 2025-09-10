@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MyTrader.Core.Models;
 using MyTrader.Core.Models.Indicators;
 using MyTrader.Infrastructure.Data;
+using MyTrader.Services.Market;
 
 namespace MyTrader.Services.Trading;
 
@@ -10,15 +11,18 @@ public class TradingStrategyService : ITradingStrategyService
 {
     private readonly TradingDbContext _context;
     private readonly IIndicatorService _indicatorService;
+    private readonly ISymbolService _symbolService;
     private readonly ILogger<TradingStrategyService> _logger;
 
     public TradingStrategyService(
         TradingDbContext context, 
         IIndicatorService indicatorService,
+        ISymbolService symbolService,
         ILogger<TradingStrategyService> logger)
     {
         _context = context;
         _indicatorService = indicatorService;
+        _symbolService = symbolService;
         _logger = logger;
     }
 
@@ -51,11 +55,14 @@ public class TradingStrategyService : ITradingStrategyService
             // Signal logic (simplified BB + MACD + RSI strategy)
             var signal = GenerateSignal(currentPrice, bb, rsi, macd, bbPosition);
 
+            // Get or create symbol entity
+            var symbolEntity = await _symbolService.GetOrCreateSymbolAsync(symbol);
+
             // Save the signal to database
             var signalEntity = new Signal
             {
                 StrategyId = Guid.Empty, // For now, using empty GUID - in real app would come from strategy
-                Symbol = symbol,
+                SymbolId = symbolEntity.Id,
                 SignalType = signal.ToString(),
                 Price = currentPrice,
                 Rsi = rsi.Value,
@@ -79,8 +86,14 @@ public class TradingStrategyService : ITradingStrategyService
 
     public async Task<List<Signal>> GetSignalsAsync(string symbol, int limit = 100)
     {
+        var symbolEntity = await _symbolService.GetSymbolAsync(symbol);
+        if (symbolEntity == null)
+        {
+            return new List<Signal>();
+        }
+
         return await _context.Signals
-            .Where(s => s.Symbol == symbol)
+            .Where(s => s.SymbolId == symbolEntity.Id)
             .OrderByDescending(s => s.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -95,7 +108,7 @@ public class TradingStrategyService : ITradingStrategyService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving signal for {Symbol}", signal.Symbol);
+            _logger.LogError(ex, "Error saving signal for SymbolId {SymbolId}", signal.SymbolId);
             throw;
         }
     }

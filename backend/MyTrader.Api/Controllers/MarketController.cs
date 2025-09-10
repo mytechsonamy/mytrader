@@ -16,15 +16,17 @@ public class MarketController : ControllerBase
 {
     private readonly IMarketDataService _marketDataService;
     private readonly IHubContext<TradingHub> _hubContext;
+    private readonly ISymbolService _symbolService;
 
-    public MarketController(IMarketDataService marketDataService, IHubContext<TradingHub> hubContext)
+    public MarketController(IMarketDataService marketDataService, IHubContext<TradingHub> hubContext, ISymbolService symbolService)
     {
         _marketDataService = marketDataService;
         _hubContext = hubContext;
+        _symbolService = symbolService;
     }
 
     [HttpPost("import-daily")]
-    public async Task<ActionResult<ImportResponse>> ImportDailyPrices([FromBody] ImportRequest request)
+    public async Task<ActionResult<MyTrader.Core.DTOs.Market.ImportResponse>> ImportDailyPrices([FromBody] ImportRequest request)
     {
         try
         {
@@ -42,7 +44,7 @@ public class MarketController : ControllerBase
     }
 
     [HttpGet("{symbol}")]
-    public async Task<ActionResult<MarketDataResponse>> GetMarketData(
+    public async Task<ActionResult<MyTrader.Core.DTOs.Market.MarketDataResponse>> GetMarketData(
         string symbol, 
         [FromQuery] string timeframe = "1d",
         [FromQuery] DateTime? start = null,
@@ -62,15 +64,15 @@ public class MarketController : ControllerBase
     [HttpPost("test-signalr")]
     public async Task<ActionResult> TestSignalR()
     {
-        // Send test price updates for popular cryptocurrencies
-        var testPrices = new[]
-        {
-            new { symbol = "BTCUSDT", price = 45123.45m, change = 2.3m },
-            new { symbol = "ETHUSDT", price = 2845.67m, change = -1.8m },
-            new { symbol = "XRPUSDT", price = 0.6234m, change = 4.2m },
-            new { symbol = "BNBUSDT", price = 312.89m, change = 1.5m },
-            new { symbol = "ADAUSDT", price = 0.4567m, change = -0.9m }
-        };
+        // Get tracked symbols and send test price updates
+        var trackedSymbols = await _symbolService.GetTrackedAsync("BINANCE");
+        var random = new Random();
+        
+        var testPrices = trackedSymbols.Take(5).Select(symbol => new {
+            symbol = symbol.Ticker,
+            price = Math.Round((decimal)(random.NextDouble() * 50000 + 1000), 2),
+            change = Math.Round((decimal)(random.NextDouble() * 10 - 5), 2)
+        }).ToArray();
 
         foreach (var price in testPrices)
         {

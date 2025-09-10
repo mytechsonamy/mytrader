@@ -17,6 +17,9 @@ public class Strategy
     [Required]
     public string Symbol { get; set; } = string.Empty;
     
+    // Symbol relationship
+    public Guid? SymbolId { get; set; }
+    
     [Required]
     public string Timeframe { get; set; } = string.Empty;
     
@@ -40,6 +43,9 @@ public class Strategy
     // Strategy parameters as JSON string
     public string Parameters { get; set; } = "{}";
     
+    // Configuration as JSON
+    public string Configuration { get; set; } = "{}";
+    
     // Strategy rules and conditions as JSON
     public string EntryRules { get; set; } = "{}";
     public string ExitRules { get; set; } = "{}";
@@ -49,6 +55,12 @@ public class Strategy
     public decimal? WinRate { get; set; }
     public int? TotalTrades { get; set; }
     public DateTime? LastBacktestDate { get; set; }
+    
+    // Performance score for optimization
+    public decimal? PerformanceScore { get; set; }
+    
+    // Backtest results as JSON
+    public string? BacktestResultsJson { get; set; }
     
     // Navigation properties
     public User User { get; set; } = null!;

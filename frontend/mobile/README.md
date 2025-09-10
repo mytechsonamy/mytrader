@@ -58,7 +58,7 @@ The app connects to the .NET backend API running on `localhost:8080`. The config
 
 ### API Endpoints
 - **Base API**: `http://localhost:8080/api`
-- **SignalR Hub**: `ws://localhost:8080/signalrhub`
+- **SignalR Hub**: `ws://localhost:8080/hubs/trading`
 
 ## Project Structure
 
@@ -115,6 +115,7 @@ The app will automatically connect to the backend API and establish WebSocket co
 3. **Backend connection**: Ensure Docker containers are running and accessible on port 8080
 4. **iOS Simulator**: Make sure Xcode and iOS Simulator are installed
 5. **Android Emulator**: Ensure Android Studio and AVD are set up
+6. **iOS build fails in ReactCodegen with spaces in path**: If your project path contains spaces (e.g., `Personal Documents`), Xcode build scripts may fail. Either move the project to a path without spaces or re-run `pod install` after our included patch to `node_modules/react-native/scripts/react_native_pods_utils/script_phases.rb` which quotes env vars.
 
 ## Contributing
 

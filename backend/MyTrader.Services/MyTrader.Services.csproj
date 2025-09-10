@@ -6,7 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.8" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
@@ -21,5 +21,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!-- Exclude feature areas that depend on models/DbSets not enabled yet -->
+  <ItemGroup>
+    <Compile Remove="Authentication/**/*.cs" />
+    <Compile Remove="Backtesting/**/*.cs" />
+    <Compile Remove="Notifications/**/*.cs" />
+    <Compile Remove="Portfolio/**/*.cs" />
+    <Compile Remove="Signals/**/*.cs" />
+    <Compile Remove="Trading/**/*.cs" />
+  </ItemGroup>
 
 </Project>

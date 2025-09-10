@@ -1,0 +1,12 @@
+meta {
+  name: Backtest - Get Result
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/backtests/{{backtestId}}
+  headers: {
+    Authorization: Bearer {{accessToken}}
+  }
+}

@@ -1,0 +1,12 @@
+meta {
+  name: Auth - List Sessions
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/auth/sessions
+  headers: {
+    Authorization: Bearer {{accessToken}}
+  }
+}

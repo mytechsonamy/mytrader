@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -27,29 +28,25 @@ public class PriceUpdateData
 public class BinanceWebSocketService : BackgroundService, IBinanceWebSocketService
 {
     private readonly ILogger<BinanceWebSocketService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource _cancellationTokenSource = new();
+    private List<string> _symbols = new();
     
     // Binance WebSocket API endpoints
     private const string BinanceWsUrl = "wss://stream.binance.com:9443/stream";
-    
-    // Default symbols to subscribe to (matching crypto-trading-bot project)
-    private readonly List<string> _symbols = new()
-    {
-        "BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", 
-        "ADAUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", 
-        "AVAXUSDT", "LINKUSDT"
-    };
 
     public event Action<PriceUpdateData>? PriceUpdated;
 
-    public BinanceWebSocketService(ILogger<BinanceWebSocketService> logger)
+    public BinanceWebSocketService(ILogger<BinanceWebSocketService> logger, IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await LoadSymbolsFromDatabaseAsync();
         await StartAsync();
         
         // Keep the service running
@@ -288,6 +285,51 @@ public class BinanceWebSocketService : BackgroundService, IBinanceWebSocketServi
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing ticker data");
+        }
+    }
+
+    private async Task LoadSymbolsFromDatabaseAsync()
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var symbolService = scope.ServiceProvider.GetService<ISymbolService>();
+            
+            if (symbolService != null)
+            {
+                var symbols = await symbolService.GetTrackedAsync("BINANCE");
+                _symbols = symbols.Where(s => s.IsTracked)
+                                .Select(s => s.Ticker)
+                                .ToList();
+                
+                _logger.LogInformation("Loaded {Count} symbols from database: {Symbols}", 
+                    _symbols.Count, string.Join(", ", _symbols));
+            }
+            else
+            {
+                // Fallback to default symbols if service not available
+                _symbols = new List<string> 
+                { 
+                    "BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", 
+                    "ADAUSDT", "SOLUSDT", "DOTUSDT", "AVAXUSDT", "LINKUSDT" 
+                };
+                
+                _logger.LogWarning("SymbolService not available, using fallback symbols: {Symbols}", 
+                    string.Join(", ", _symbols));
+            }
+            
+            if (!_symbols.Any())
+            {
+                // Ultimate fallback if no symbols found
+                _symbols = new List<string> { "BTCUSDT", "ETHUSDT" };
+                _logger.LogWarning("No symbols found in database, using minimal fallback: {Symbols}", 
+                    string.Join(", ", _symbols));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading symbols from database, using fallback");
+            _symbols = new List<string> { "BTCUSDT", "ETHUSDT" };
         }
     }
 

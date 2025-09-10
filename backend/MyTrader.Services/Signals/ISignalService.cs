@@ -13,11 +13,11 @@ public class MarketDataResponse
     public decimal Price { get; set; }
     public string? CurrentSignal { get; set; }
     public string? BbPosition { get; set; }
-    public IndicatorValues? Indicators { get; set; }
+    public MarketIndicatorValues? Indicators { get; set; }
     public DateTime Timestamp { get; set; }
 }
 
-public class IndicatorValues
+public class MarketIndicatorValues
 {
     public decimal? Rsi { get; set; }
     public decimal? Macd { get; set; }

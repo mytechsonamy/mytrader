@@ -1,0 +1,19 @@
+meta {
+  name: Strategy Templates - Create
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/strategy-templates
+  headers: {
+    Content-Type: application/json
+    Authorization: Bearer {{accessToken}}
+  }
+  body: json({
+    "name": "Conservative",
+    "version": "1.0",
+    "parameters": { "bb_period": 20, "bb_std": 2.0, "rsi_period": 14 },
+    "is_default": true
+  })
+}

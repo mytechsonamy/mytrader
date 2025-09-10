@@ -13,7 +13,7 @@ public class TradeHistory
     public Guid? BacktestResultsId { get; set; }
     
     [Required]
-    public string Symbol { get; set; } = string.Empty;
+    public Guid SymbolId { get; set; }
     
     [Required]
     public TradeType TradeType { get; set; } // BUY, SELL
@@ -26,7 +26,7 @@ public class TradeHistory
     public decimal EntryPrice { get; set; }
     public decimal Quantity { get; set; }
     public decimal EntryValue { get; set; }
-    public decimal EntryFee { get; set; }
+    public decimal? EntryFee { get; set; }
     
     // Exit Details
     public DateTime? ExitTime { get; set; }
@@ -70,8 +70,16 @@ public class TradeHistory
     // Additional trade context as JSON
     public string? TradeContext { get; set; } = "{}";
     
+    // Legacy compatibility properties (computed from primary properties)
+    public decimal ProfitLoss => RealizedPnl ?? UnrealizedPnl ?? 0m;
+    public decimal Price => ExitPrice ?? EntryPrice;
+    public DateTime ExecutedAt => ExitTime ?? EntryTime;
+    public decimal Commission => (EntryFee ?? 0m) + (ExitFee ?? 0m);
+    public string Type => TradeType.ToString().ToUpper();
+    
     // Navigation properties
     public User User { get; set; } = null!;
+    public Symbol Symbol { get; set; } = null!;
     public Strategy? Strategy { get; set; }
     public BacktestResults? BacktestResults { get; set; }
 }

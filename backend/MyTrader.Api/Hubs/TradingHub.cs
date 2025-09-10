@@ -4,8 +4,7 @@ using System.Security.Claims;
 
 namespace MyTrader.Api.Hubs;
 
-// Temporarily removing [Authorize] for debugging
-// [Authorize]
+[Authorize]
 public class TradingHub : Hub
 {
     // Method to send price updates to all connected clients
@@ -37,10 +36,12 @@ public class TradingHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        var userId = Context.User?.FindFirst("user_id")?.Value;
+        var userId = Context.User?.FindFirst("sub")?.Value ?? 
+                     Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
+                     Context.User?.FindFirst("user_id")?.Value;
         if (!string.IsNullOrEmpty(userId))
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
         }
         
         await base.OnConnectedAsync();
@@ -48,10 +49,12 @@ public class TradingHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = Context.User?.FindFirst("user_id")?.Value;
+        var userId = Context.User?.FindFirst("sub")?.Value ?? 
+                     Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
+                     Context.User?.FindFirst("user_id")?.Value;
         if (!string.IsNullOrEmpty(userId))
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user_{userId}");
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user:{userId}");
         }
         
         await base.OnDisconnectedAsync(exception);

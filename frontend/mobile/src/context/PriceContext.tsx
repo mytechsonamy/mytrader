@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import Constants from 'expo-constants';
+import { API_BASE_URL as CFG_API_BASE_URL, WS_BASE_URL as CFG_WS_BASE_URL } from '../config';
 import * as signalR from '@microsoft/signalr';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -11,15 +12,19 @@ interface PriceData {
   };
 }
 
+type SymbolRow = { id: string; ticker: string; display: string; venue: string; baseCcy: string; quoteCcy: string; isTracked: boolean };
+
 interface PriceContextType {
   prices: PriceData;
   isConnected: boolean;
+  symbols: SymbolRow[];
   getPrice: (symbol: string) => { price: number; change: number } | null;
 }
 
 const PriceContext = createContext<PriceContextType>({
   prices: {},
   isConnected: false,
+  symbols: [],
   getPrice: () => null,
 });
 
@@ -31,11 +36,60 @@ interface PriceProviderProps {
 
 export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   const [prices, setPrices] = useState<PriceData>({});
+  const [symbols, setSymbols] = useState<SymbolRow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
 
-  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || 'http://localhost:8080/api';
-  const SIGNALR_HUB_URL = API_BASE_URL.replace('/api', '/hub');
+  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:8080/api';
+  // Prefer explicit WS_BASE_URL from config; fall back to API->hubs/trading
+  const configuredHubUrl = (Constants.expoConfig?.extra?.WS_BASE_URL as string | undefined) || CFG_WS_BASE_URL;
+  const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/trading');
+  // SignalR accepts http(s) or ws(s). Use http(s) so negotiation works consistently.
+  const SIGNALR_HUB_URL = rawHubUrl.startsWith('wss://')
+    ? rawHubUrl.replace('wss://', 'https://')
+    : rawHubUrl.startsWith('ws://')
+    ? rawHubUrl.replace('ws://', 'http://')
+    : rawHubUrl;
+
+  // Fetch tracked symbols and initial price data
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        // 1) Fetch tracked symbols
+        console.log('Fetching tracked symbols from:', API_BASE_URL);
+        const symbolsResponse = await fetch(`${API_BASE_URL}/symbols/tracked`, { headers });
+        if (symbolsResponse.ok) {
+          const symbolsData = await symbolsResponse.json();
+          console.log('Received symbols data:', symbolsData);
+          setSymbols(symbolsData);
+        }
+        
+        // 2) Fetch live prices snapshot
+        console.log('Fetching real price data from:', API_BASE_URL);
+        const pricesResponse = await fetch(`${API_BASE_URL}/prices/live`, { headers });
+        if (pricesResponse.ok) {
+          const pricesData = await pricesResponse.json();
+          console.log('Received price data:', pricesData);
+          if (pricesData.symbols) {
+            setPrices(pricesData.symbols);
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching initial data:', error);
+        // Fallback to mock data if needed
+        const fallbackPrices: PriceData = {
+          BTCUSDT: { price: 43250.67, change: 2.34, timestamp: new Date().toISOString() },
+          ETHUSDT: { price: 2634.89, change: -1.23, timestamp: new Date().toISOString() },
+        };
+        setPrices(fallbackPrices);
+      }
+    };
+
+    initializeData();
+  }, [API_BASE_URL]);
 
   useEffect(() => {
     let hubConnection: signalR.HubConnection | null = null;
@@ -182,7 +236,7 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   };
 
   return (
-    <PriceContext.Provider value={{ prices, isConnected, getPrice }}>
+    <PriceContext.Provider value={{ prices, isConnected, symbols, getPrice }}>
       {children}
     </PriceContext.Provider>
   );

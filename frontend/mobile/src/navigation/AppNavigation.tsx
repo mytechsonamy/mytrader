@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
-import { RootStackParamList, AuthStackParamList } from '../types';
+import { RootStackParamList, AuthStackParamList, MainTabsParamList } from '../types';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
@@ -16,10 +16,13 @@ import DashboardScreen from '../screens/DashboardScreen';
 import NewsScreen from '../screens/NewsScreen';
 import StrategiesScreen from '../screens/StrategiesScreen';
 import StrategyTestScreen from '../screens/StrategyTestScreen';
+import GamificationScreen from '../screens/GamificationScreen';
+import AlarmsScreen from '../screens/AlarmsScreen';
+import EducationScreen from '../screens/EducationScreen';
 
 const RootStack = createStackNavigator<RootStackParamList>();
 const AuthStack = createStackNavigator<AuthStackParamList>();
-const MainTabs = createBottomTabNavigator();
+const MainTabs = createBottomTabNavigator<MainTabsParamList>();
 
 const AuthNavigator = () => (
   <AuthStack.Navigator
@@ -154,6 +157,30 @@ const MainTabsNavigator = () => (
       options={{
         tabBarLabel: 'Stratejiler',
         tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🎯</Text>,
+      }}
+    />
+    <MainTabs.Screen
+      name="Gamification"
+      component={GamificationScreen}
+      options={{
+        tabBarLabel: 'Oyunlaştırma',
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
+      }}
+    />
+    <MainTabs.Screen
+      name="Alarms"
+      component={AlarmsScreen}
+      options={{
+        tabBarLabel: 'Alarmlar',
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔔</Text>,
+      }}
+    />
+    <MainTabs.Screen
+      name="Education"
+      component={EducationScreen}
+      options={{
+        tabBarLabel: 'Eğitim',
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📚</Text>,
       }}
     />
     <MainTabs.Screen
