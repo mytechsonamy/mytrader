@@ -121,7 +121,9 @@ builder.Services.AddScoped<MyTrader.Core.Services.IStrategyManagementService, My
 builder.Services.AddScoped<MyTrader.Core.Services.IPerformanceTrackingService, MyTrader.Core.Services.PerformanceTrackingService>();
 
 // Register additional services for controllers
-builder.Services.AddScoped<MyTrader.Services.Authentication.IAuthenticationService, MyTrader.Services.Authentication.AuthenticationService>();
+// Authentication services are excluded from MyTrader.Services build for now
+// so skip DI registration to avoid compile errors.
+// builder.Services.AddScoped<MyTrader.Services.Authentication.IAuthenticationService, MyTrader.Services.Authentication.AuthenticationService>();
 builder.Services.AddScoped<MyTrader.Core.Services.ISymbolService, MyTrader.Core.Services.SymbolService>();
 builder.Services.AddScoped<MyTrader.Core.Services.IIndicatorService, MyTrader.Core.Services.IndicatorService>();
 builder.Services.AddScoped<MyTrader.Core.Services.ISignalGenerationEngine, MyTrader.Core.Services.SignalGenerationEngine>();
