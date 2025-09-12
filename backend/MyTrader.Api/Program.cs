@@ -16,8 +16,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", Serilog.Events.LogEventLevel.Information)
     .ReadFrom.Configuration(builder.Configuration)
-    .WriteTo.Console()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
     .WriteTo.GrafanaLoki("http://localhost:3100", new[]
     {
         new LokiLabel { Key = "app", Value = "mytrader-api" },
@@ -106,10 +109,9 @@ builder.Services.AddSignalR();
 // Add MyTrader core services
 // builder.Services.AddMyTraderCore();
 
-// Register core services (DB-backed) - temporarily disabled for debugging
-// builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-// builder.Services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
-// builder.Services.AddScoped<IEmailService, EmailService>();
+// Register core services (DB-backed)
+builder.Services.AddScoped<MyTrader.Services.Authentication.IAuthenticationService, MyTrader.Services.Authentication.AuthenticationService>();
+builder.Services.AddScoped<MyTrader.Services.Authentication.IEmailService, MyTrader.Services.Authentication.EmailService>();
 // builder.Services.AddScoped<ISymbolService, SymbolService>();
 // builder.Services.AddScoped<IMarketDataService, MarketDataService>();
 
@@ -121,9 +123,7 @@ builder.Services.AddScoped<MyTrader.Core.Services.IStrategyManagementService, My
 builder.Services.AddScoped<MyTrader.Core.Services.IPerformanceTrackingService, MyTrader.Core.Services.PerformanceTrackingService>();
 
 // Register additional services for controllers
-// Authentication services are excluded from MyTrader.Services build for now
-// so skip DI registration to avoid compile errors.
-// builder.Services.AddScoped<MyTrader.Services.Authentication.IAuthenticationService, MyTrader.Services.Authentication.AuthenticationService>();
+// Authentication services are now enabled and registered above
 builder.Services.AddScoped<MyTrader.Core.Services.ISymbolService, MyTrader.Core.Services.SymbolService>();
 builder.Services.AddScoped<MyTrader.Core.Services.IIndicatorService, MyTrader.Core.Services.IndicatorService>();
 builder.Services.AddScoped<MyTrader.Core.Services.ISignalGenerationEngine, MyTrader.Core.Services.SignalGenerationEngine>();
@@ -184,8 +184,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Map SignalR hub
+// Map SignalR hubs
 app.MapHub<TradingHub>("/hubs/trading");
+app.MapHub<MyTrader.Api.Hubs.MockTradingHub>("/hubs/mock-trading");
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { 

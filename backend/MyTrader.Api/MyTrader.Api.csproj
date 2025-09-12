@@ -32,7 +32,6 @@
 
   <!-- Temporarily exclude controllers/hubs that depend on disabled services -->
   <ItemGroup>
-    <Compile Remove="Controllers/AuthController.cs" />
     <Compile Remove="Controllers/IndicatorsController.cs" />
     <Compile Remove="Controllers/NotificationsController.cs" />
     <Compile Remove="Controllers/AnalyticsController.cs" />

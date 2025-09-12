@@ -12,24 +12,30 @@ export interface User {
 }
 
 export interface UserSession {
-  session_token: string;
+  accessToken: string;
+  refreshToken: string;
   user: User;
-  expires_at: string;
+  accessTokenExpiresAt: string;
+  refreshTokenExpiresAt: string;
+  tokenType: string;
+  jwtId: string;
+  sessionId: string;
 }
 
 export interface SymbolData {
   symbol: string;
   display_name: string;
   price: number;
-  signal: 'BUY' | 'SELL' | 'NEUTRAL';
+  change?: number;
+  signal: SignalType;
   indicators: {
-    RSI: number;
-    MACD: number;
-    BB_UPPER: number;
-    BB_LOWER: number;
+    rsi: number;
+    macd: number;
+    bB_UPPER: number;
+    bB_LOWER: number;
   };
   timestamp: string;
-  strategy_type: string;
+  strategy_type?: string;
 }
 
 export interface StrategyConfig {
@@ -55,14 +61,32 @@ export interface BacktestResult {
   }>;
 }
 
+// API Response Types
+export type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+};
+
 // WebSocket message types
 export type WebSocketMessage =
   | { type: 'symbol_update'; symbol: string; data: SymbolData }
-  | { type: 'initial'; data: any }
-  | { type: 'market'; data: any }
-  | { type: 'price_update'; data: any }
-  | { type: 'signal'; data: any }
+  | { type: 'initial'; data: Record<string, unknown> }
+  | { type: 'market'; data: Record<string, SymbolData> }
+  | { type: 'price_update'; data: SymbolData }
+  | { type: 'signal'; data: { symbol: string; signal: SignalType; timestamp: string } }
   | { type: 'connection_status' | 'error'; message?: string };
+
+// Helper Types
+export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
+export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
+
+// Common Component Props
+export interface BaseScreenProps {
+  loading?: boolean;
+  error?: string | null;
+}
 
 export type RootStackParamList = {
   MainTabs: { screen?: string } | undefined;

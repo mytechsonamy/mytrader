@@ -117,6 +117,12 @@ public class AuthenticationService : IAuthenticationService
 
             if (verification == null || verification.VerificationCode != request.VerificationCode)
             {
+                _logger.LogWarning(
+                    "Email verification failed for {Email}. StoredVerificationCode={StoredCode}, ProvidedVerificationCode={ProvidedCode}",
+                    request.Email,
+                    verification?.VerificationCode ?? "null",
+                    request.VerificationCode ?? "null");
+
                 return new RegisterResponse
                 {
                     Success = false,
@@ -684,7 +690,7 @@ public class AuthenticationService : IAuthenticationService
                 .Include(s => s.User)
                 .FirstOrDefaultAsync(s => s.RefreshTokenHash == refreshTokenHash && s.RevokedAt == null);
 
-            if (session == null || !session.IsActive)
+            if (session == null || session.ExpiresAt <= DateTime.UtcNow)
             {
                 _logger.LogWarning("Invalid or expired refresh token used from IP: {IpAddress}", ipAddress);
                 throw new UnauthorizedAccessException("Invalid or expired refresh token");

@@ -28,8 +28,8 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "API_BASE_URL": "http://localhost:5245/api",
-      "WS_BASE_URL": "http://localhost:5245/hubs/trading"
+      "API_BASE_URL": "http://localhost:5002/api",
+      "WS_BASE_URL": "http://localhost:5002/hubs/mock-trading"
     }
   }
 }

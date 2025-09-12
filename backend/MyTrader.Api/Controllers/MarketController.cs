@@ -37,7 +37,7 @@ public class MarketController : ControllerBase
         {
             return BadRequest(new { code = "INVALID_REQUEST", message = ex.Message });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { code = "IMPORT_ERROR", message = "Failed to import prices" });
         }
@@ -55,7 +55,7 @@ public class MarketController : ControllerBase
             var result = await _marketDataService.GetMarketDataAsync(symbol, timeframe, start, end);
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { code = "MARKET_DATA_ERROR", message = "Failed to retrieve market data" });
         }

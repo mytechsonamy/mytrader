@@ -43,7 +43,7 @@ public class GamificationController : ControllerBase
                 })
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to load achievements" });
         }
@@ -75,7 +75,7 @@ public class GamificationController : ControllerBase
                 }
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to load user stats" });
         }
@@ -106,7 +106,7 @@ public class GamificationController : ControllerBase
                 }
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to load leaderboard" });
         }
@@ -140,7 +140,7 @@ public class GamificationController : ControllerBase
                 })
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to load performance history" });
         }
@@ -179,7 +179,7 @@ public class GamificationController : ControllerBase
                 }
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to record performance" });
         }
@@ -204,7 +204,7 @@ public class GamificationController : ControllerBase
                 }
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, new { success = false, message = "Failed to get user rank" });
         }

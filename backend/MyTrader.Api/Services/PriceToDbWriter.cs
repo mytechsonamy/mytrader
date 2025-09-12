@@ -15,7 +15,9 @@ public class PriceToDbWriter : IHostedService
     private readonly string[] _timeframes = new[] { "5m", "15m", "1h", "4h", "1d", "1w" };
     // Symbols will be fetched dynamically from database
     private readonly Random _random = new Random();
-    private Timer? _timer;
+    #pragma warning disable CS0649 // Field is never assigned - intentionally disabled
+    private readonly Timer? _timer;
+    #pragma warning restore CS0649
     
     // Her asset için son DB yazım zamanını takip et
     private readonly ConcurrentDictionary<string, DateTime> _lastWriteTime = new();
@@ -44,7 +46,7 @@ public class PriceToDbWriter : IHostedService
         return Task.CompletedTask;
     }
 
-    private async void OnPrice(object? state)
+    private void OnPrice(object? state)
     {
         // COMPLETELY DISABLED - No database writes to prevent memory issues
         _logger.LogDebug("OnPrice called but DISABLED to prevent excessive DB writes");

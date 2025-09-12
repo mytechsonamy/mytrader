@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { API_BASE_URL, WS_BASE_URL } from '../config';
+import { API_BASE_URL, AUTH_BASE_URL, WS_BASE_URL } from '../config';
 import { User, UserSession, StrategyConfig, BacktestResult } from '../types';
 
 // API base URL is configured via app.json extra; falls back to localhost
@@ -13,6 +13,52 @@ const STORAGE_KEYS = {
 
 class ApiService {
   private sessionToken: string | null = null;
+
+  private buildCandidates(baseUrl: string, path: string): string[] {
+    const base = baseUrl.replace(/\/$/, '');
+    const hasApiSuffix = base.endsWith('/api');
+    const trimmed = hasApiSuffix ? base.slice(0, -4) : base; // remove /api if present
+    const ensuredApiBase = hasApiSuffix ? base : `${trimmed}/api`; // add /api if missing
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const withV1 = cleanPath.startsWith('/v1/') ? cleanPath : `/v1${cleanPath}`;
+
+    const candidates = [
+      // As-is
+      `${base}${cleanPath}`,
+      `${base}${withV1}`,
+      // Without /api (if present)
+      `${trimmed}${cleanPath}`,
+      `${trimmed}${withV1}`,
+      // With /api (if missing)
+      `${ensuredApiBase}${cleanPath}`,
+      `${ensuredApiBase}${withV1}`,
+    ];
+    // De-duplicate while preserving order
+    return Array.from(new Set(candidates));
+  }
+
+  private async postJsonWithFallback<T>(path: string, body: any, baseUrl: string = API_BASE_URL): Promise<Response> {
+    const urls = this.buildCandidates(baseUrl, path);
+    let lastResponse: Response | null = null;
+    for (const url of urls) {
+      console.log(`POST try: ${url}`);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.status === 404) {
+        console.warn(`404 on ${url}, trying next candidate (if any)`);
+        lastResponse = res;
+        continue;
+      }
+      return res;
+    }
+    // If all 404, return last 404 so caller surfaces error properly
+    if (lastResponse) return lastResponse;
+    // Should not reach here normally
+    throw new Error('No response from any candidate URL');
+  }
 
   async initialize() {
     this.sessionToken = await AsyncStorage.getItem(STORAGE_KEYS.SESSION_TOKEN);
@@ -71,22 +117,13 @@ class ApiService {
     console.log('Login attempt:', email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password
-        }),
-      });
+      const response = await this.postJsonWithFallback<UserSession>('/auth/login', { Email: email, Password: password }, AUTH_BASE_URL);
 
       const session = await this.handleResponse<UserSession>(response);
       
       // Store session data
-      this.sessionToken = session.session_token;
-      await AsyncStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, session.session_token);
+      this.sessionToken = session.accessToken;
+      await AsyncStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, session.accessToken);
       await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(session.user));
       
       console.log('Login successful');
@@ -108,20 +145,13 @@ class ApiService {
     console.log('Register attempt:', userData.email);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: userData.email,
-          password: userData.password,
-          first_name: userData.first_name,
-          last_name: userData.last_name,
-          phone: userData.phone || ''
-        }),
-      });
-
+      const response = await this.postJsonWithFallback('/auth/register', {
+        email: userData.email,
+        password: userData.password,
+        FirstName: userData.first_name,
+        LastName: userData.last_name,
+        Phone: userData.phone || '',
+      }, AUTH_BASE_URL);
       const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
     } catch (error) {
@@ -135,16 +165,7 @@ class ApiService {
 
   async verifyEmail(email: string, verificationCode: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email, 
-          verification_code: verificationCode 
-        }),
-      });
+      const response = await this.postJsonWithFallback('/auth/verify-email', { Email: email, VerificationCode: verificationCode }, AUTH_BASE_URL);
 
       const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
@@ -159,13 +180,7 @@ class ApiService {
 
   async resendVerificationCode(email: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
+      const response = await this.postJsonWithFallback('/auth/resend-verification', { Email: email }, AUTH_BASE_URL);
 
       const result = await this.handleResponse<{ success: boolean; message: string }>(response);
       return result;
@@ -181,10 +196,7 @@ class ApiService {
   async logout(): Promise<void> {
     if (this.sessionToken) {
       try {
-        await fetch(`${API_BASE_URL}/v1/auth/logout`, {
-          method: 'POST',
-          headers: await this.getHeaders(),
-        });
+        await this.postJsonWithFallback('/auth/logout', {}, AUTH_BASE_URL);
       } catch (error) {
         console.warn('Logout API call failed:', error);
       }
@@ -202,39 +214,28 @@ class ApiService {
     phone?: string;
     telegram_id?: string;
   }): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      method: 'PUT',
-      headers: await this.getHeaders(),
-      body: JSON.stringify(partial),
-    });
+    const payload = {
+      Name: partial.first_name && partial.last_name ? `${partial.first_name} ${partial.last_name}` : undefined,
+      Phone: partial.phone,
+      Country: undefined // Add if needed later
+    };
+    const response = await this.postJsonWithFallback('/auth/me', payload, AUTH_BASE_URL);
     return await this.handleResponse(response);
   }
 
   // Password reset flow
   async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/request-password-reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
+    const response = await this.postJsonWithFallback('/auth/request-password-reset', { Email: email }, AUTH_BASE_URL);
     return await this.handleResponse(response);
   }
 
   async verifyPasswordReset(email: string, code: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/verify-password-reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, verification_code: code }),
-    });
+    const response = await this.postJsonWithFallback('/auth/verify-password-reset', { Email: email, VerificationCode: code }, AUTH_BASE_URL);
     return await this.handleResponse<{ success: boolean; message: string }>(response);
   }
 
   async resetPassword(email: string, newPassword: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, new_password: newPassword }),
-    });
+    const response = await this.postJsonWithFallback('/auth/reset-password', { Email: email, NewPassword: newPassword }, AUTH_BASE_URL);
     return await this.handleResponse<{ success: boolean; message: string }>(response);
   }
 
@@ -246,7 +247,7 @@ class ApiService {
 
     try {
       // Verify session is still valid
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const response = await fetch(`${AUTH_BASE_URL.replace(/\/$/, '')}/auth/me`, {
         headers: await this.getHeaders(),
       });
 
@@ -348,7 +349,7 @@ class ApiService {
   }
 
   async getSymbolsConfig(): Promise<{ symbols: Record<string, any>; interval: string }> {
-    const response = await fetch(`${API_BASE_URL}/symbols`, {
+    const response = await fetch(`${API_BASE_URL}/MockMarket/symbols`, {
       headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);

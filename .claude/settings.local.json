@@ -37,7 +37,8 @@
       "Bash(ASPNETCORE_URLS=\"http://localhost:5001\" dotnet run)",
       "Bash(pkill:*)",
       "Bash(ASPNETCORE_URLS=\"http://localhost:5002\" dotnet run --no-launch-profile)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=\"http://localhost:5002\" dotnet run --no-launch-profile)"
     ],
     "deny": [],
     "ask": []

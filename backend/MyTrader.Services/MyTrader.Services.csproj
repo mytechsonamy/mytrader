@@ -24,7 +24,6 @@
 
   <!-- Exclude feature areas that depend on models/DbSets not enabled yet -->
   <ItemGroup>
-    <Compile Remove="Authentication/**/*.cs" />
     <Compile Remove="Backtesting/**/*.cs" />
     <Compile Remove="Notifications/**/*.cs" />
     <Compile Remove="Portfolio/**/*.cs" />

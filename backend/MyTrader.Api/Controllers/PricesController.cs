@@ -65,14 +65,14 @@ public class PricesController : ControllerBase
             var symbolsParam = string.Join(",", symbols);
             
             var response = await _httpClient.GetStringAsync($"https://api.binance.com/api/v3/ticker/24hr?symbols=[{string.Join(",", symbols.Select(s => $"\"{s}\""))}]");
-            var binanceData = JsonSerializer.Deserialize<JsonElement[]>(response);
+            var binanceData = JsonSerializer.Deserialize<JsonElement[]>(response) ?? Array.Empty<JsonElement>();
 
             var prices = new Dictionary<string, object>();
             var marketDataEntries = new List<MarketData>();
             
             foreach (var item in binanceData)
             {
-                var symbol = item.GetProperty("symbol").GetString();
+                var symbol = item.GetProperty("symbol").GetString() ?? "UNKNOWN";
                 var price = decimal.Parse(item.GetProperty("lastPrice").GetString() ?? "0");
                 var change = decimal.Parse(item.GetProperty("priceChangePercent").GetString() ?? "0");
                 var high = decimal.Parse(item.GetProperty("highPrice").GetString() ?? "0");
