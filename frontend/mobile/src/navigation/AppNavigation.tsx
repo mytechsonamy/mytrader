@@ -14,11 +14,13 @@ import ForgotPasswordVerify from '../screens/ForgotPasswordVerify';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import NewsScreen from '../screens/NewsScreen';
+import PortfolioScreen from '../screens/PortfolioScreen';
 import StrategiesScreen from '../screens/StrategiesScreen';
 import StrategyTestScreen from '../screens/StrategyTestScreen';
 import GamificationScreen from '../screens/GamificationScreen';
 import AlarmsScreen from '../screens/AlarmsScreen';
 import EducationScreen from '../screens/EducationScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const RootStack = createStackNavigator<RootStackParamList>();
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -71,46 +73,6 @@ const AuthNavigator = () => (
   </AuthStack.Navigator>
 );
 
-const ProfileScreen = ({ navigation }: any) => {
-  const { user, logout } = useAuth();
-
-  const handleLogout = async () => {
-    await logout();
-  };
-
-  const handleLogin = () => {
-    navigation.navigate('AuthStack');
-  };
-
-  return (
-    <View style={profileStyles.container}>
-      <Text style={profileStyles.title}>👤 Profil</Text>
-      
-      {user ? (
-        <View style={profileStyles.userInfo}>
-          <Text style={profileStyles.userName}>{user.first_name} {user.last_name}</Text>
-          <Text style={profileStyles.userEmail}>{user.email}</Text>
-          {user.phone && <Text style={profileStyles.userDetail}>📞 {user.phone}</Text>}
-          {user.telegram_id && <Text style={profileStyles.userDetail}>📱 {user.telegram_id}</Text>}
-          
-          <TouchableOpacity style={profileStyles.logoutButton} onPress={handleLogout}>
-            <Text style={profileStyles.logoutText}>🚪 Çıkış Yap</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={profileStyles.userInfo}>
-          <Text style={profileStyles.guestTitle}>Misafir Modunda</Text>
-          <Text style={profileStyles.guestText}>Stratejileri kaydetmek için giriş yapın</Text>
-          
-          <TouchableOpacity style={profileStyles.loginButton} onPress={handleLogin}>
-            <Text style={profileStyles.loginText}>🔑 Giriş Yap</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-};
-
 const MainTabsNavigator = () => (
   <MainTabs.Navigator
     screenOptions={{
@@ -141,6 +103,14 @@ const MainTabsNavigator = () => (
       options={{
         tabBarLabel: 'Ana Sayfa',
         tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📊</Text>,
+      }}
+    />
+    <MainTabs.Screen
+      name="Portfolio"
+      component={PortfolioScreen}
+      options={{
+        tabBarLabel: 'Portföy',
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💼</Text>,
       }}
     />
     <MainTabs.Screen

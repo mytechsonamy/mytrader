@@ -78,6 +78,102 @@ export type WebSocketMessage =
   | { type: 'signal'; data: { symbol: string; signal: SignalType; timestamp: string } }
   | { type: 'connection_status' | 'error'; message?: string };
 
+// Portfolio Management Types
+export interface Portfolio {
+  id: string;
+  name: string;
+  description?: string;
+  baseCurrency: string;
+  totalValue: number;
+  totalPnL: number;
+  totalPnLPercent: number;
+  dailyPnL: number;
+  positions: Position[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Position {
+  id: string;
+  portfolioId: string;
+  symbol: string;
+  symbolType: 'CRYPTO' | 'STOCK' | 'FOREX' | 'COMMODITY';
+  quantity: number;
+  averagePrice: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  realizedPnL: number;
+  totalPnL: number;
+  totalPnLPercent: number;
+  allocation: number;
+  openDate: string;
+  lastUpdated: string;
+}
+
+export interface Transaction {
+  id: string;
+  portfolioId: string;
+  symbol: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  amount: number;
+  fee: number;
+  executedAt: string;
+  orderId?: string;
+  notes?: string;
+}
+
+export interface PortfolioAnalytics {
+  portfolioId: string;
+  performance: {
+    totalReturn: number;
+    annualizedReturn: number;
+    volatility: number;
+    sharpeRatio: number;
+    sortinoRatio: number;
+    maxDrawdown: number;
+    maxDrawdownPercent: number;
+    bestDay: number;
+    worstDay: number;
+    winRate: number;
+    profitFactor: number;
+  };
+  risk: {
+    valueAtRisk: number;
+    beta: number;
+    alpha: number;
+    currentDrawdown: number;
+  };
+  allocation: {
+    assetAllocation: Array<{ asset: string; percentage: number; value: number }>;
+    sectorAllocation: Array<{ sector: string; percentage: number; value: number }>;
+  };
+}
+
+export interface ExportRequest {
+  portfolioId: string;
+  format: 'csv' | 'pdf' | 'json';
+  dateFrom: string;
+  dateTo: string;
+  includeSummary?: boolean;
+  includeHoldings?: boolean;
+  includeTransactions?: boolean;
+  includePerformance?: boolean;
+  includeCharts?: boolean;
+}
+
+export interface ExportResponse {
+  fileName: string;
+  contentType: string;
+  fileContent: string; // Base64 encoded
+  fileSizeBytes: number;
+  generatedAt: string;
+  downloadUrl: string;
+}
+
 // Helper Types
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
@@ -100,6 +196,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Dashboard: undefined;
+  Portfolio: undefined;
   News: undefined;
   Strategies: undefined;
   Gamification: undefined;

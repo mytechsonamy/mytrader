@@ -31,6 +31,9 @@ public class TradingDbContext : DbContext, ITradingDbContext
     public DbSet<StrategyPerformance> StrategyPerformances { get; set; }
     public DbSet<PriceAlert> PriceAlerts { get; set; }
     public DbSet<NotificationHistory> NotificationHistory { get; set; }
+    public DbSet<UserPortfolio> UserPortfolios { get; set; }
+    public DbSet<PortfolioPosition> PortfolioPositions { get; set; }
+    public DbSet<Transaction> Transactions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -372,6 +375,101 @@ public class TradingDbContext : DbContext, ITradingDbContext
             entity.HasOne(e => e.Strategy)
                   .WithMany()
                   .HasForeignKey(e => e.StrategyId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // UserPortfolio configuration
+        modelBuilder.Entity<UserPortfolio>(entity =>
+        {
+            entity.ToTable("user_portfolios");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(500);
+            entity.Property(e => e.BaseCurrency).HasColumnName("base_ccy").HasMaxLength(12).IsRequired();
+            entity.Property(e => e.InitialCapital).HasColumnName("initial_capital").HasPrecision(18, 8);
+            entity.Property(e => e.CurrentValue).HasColumnName("current_value").HasPrecision(18, 8);
+            entity.Property(e => e.CashBalance).HasColumnName("cash_balance").HasPrecision(18, 8);
+            entity.Property(e => e.TotalPnL).HasColumnName("total_pnl").HasPrecision(18, 8);
+            entity.Property(e => e.DailyPnL).HasColumnName("daily_pnl").HasPrecision(18, 8);
+            entity.Property(e => e.TotalReturnPercent).HasColumnName("total_return_percent").HasPrecision(10, 4);
+            entity.Property(e => e.IsDefault).HasColumnName("is_default");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+            
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.UserId, e.IsDefault });
+            
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PortfolioPosition configuration
+        modelBuilder.Entity<PortfolioPosition>(entity =>
+        {
+            entity.ToTable("portfolio_positions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Quantity).HasPrecision(18, 8);
+            entity.Property(e => e.AveragePrice).HasPrecision(18, 8);
+            entity.Property(e => e.CurrentPrice).HasPrecision(18, 8);
+            entity.Property(e => e.MarketValue).HasPrecision(18, 8);
+            entity.Property(e => e.UnrealizedPnL).HasPrecision(18, 8);
+            entity.Property(e => e.UnrealizedPnLPercent).HasPrecision(10, 4);
+            entity.Property(e => e.RealizedPnL).HasPrecision(18, 8);
+            entity.Property(e => e.CostBasis).HasPrecision(18, 8);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("NOW()");
+            
+            entity.HasIndex(e => e.PortfolioId);
+            entity.HasIndex(e => new { e.PortfolioId, e.SymbolId }).IsUnique();
+            
+            entity.HasOne(e => e.Portfolio)
+                  .WithMany(p => p.Positions)
+                  .HasForeignKey(e => e.PortfolioId)
+                  .OnDelete(DeleteBehavior.Cascade);
+                  
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Transaction configuration
+        modelBuilder.Entity<Transaction>(entity =>
+        {
+            entity.ToTable("transactions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TransactionType).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Side).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Quantity).HasPrecision(18, 8);
+            entity.Property(e => e.Price).HasPrecision(18, 8);
+            entity.Property(e => e.TotalAmount).HasPrecision(18, 8);
+            entity.Property(e => e.Fee).HasPrecision(18, 8);
+            entity.Property(e => e.Currency).HasMaxLength(12).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.OrderId).HasMaxLength(100);
+            entity.Property(e => e.ExecutionId).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("NOW()");
+            
+            entity.HasIndex(e => e.PortfolioId);
+            entity.HasIndex(e => e.ExecutedAt);
+            entity.HasIndex(e => new { e.PortfolioId, e.ExecutedAt });
+            entity.HasIndex(e => new { e.PortfolioId, e.SymbolId, e.ExecutedAt });
+            
+            entity.HasOne(e => e.Portfolio)
+                  .WithMany(p => p.Transactions)
+                  .HasForeignKey(e => e.PortfolioId)
                   .OnDelete(DeleteBehavior.Cascade);
                   
             entity.HasOne(e => e.Symbol)

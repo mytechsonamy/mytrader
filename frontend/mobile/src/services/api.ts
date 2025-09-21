@@ -1,7 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { API_BASE_URL, AUTH_BASE_URL, WS_BASE_URL } from '../config';
-import { User, UserSession, StrategyConfig, BacktestResult } from '../types';
+import { 
+  User, UserSession, StrategyConfig, BacktestResult,
+  Portfolio, Position, Transaction, PortfolioAnalytics, ExportRequest, ExportResponse
+} from '../types';
 
 // API base URL is configured via app.json extra; falls back to localhost
 
@@ -524,6 +527,123 @@ class ApiService {
       method: 'POST',
       headers: await this.getHeaders(),
       body: JSON.stringify({ answers }),
+    });
+    return await this.handleResponse(response);
+  }
+
+  // Portfolio Management APIs
+  async getPortfolios(): Promise<Portfolio[]> {
+    const response = await fetch(`${API_BASE_URL}/portfolio`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolio(portfolioId: string): Promise<Portfolio> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async createPortfolio(portfolio: { name: string; description?: string; baseCurrency: string }): Promise<Portfolio> {
+    const response = await fetch(`${API_BASE_URL}/portfolio`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(portfolio),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async updatePortfolio(portfolioId: string, updates: Partial<Portfolio>): Promise<Portfolio> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}`, {
+      method: 'PUT',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(updates),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async deletePortfolio(portfolioId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    });
+    await this.handleResponse(response);
+  }
+
+  async getPortfolioPositions(portfolioId: string): Promise<Position[]> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/positions`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolioTransactions(portfolioId: string, limit?: number, offset?: number): Promise<Transaction[]> {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit.toString());
+    if (offset) params.append('offset', offset.toString());
+    
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/transactions?${params}`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async createTransaction(transaction: {
+    portfolioId: string;
+    symbol: string;
+    type: 'BUY' | 'SELL';
+    quantity: number;
+    price: number;
+    fee?: number;
+    notes?: string;
+  }): Promise<Transaction> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/transactions`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(transaction),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolioAnalytics(portfolioId: string): Promise<PortfolioAnalytics> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/analytics`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolioPerformance(portfolioId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/performance`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolioRisk(portfolioId: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/risk`, {
+      headers: await this.getHeaders(),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async exportPortfolio(request: ExportRequest): Promise<ExportResponse> {
+    const response = await fetch(`${API_BASE_URL}/portfolio/export`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(request),
+    });
+    return await this.handleResponse(response);
+  }
+
+  async getPortfolioReport(portfolioId: string, dateFrom?: string, dateTo?: string): Promise<any> {
+    const params = new URLSearchParams();
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+    
+    const response = await fetch(`${API_BASE_URL}/portfolio/${portfolioId}/report?${params}`, {
+      headers: await this.getHeaders(),
     });
     return await this.handleResponse(response);
   }

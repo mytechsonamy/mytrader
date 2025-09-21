@@ -9,7 +9,7 @@ using System.Collections.Concurrent;
 
 namespace MyTrader.Services.Portfolio;
 
-public interface IPortfolioService
+public interface IDashboardPortfolioService
 {
     Task<PortfolioSummaryDto> GetPortfolioSummaryAsync(Guid userId);
     Task<List<PositionUpdateDto>> GetPositionsAsync(Guid userId);
@@ -20,7 +20,7 @@ public interface IPortfolioService
     Task<List<TradeHistory>> GetTradeHistoryAsync(Guid userId, DateTime? from = null, DateTime? to = null);
 }
 
-public class PortfolioService : IPortfolioService
+public class PortfolioService : IDashboardPortfolioService
 {
     private readonly TradingDbContext _context;
     private readonly ISymbolService _symbolService;

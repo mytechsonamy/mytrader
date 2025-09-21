@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MyTrader - Real-time Data Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.11/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .price-feed { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .price { font-weight: bold; color: #2c5aa0; }
+        .change-positive { color: green; }
+        .change-negative { color: red; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .log { background: #e2e3e5; padding: 5px; margin: 2px 0; font-size: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 MyTrader - Real-time Market Data Test</h1>
+    
+    <div id="connection-status" class="status disconnected">
+        ❌ Disconnected
+    </div>
+    
+    <h2>📊 Live Price Feed</h2>
+    <div id="price-feed"></div>
+    
+    <h2>📝 Connection Log</h2>
+    <div id="log"></div>
+    
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:8080/hubs/market-data")
+            .build();
+
+        const statusDiv = document.getElementById('connection-status');
+        const priceFeedDiv = document.getElementById('price-feed');
+        const logDiv = document.getElementById('log');
+        
+        function addLog(message) {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log';
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.insertBefore(logEntry, logDiv.firstChild);
+            
+            // Keep only last 20 logs
+            while (logDiv.children.length > 20) {
+                logDiv.removeChild(logDiv.lastChild);
+            }
+        }
+        
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.innerHTML = '✅ Connected to SignalR Hub';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.innerHTML = '❌ Disconnected from SignalR Hub';
+            }
+        }
+        
+        function updatePrice(symbol, price, change) {
+            const changeClass = change >= 0 ? 'change-positive' : 'change-negative';
+            const changeSign = change >= 0 ? '+' : '';
+            
+            let priceElement = document.getElementById(`price-${symbol}`);
+            if (!priceElement) {
+                priceElement = document.createElement('div');
+                priceElement.id = `price-${symbol}`;
+                priceElement.className = 'price-feed';
+                priceFeedDiv.appendChild(priceElement);
+            }
+            
+            priceElement.innerHTML = `
+                <strong>${symbol}</strong>: 
+                <span class="price">$${price}</span> 
+                <span class="${changeClass}">(${changeSign}${change}%)</span>
+                <small style="color: #666; margin-left: 10px;">${new Date().toLocaleTimeString()}</small>
+            `;
+        }
+
+        // Connection events
+        connection.onclose(async () => {
+            updateConnectionStatus(false);
+            addLog('Connection closed');
+        });
+
+        connection.onreconnecting((error) => {
+            updateConnectionStatus(false);
+            addLog('Reconnecting...');
+        });
+
+        connection.onreconnected((connectionId) => {
+            updateConnectionStatus(true);
+            addLog(`Reconnected with ID: ${connectionId}`);
+        });
+
+        // Listen for price updates
+        connection.on("PriceUpdate", function (symbol, price, change) {
+            addLog(`Price update: ${symbol} = $${price} (${change}%)`);
+            updatePrice(symbol, price, change);
+        });
+
+        connection.on("MarketDataUpdate", function (data) {
+            addLog(`Market data: ${JSON.stringify(data)}`);
+        });
+
+        // Start connection
+        connection.start().then(function () {
+            updateConnectionStatus(true);
+            addLog('Connected to SignalR Hub successfully!');
+            
+            // Subscribe to price updates for each symbol individually
+            const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT", "DOTUSDT"];
+            symbols.forEach(symbol => {
+                connection.invoke("SubscribeToPriceUpdates", symbol)
+                    .then(() => addLog(`✅ Subscribed to ${symbol}`))
+                    .catch(err => addLog(`❌ Error subscribing to ${symbol}: ${err.toString()}`));
+            });
+                
+        }).catch(function (err) {
+            updateConnectionStatus(false);
+            addLog(`Connection failed: ${err.toString()}`);
+        });
+    </script>
+</body>
+</html>

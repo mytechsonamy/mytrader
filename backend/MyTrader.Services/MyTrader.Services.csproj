@@ -6,6 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.8" />
@@ -26,7 +27,7 @@
   <ItemGroup>
     <Compile Remove="Backtesting/**/*.cs" />
     <Compile Remove="Notifications/**/*.cs" />
-    <Compile Remove="Portfolio/**/*.cs" />
+    <Compile Remove="Portfolio/PortfolioService.cs" />
     <Compile Remove="Signals/**/*.cs" />
     <Compile Remove="Trading/**/*.cs" />
   </ItemGroup>

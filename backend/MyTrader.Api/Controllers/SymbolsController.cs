@@ -9,7 +9,6 @@ namespace MyTrader.Api.Controllers;
 
 [ApiController]
 [Route("api/symbols")]
-[Authorize]
 public class SymbolsController : ControllerBase
 {
     private readonly ISymbolService _symbolService;
@@ -20,6 +19,7 @@ public class SymbolsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize]
     public async Task<ActionResult> GetSymbols()
     {
         // Return symbols in the format expected by frontend
@@ -38,7 +38,56 @@ public class SymbolsController : ControllerBase
         return Ok(new { symbols, interval = "1m" });
     }
 
+    [HttpGet("test")]
+    [AllowAnonymous]
+    public ActionResult GetTest()
+    {
+        return Ok(new { message = "Test endpoint working", timestamp = DateTime.UtcNow });
+    }
+
+    /// <summary>
+    /// Public endpoint for market data overview
+    /// </summary>
+    [HttpGet("market-overview")]
+    [AllowAnonymous]
+    public async Task<ActionResult> GetMarketOverview()
+    {
+        try
+        {
+            var allSymbols = await _symbolService.GetActiveSymbolsAsync();
+            var trackedSymbols = await _symbolService.GetTrackedAsync();
+            
+            // Group by venue
+            var venueBreakdown = allSymbols
+                .GroupBy(s => s.Venue)
+                .Select(g => new
+                {
+                    Venue = g.Key,
+                    Count = g.Count(),
+                    TrackedCount = g.Count(s => s.IsTracked),
+                    Symbols = g.Select(s => s.Ticker).Take(3).ToArray()
+                })
+                .ToArray();
+
+            var overview = new
+            {
+                TotalSymbols = allSymbols.Count,
+                TrackedSymbols = trackedSymbols.Count,
+                VenueBreakdown = venueBreakdown,
+                MarketSentiment = "Neutral", // Mock data
+                LastUpdated = DateTime.UtcNow
+            };
+
+            return Ok(new { success = true, data = overview });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { success = false, message = "Failed to get market overview" });
+        }
+    }
+
     [HttpGet("tracked")]
+    [Authorize]
     public async Task<ActionResult> GetTracked()
     {
         var list = await _symbolService.GetTrackedAsync();
@@ -46,6 +95,7 @@ public class SymbolsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize]
     public async Task<ActionResult> Create([FromBody] CreateSymbolRequest req)
     {
         var created = await _symbolService.GetOrCreateAsync(req.Ticker, req.Venue ?? "BINANCE", req.BaseCcy, req.QuoteCcy);
@@ -53,6 +103,7 @@ public class SymbolsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}")]
+    [Authorize]
     public async Task<ActionResult> Patch(Guid id, [FromBody] PatchSymbolRequest req)
     {
         var success = await _symbolService.SetTrackedAsync(id, req.IsTracked);

@@ -9,6 +9,7 @@ using MyTrader.Core.Interfaces;
 using MyTrader.Api.Hubs;
 using MyTrader.Api.Services;
 using MyTrader.Api.Setup;
+using MyTrader.API.Hubs;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
 
@@ -41,7 +42,8 @@ builder.Services.AddCors(options =>
         corsBuilder.WithOrigins(
                        "http://localhost:3000", "https://localhost:3000",
                        "http://localhost:8081", "https://localhost:8081",
-                       "http://localhost:8084", "https://localhost:8084"
+                       "http://localhost:8084", "https://localhost:8084",
+                       "http://localhost:3333", "https://localhost:3333"
                    )
                    .AllowAnyMethod()
                    .AllowAnyHeader()
@@ -92,6 +94,13 @@ builder.Services.AddAuthentication(x =>
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
             
+            // Allow anonymous access to dashboard hub
+            if (path.StartsWithSegments("/hubs/dashboard"))
+            {
+                return Task.CompletedTask;
+            }
+            
+            // Require authentication for other hubs
             if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
             {
                 context.Token = accessToken;
@@ -124,10 +133,14 @@ builder.Services.AddScoped<MyTrader.Core.Services.IPerformanceTrackingService, M
 
 // Register additional services for controllers
 // Authentication services are now enabled and registered above
-builder.Services.AddScoped<MyTrader.Core.Services.ISymbolService, MyTrader.Core.Services.SymbolService>();
+builder.Services.AddScoped<MyTrader.Services.Market.ISymbolService, MyTrader.Services.Market.SymbolService>();
 builder.Services.AddScoped<MyTrader.Core.Services.IIndicatorService, MyTrader.Core.Services.IndicatorService>();
 builder.Services.AddScoped<MyTrader.Core.Services.ISignalGenerationEngine, MyTrader.Core.Services.SignalGenerationEngine>();
 builder.Services.AddScoped<MyTrader.Core.Services.ITradingStrategyService, MyTrader.Core.Services.TradingStrategyService>();
+
+// Register portfolio service
+//builder.Services.AddScoped<IPortfolioService, MyTrader.Services.Portfolio.NewPortfolioService>();
+builder.Services.AddScoped<IPortfolioService, MyTrader.API.Services.InMemoryPortfolioService>();
 
 // Register gamification service
 builder.Services.AddScoped<MyTrader.Services.Gamification.IGamificationService, MyTrader.Services.Gamification.GamificationService>();
@@ -146,8 +159,12 @@ builder.Services.AddScoped<MyTrader.Core.Data.ITradingDbContext>(provider =>
     provider.GetRequiredService<TradingDbContext>());
 
 // Register background services: WebSocket + Daily backtest automation  
-// builder.Services.AddSingleton<IBinanceWebSocketService, BinanceWebSocketService>();
-// builder.Services.AddHostedService<BinanceWebSocketService>();
+builder.Services.AddSingleton<IBinanceWebSocketService, BinanceWebSocketService>();
+builder.Services.AddHostedService<BinanceWebSocketService>();
+// MarketDataBroadcastService to connect Binance WebSocket to SignalR
+builder.Services.AddHostedService<MyTrader.Api.Services.MarketDataBroadcastService>();
+// Portfolio Monitoring Service for real-time portfolio updates
+builder.Services.AddHostedService<MyTrader.API.Services.PortfolioMonitoringService>();
 // PriceToDbWriter COMPLETELY DISABLED due to excessive DB writes causing memory issues
 // builder.Services.AddHostedService<PriceToDbWriter>();
 // DailyBacktestService ENABLED for controlled backtesting and strategy optimization
@@ -186,7 +203,10 @@ app.MapControllers();
 
 // Map SignalR hubs
 app.MapHub<TradingHub>("/hubs/trading");
-app.MapHub<MyTrader.Api.Hubs.MockTradingHub>("/hubs/mock-trading");
+// app.MapHub<DashboardHub>("/hubs/dashboard"); // Temporarily disabled - reference issue
+app.MapHub<MockTradingHub>("/hubs/mock-trading");
+app.MapHub<MarketDataHub>("/hubs/market-data");
+app.MapHub<PortfolioHub>("/hubs/portfolio");
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { 
@@ -246,6 +266,7 @@ Console.WriteLine("🎯 Available endpoints:");
 Console.WriteLine("   GET  /           - API info");
 Console.WriteLine("   GET  /health     - Health check");
 Console.WriteLine("   POST /api/auth/* - Authentication");
-Console.WriteLine("   WS   /hubs/trading - SignalR hub");
+Console.WriteLine("   WS   /hubs/trading - SignalR trading hub");
+Console.WriteLine("   WS   /hubs/dashboard - SignalR dashboard hub (anonymous)");
 
 app.Run();

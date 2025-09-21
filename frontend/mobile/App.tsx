@@ -6,6 +6,7 @@ import { StyleSheet, View, Text } from 'react-native';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { PriceProvider } from './src/context/PriceContext';
+import { PortfolioProvider } from './src/context/PortfolioContext';
 import AppNavigation from './src/navigation/AppNavigation';
 
 export default function App() {
@@ -16,8 +17,10 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <PriceProvider>
-            <AppNavigation />
-            <StatusBar style="light" />
+            <PortfolioProvider>
+              <AppNavigation />
+              <StatusBar style="light" />
+            </PortfolioProvider>
           </PriceProvider>
         </AuthProvider>
       </SafeAreaProvider>

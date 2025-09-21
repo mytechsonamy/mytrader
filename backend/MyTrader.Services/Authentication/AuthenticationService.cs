@@ -982,4 +982,17 @@ public class EmailService : IEmailService
         _logger.LogInformation("Would send password reset email to {Email} with code {Code}", email, code);
         await Task.CompletedTask;
     }
+
+    private bool VerifyPassword(string password, string hash)
+    {
+        try
+        {
+            return BCrypt.Net.BCrypt.Verify(password, hash);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying password");
+            return false;
+        }
+    }
 }

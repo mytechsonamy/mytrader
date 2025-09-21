@@ -679,6 +679,92 @@ namespace MyTrader.Infrastructure.Migrations
                     b.ToTable("market_data", (string)null);
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.NotificationHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SourceEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("notification_history");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.PasswordReset", b =>
                 {
                     b.Property<Guid>("Id")
@@ -725,6 +811,156 @@ namespace MyTrader.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("password_resets", (string)null);
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.PortfolioPosition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AveragePrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("average_price");
+
+                    b.Property<decimal>("CostBasis")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("cost_basis");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<decimal>("CurrentPrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("current_price");
+
+                    b.Property<DateTime?>("FirstPurchasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_purchased_at");
+
+                    b.Property<DateTime?>("LastTradedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_traded_at");
+
+                    b.Property<decimal>("MarketValue")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("market_value");
+
+                    b.Property<Guid>("PortfolioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("portfolio_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal>("RealizedPnL")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("realized_pnl");
+
+                    b.Property<Guid>("SymbolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("symbol_id");
+
+                    b.Property<decimal>("UnrealizedPnL")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("unrealized_pnl");
+
+                    b.Property<decimal>("UnrealizedPnLPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("unrealized_pnl_percent");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PortfolioId");
+
+                    b.HasIndex("SymbolId");
+
+                    b.HasIndex("PortfolioId", "SymbolId")
+                        .IsUnique();
+
+                    b.ToTable("portfolio_positions", (string)null);
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.PriceAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlertType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("alert_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsTriggered")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_triggered");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.Property<decimal?>("PercentageChange")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("percentage_change");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("symbol");
+
+                    b.Property<decimal>("TargetPrice")
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("target_price");
+
+                    b.Property<DateTimeOffset?>("TriggeredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("triggered_at");
+
+                    b.Property<decimal?>("TriggeredPrice")
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("triggered_price");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("price_alerts");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.Signal", b =>
@@ -1218,6 +1454,111 @@ namespace MyTrader.Infrastructure.Migrations
                     b.ToTable("trade_history", (string)null);
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.Transaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("executed_at");
+
+                    b.Property<string>("ExecutionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("execution_id");
+
+                    b.Property<decimal>("Fee")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("fee");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("OrderId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("PortfolioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("portfolio_id");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("price");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("side");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SymbolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("symbol_id");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("total_amount");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("transaction_type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExecutedAt");
+
+                    b.HasIndex("PortfolioId");
+
+                    b.HasIndex("SymbolId");
+
+                    b.HasIndex("PortfolioId", "ExecutedAt");
+
+                    b.HasIndex("PortfolioId", "SymbolId", "ExecutedAt");
+
+                    b.ToTable("transactions", (string)null);
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1354,6 +1695,60 @@ namespace MyTrader.Infrastructure.Migrations
                     b.ToTable("user_achievements");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.UserDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DeviceToken")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("DeviceType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Platform")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserDevice");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.UserNotificationPreferences", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1477,6 +1872,93 @@ namespace MyTrader.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("user_notification_preferences", (string)null);
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.UserPortfolio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseCurrency")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("base_currency");
+
+                    b.Property<decimal>("CashBalance")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("cash_balance");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<decimal>("CurrentValue")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("current_value");
+
+                    b.Property<decimal>("DailyPnL")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("daily_pnl");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<decimal>("InitialCapital")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("initial_capital");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("TotalPnL")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("total_pnl");
+
+                    b.Property<decimal>("TotalReturnPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("total_return_percent");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "IsDefault");
+
+                    b.ToTable("user_portfolios", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.UserSession", b =>
@@ -1680,10 +2162,57 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("Symbol");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.NotificationHistory", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.UserDevice", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId");
+
+                    b.HasOne("MyTrader.Core.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.PasswordReset", b =>
                 {
                     b.HasOne("MyTrader.Core.Models.User", "User")
                         .WithMany("PasswordResets")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.PortfolioPosition", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.UserPortfolio", "Portfolio")
+                        .WithMany("Positions")
+                        .HasForeignKey("PortfolioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyTrader.Core.Models.Symbol", "Symbol")
+                        .WithMany()
+                        .HasForeignKey("SymbolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Portfolio");
+
+                    b.Navigation("Symbol");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.PriceAlert", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.User", "User")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1780,6 +2309,25 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.Transaction", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.UserPortfolio", "Portfolio")
+                        .WithMany("Transactions")
+                        .HasForeignKey("PortfolioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyTrader.Core.Models.Symbol", "Symbol")
+                        .WithMany()
+                        .HasForeignKey("SymbolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Portfolio");
+
+                    b.Navigation("Symbol");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.UserAchievement", b =>
                 {
                     b.HasOne("MyTrader.Core.Models.User", "User")
@@ -1791,7 +2339,29 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.UserDevice", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.UserNotificationPreferences", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.UserPortfolio", b =>
                 {
                     b.HasOne("MyTrader.Core.Models.User", "User")
                         .WithMany()
@@ -1847,6 +2417,13 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("Strategies");
 
                     b.Navigation("TradeHistory");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.UserPortfolio", b =>
+                {
+                    b.Navigation("Positions");
+
+                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

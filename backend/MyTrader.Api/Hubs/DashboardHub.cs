@@ -4,16 +4,14 @@ using Microsoft.EntityFrameworkCore;
 using MyTrader.Core.DTOs.Dashboard;
 using MyTrader.Core.DTOs.Indicators;
 using MyTrader.Infrastructure.Data;
-using MyTrader.Services.Market;
-using MyTrader.Services.Signals;
-using MyTrader.Services.Trading;
+using MyTrader.Core.Services;
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 
 namespace MyTrader.Api.Hubs;
 
-[Authorize]
+[AllowAnonymous]
 public class DashboardHub : Hub
 {
     private readonly TradingDbContext _context;
