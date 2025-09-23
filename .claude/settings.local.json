@@ -44,7 +44,8 @@
       "Bash(PGPASSWORD=password psql:*)",
       "Bash(dos2unix:*)",
       "Bash(git add:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
