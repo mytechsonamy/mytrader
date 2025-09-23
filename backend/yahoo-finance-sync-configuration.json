@@ -1,0 +1,85 @@
+{
+  "YahooFinance": {
+    "MaxConcurrentRequests": 5,
+    "MinRequestIntervalMs": 200,
+    "RequestTimeoutSeconds": 30,
+    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "MaxRetryAttempts": 3,
+    "RetryDelayMs": 1000,
+
+    "DailySync": {
+      "BatchSize": 10,
+      "BatchDelayMs": 1000,
+      "MaxRetryAttempts": 3,
+      "RetryDelayMs": 2000,
+      "OverwriteExistingData": false,
+      "AutoFillGaps": true,
+      "MaxGapsToFill": 100,
+      "MinDataCompletenessPercent": 90.0
+    },
+
+    "ErrorHandling": {
+      "MaxRetryAttempts": 3,
+      "BaseRetryDelayMs": 1000,
+      "ExponentialBackoffMultiplier": 2.0,
+      "JitterMaxMs": 500,
+      "MaxRetryDelay": "00:05:00",
+      "CircuitBreakerFailureThreshold": 5,
+      "CircuitBreakerTimeout": "00:01:00",
+      "EnableDeadLetterQueue": true,
+      "MaxConcurrentOperations": 10
+    },
+
+    "DataQuality": {
+      "MinCompletenessThreshold": 95.0,
+      "MaxDataAgeHours": 48,
+      "ValidDataSources": ["YAHOO", "BIST", "BINANCE", "ALPHA_VANTAGE"],
+      "MinOverallScore": 80.0,
+      "EnableAutoRemediation": false
+    },
+
+    "MarketSchedule": {
+      "EnableBistSync": true,
+      "EnableUSMarketsSync": true,
+      "EnableCryptoSync": true,
+      "EnableGapMonitoring": true,
+      "BistSyncTime": "18:30",
+      "USMarketsSyncTime": "16:30",
+      "CryptoSyncTime": "00:01",
+      "SendNotifications": false,
+      "NotificationWebhookUrl": null,
+      "NotificationEmail": null,
+      "MaxSyncDuration": "02:00:00",
+      "HealthCheckIntervalMinutes": 5
+    }
+  },
+
+  "Logging": {
+    "LogLevel": {
+      "MyTrader.Core.Services.YahooFinanceApiService": "Debug",
+      "MyTrader.Core.Services.YahooFinanceDailyDataService": "Information",
+      "MyTrader.Core.Services.DataQualityValidationService": "Information",
+      "MyTrader.Infrastructure.Services.BistDailySyncService": "Information",
+      "MyTrader.Infrastructure.Services.USMarketsDailySyncService": "Information",
+      "MyTrader.Infrastructure.Services.CryptoDailySyncService": "Information",
+      "MyTrader.Infrastructure.Services.DataGapMonitoringService": "Information"
+    }
+  },
+
+  "HealthChecks": {
+    "yahoo_finance_sync": {
+      "timeout": "00:00:30",
+      "tags": ["ready", "live"]
+    }
+  },
+
+  "DatabaseOptimization": {
+    "EnableBulkOperations": true,
+    "DefaultBatchSize": 1000,
+    "MaxBatchSize": 5000,
+    "EnableParallelProcessing": true,
+    "MaxDegreeOfParallelism": 4,
+    "CommandTimeout": 300,
+    "EnableQueryOptimization": true
+  }
+}

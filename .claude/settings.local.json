@@ -38,7 +38,12 @@
       "Bash(pkill:*)",
       "Bash(ASPNETCORE_URLS=\"http://localhost:5002\" dotnet run --no-launch-profile)",
       "Bash(chmod:*)",
-      "Bash(ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=\"http://localhost:5002\" dotnet run --no-launch-profile)"
+      "Bash(ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=\"http://localhost:5002\" dotnet run --no-launch-profile)",
+      "Bash(dotnet --version)",
+      "Bash(mv:*)",
+      "Bash(PGPASSWORD=password psql:*)",
+      "Bash(dos2unix:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

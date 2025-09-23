@@ -36,6 +36,7 @@ public class AuthenticationService : IAuthenticationService
     {
         try
         {
+            _logger.LogInformation("Starting registration process for email: {Email}", request.Email);
             // Check if user already exists
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (existingUser != null)
@@ -43,8 +44,22 @@ public class AuthenticationService : IAuthenticationService
                 return new RegisterResponse
                 {
                     Success = false,
-                    Message = "Bu email adresi zaten kullanılıyor."
+                    Message = "Bu email adresi ile zaten bir hesap bulunmaktadır. Eğer şifrenizi unuttuysanız 'Şifremi Unuttum' seçeneğini kullanabilirsiniz."
                 };
+            }
+
+            // Check if user exists with phone number
+            if (!string.IsNullOrEmpty(request.Phone))
+            {
+                var existingUserByPhone = await _context.Users.FirstOrDefaultAsync(u => u.Phone == request.Phone);
+                if (existingUserByPhone != null)
+                {
+                    return new RegisterResponse
+                    {
+                        Success = false,
+                        Message = "Bu telefon numarası ile zaten bir hesap bulunmaktadır. Eğer şifrenizi unuttuysanız 'Şifremi Unuttum' seçeneğini kullanabilirsiniz."
+                    };
+                }
             }
 
             // Validate password
@@ -64,7 +79,30 @@ public class AuthenticationService : IAuthenticationService
             // Generate verification code
             var verificationCode = GenerateVerificationCode();
 
-            // Store verification code
+            // Clean up any existing records for this email since user doesn't exist
+            var existingVerification = await _context.EmailVerifications
+                .FirstOrDefaultAsync(v => v.Email == request.Email);
+            var existingTempRegistration = await _context.TempRegistrations
+                .FirstOrDefaultAsync(t => t.Email == request.Email);
+
+            // Remove existing records if they exist
+            if (existingVerification != null)
+            {
+                _context.EmailVerifications.Remove(existingVerification);
+            }
+
+            if (existingTempRegistration != null)
+            {
+                _context.TempRegistrations.Remove(existingTempRegistration);
+            }
+
+            // Save removals first
+            if (existingVerification != null || existingTempRegistration != null)
+            {
+                await _context.SaveChangesAsync();
+            }
+
+            // Store new verification code
             var verification = new EmailVerification
             {
                 Email = request.Email,
@@ -98,7 +136,7 @@ public class AuthenticationService : IAuthenticationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Registration error for email: {Email}", request.Email);
+            _logger.LogError(ex, "Registration error for email: {Email}. Error: {ErrorMessage}", request.Email, ex.Message);
             return new RegisterResponse
             {
                 Success = false,

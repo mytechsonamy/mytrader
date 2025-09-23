@@ -10,10 +10,19 @@ using MyTrader.Api.Hubs;
 using MyTrader.Api.Services;
 using MyTrader.Api.Setup;
 using MyTrader.API.Hubs;
+using MyTrader.Api.Middleware;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
+// Removed Hangfire dependencies - replaced with native .NET background services
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Kestrel for WebSocket support
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
+{
+    options.AllowSynchronousIO = false;
+    options.DisableStringReuse = false;
+});
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -32,34 +41,130 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    // Configure model validation
+    options.ModelValidatorProviders.Clear();
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    // Customize validation error responses
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+            .Where(x => x.Value?.Errors.Count > 0)
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToList() ?? new List<string>()
+            );
+
+        var response = new MyTrader.Core.DTOs.ValidationErrorResponse
+        {
+            Success = false,
+            Message = "Validation failed",
+            Errors = errors
+        };
+
+        return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(response);
+    };
+});
+
+// Add Swagger/OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "MyTrader API",
+        Version = "v1",
+        Description = "Trading platform API"
+    });
+    
+    // Add JWT authentication to Swagger
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
 
 // Add CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultPolicy", corsBuilder =>
     {
-        corsBuilder.WithOrigins(
-                       "http://localhost:3000", "https://localhost:3000",
-                       "http://localhost:8081", "https://localhost:8081",
-                       "http://localhost:8084", "https://localhost:8084",
-                       "http://localhost:3333", "https://localhost:3333"
-                   )
-                   .AllowAnyMethod()
-                   .AllowAnyHeader()
-                   .AllowCredentials();
+        if (builder.Environment.IsDevelopment())
+        {
+            // Allow all localhost origins in development for React Native and web clients
+            corsBuilder.SetIsOriginAllowed(origin =>
+                {
+                    if (string.IsNullOrEmpty(origin)) return true; // Allow null origin for mobile apps
+                    var uri = new Uri(origin);
+                    return uri.Host == "localhost" || uri.Host == "127.0.0.1" || uri.Host.EndsWith(".local");
+                })
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials()
+                .SetPreflightMaxAge(TimeSpan.FromMinutes(5))
+                // Explicitly allow SignalR headers
+                .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With");
+        }
+        else
+        {
+            // Production - restrict to specific origins
+            corsBuilder.WithOrigins(
+                           "http://localhost:3000", "https://localhost:3000",
+                           "http://localhost:8081", "https://localhost:8081",
+                           "http://localhost:8084", "https://localhost:8084",
+                           "http://localhost:3333", "https://localhost:3333"
+                       )
+                       .AllowAnyMethod()
+                       .AllowAnyHeader()
+                       .AllowCredentials()
+                       .SetPreflightMaxAge(TimeSpan.FromMinutes(5))
+                       .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With");
+        }
     });
 });
 
 // Add database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Host=localhost;Port=5434;Database=mytrader;Username=postgres;Password=password";
 
 builder.Services.AddDbContext<TradingDbContext>(options =>
 {
-    options.UseNpgsql(connectionString);
+    if (useInMemoryDatabase)
+    {
+        options.UseInMemoryDatabase("MyTraderTestDb");
+    }
+    else
+    {
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+        {
+            // Disable any naming conventions that might convert to snake_case
+        });
+    }
     // Suppress pending model changes warning during development
-    options.ConfigureWarnings(warnings => 
+    options.ConfigureWarnings(warnings =>
         warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 });
 
@@ -93,17 +198,29 @@ builder.Services.AddAuthentication(x =>
         {
             var accessToken = context.Request.Query["access_token"];
             var path = context.HttpContext.Request.Path;
-            
-            // Allow anonymous access to dashboard hub
-            if (path.StartsWithSegments("/hubs/dashboard"))
+
+            // Allow anonymous access to dashboard and market-data hubs
+            if (path.StartsWithSegments("/hubs/dashboard") || path.StartsWithSegments("/hubs/market-data"))
             {
                 return Task.CompletedTask;
             }
-            
-            // Require authentication for other hubs
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+
+            // For SignalR hubs, check for token in query string or Authorization header
+            if (path.StartsWithSegments("/hubs"))
             {
-                context.Token = accessToken;
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    context.Token = accessToken;
+                }
+                else
+                {
+                    // Check Authorization header
+                    var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+                    if (authHeader?.StartsWith("Bearer ") == true)
+                    {
+                        context.Token = authHeader.Substring("Bearer ".Length).Trim();
+                    }
+                }
             }
             return Task.CompletedTask;
         }
@@ -112,8 +229,18 @@ builder.Services.AddAuthentication(x =>
 
 builder.Services.AddAuthorization();
 
-// Add SignalR
-builder.Services.AddSignalR();
+// Add SignalR with enhanced configuration for WebSocket support
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+    options.StreamBufferCapacity = 10;
+}).AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+});
 
 // Add MyTrader core services
 // builder.Services.AddMyTraderCore();
@@ -138,6 +265,16 @@ builder.Services.AddScoped<MyTrader.Core.Services.IIndicatorService, MyTrader.Co
 builder.Services.AddScoped<MyTrader.Core.Services.ISignalGenerationEngine, MyTrader.Core.Services.SignalGenerationEngine>();
 builder.Services.AddScoped<MyTrader.Core.Services.ITradingStrategyService, MyTrader.Core.Services.TradingStrategyService>();
 
+// Register multi-asset services
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IAssetClassService, MyTrader.Infrastructure.Services.AssetClassService>();
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketService, MyTrader.Infrastructure.Services.MarketService>();
+
+// Register singleton for data provider orchestrator to maintain provider state across requests
+builder.Services.AddSingleton<MyTrader.Core.Interfaces.IDataProviderOrchestrator, MyTrader.Core.Services.DataProviderOrchestrator>();
+
+// Note: Additional service implementations (IEnhancedSymbolService, IMultiAssetDataService, IMarketStatusService)
+// need to be implemented and registered when ready
+
 // Register portfolio service
 //builder.Services.AddScoped<IPortfolioService, MyTrader.Services.Portfolio.NewPortfolioService>();
 builder.Services.AddScoped<IPortfolioService, MyTrader.API.Services.InMemoryPortfolioService>();
@@ -155,14 +292,36 @@ builder.Services.AddScoped<MyTrader.Services.Gamification.IGamificationService, 
 // builder.Services.AddScoped<MyTrader.Services.Education.IEducationService, MyTrader.Services.Education.EducationService>();
 
 // Register DbContext interface
-builder.Services.AddScoped<MyTrader.Core.Data.ITradingDbContext>(provider => 
+builder.Services.AddScoped<MyTrader.Core.Data.ITradingDbContext>(provider =>
     provider.GetRequiredService<TradingDbContext>());
 
-// Register background services: WebSocket + Daily backtest automation  
+// Register data import service for Stock_Scrapper data
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IDataImportService, MyTrader.Infrastructure.Services.InfrastructureDataImportService>();
+
+// Add native .NET batch processing services (replaces Hangfire)
+builder.Services.AddSingleton<MyTrader.Infrastructure.Services.BatchProcessing.MemoryJobStore>();
+builder.Services.AddSingleton<MyTrader.Core.Services.BatchProcessing.IJobStore>(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.BatchProcessing.MemoryJobStore>());
+builder.Services.AddSingleton<MyTrader.Core.Services.BatchProcessing.IRecurringJobStore>(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.BatchProcessing.MemoryJobStore>());
+
+// Register native batch processing services
+builder.Services.AddSingleton<MyTrader.Infrastructure.Services.BatchProcessing.NativeBatchJobOrchestrator>();
+builder.Services.AddSingleton<MyTrader.Core.Services.BatchProcessing.IBatchJobOrchestrator>(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.BatchProcessing.NativeBatchJobOrchestrator>());
+builder.Services.AddHostedService(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.BatchProcessing.NativeBatchJobOrchestrator>());
+
+// Register background services: WebSocket + Daily backtest automation
 builder.Services.AddSingleton<IBinanceWebSocketService, BinanceWebSocketService>();
 builder.Services.AddHostedService<BinanceWebSocketService>();
-// MarketDataBroadcastService to connect Binance WebSocket to SignalR
-builder.Services.AddHostedService<MyTrader.Api.Services.MarketDataBroadcastService>();
+
+// Register enhanced multi-asset data broadcast service (replaces old MarketDataBroadcastService)
+builder.Services.AddHostedService<MyTrader.Api.Services.MultiAssetDataBroadcastService>();
+
+// Register market status monitoring service for market hours tracking
+builder.Services.AddHostedService<MyTrader.Infrastructure.Services.MarketStatusMonitoringService>();
+
 // Portfolio Monitoring Service for real-time portfolio updates
 builder.Services.AddHostedService<MyTrader.API.Services.PortfolioMonitoringService>();
 // PriceToDbWriter COMPLETELY DISABLED due to excessive DB writes causing memory issues
@@ -191,10 +350,19 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "MyTrader API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
 app.UseHttpsRedirection();
 app.UseCors("DefaultPolicy");
+
+// Add custom validation middleware
+app.UseValidationMiddleware();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -203,10 +371,13 @@ app.MapControllers();
 
 // Map SignalR hubs
 app.MapHub<TradingHub>("/hubs/trading");
-// app.MapHub<DashboardHub>("/hubs/dashboard"); // Temporarily disabled - reference issue
+// app.MapHub<MyTrader.Api.Hubs.DashboardHub>("/hubs/dashboard"); // Temporarily disabled - dependency issues
 app.MapHub<MockTradingHub>("/hubs/mock-trading");
 app.MapHub<MarketDataHub>("/hubs/market-data");
 app.MapHub<PortfolioHub>("/hubs/portfolio");
+
+// Native batch processing dashboard removed - use API endpoints at /api/batch-processing/*
+// Health check and monitoring available through REST API instead of Hangfire dashboard
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { 
@@ -242,20 +413,31 @@ app.MapGet("/test-logging", (ILogger<Program> logger) =>
     });
 });
 
-// Apply pending EF Core migrations at startup
+// Apply pending EF Core migrations at startup (skip for in-memory database)
 try
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
-    await context.Database.MigrateAsync();
 
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("Database migrations applied successfully");
+    // Only migrate if not using in-memory database
+    if (!context.Database.IsInMemory())
+    {
+        await context.Database.MigrateAsync();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("Database migrations applied successfully");
+    }
+    else
+    {
+        // For in-memory database, ensure the database is created
+        await context.Database.EnsureCreatedAsync();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("In-memory database created successfully");
+    }
 }
 catch (Exception ex)
 {
     var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<Program>();
-    logger.LogError(ex, "Failed to apply database migrations on startup");
+    logger.LogError(ex, "Failed to initialize database on startup");
 }
 
 Console.WriteLine("🚀 MyTrader API starting...");
@@ -266,7 +448,12 @@ Console.WriteLine("🎯 Available endpoints:");
 Console.WriteLine("   GET  /           - API info");
 Console.WriteLine("   GET  /health     - Health check");
 Console.WriteLine("   POST /api/auth/* - Authentication");
+Console.WriteLine("   POST /api/batch-processing/* - Batch processing jobs");
+Console.WriteLine("   GET  /api/batch-processing/health - Batch processing health check");
 Console.WriteLine("   WS   /hubs/trading - SignalR trading hub");
 Console.WriteLine("   WS   /hubs/dashboard - SignalR dashboard hub (anonymous)");
 
 app.Run();
+
+// Make Program class accessible for integration testing
+public partial class Program { }

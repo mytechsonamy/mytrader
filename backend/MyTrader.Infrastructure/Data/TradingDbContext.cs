@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using MyTrader.Core.Models;
 using MyTrader.Core.Data;
 
@@ -35,9 +36,90 @@ public class TradingDbContext : DbContext, ITradingDbContext
     public DbSet<PortfolioPosition> PortfolioPositions { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
 
+    // Multi-asset support entities
+    public DbSet<AssetClass> AssetClasses { get; set; }
+    public DbSet<Market> Markets { get; set; }
+    public DbSet<TradingSession> TradingSessions { get; set; }
+    public DbSet<DataProvider> DataProviders { get; set; }
+
+    // Historical market data entities
+    public DbSet<HistoricalMarketData> HistoricalMarketData { get; set; }
+    public DbSet<MarketDataSummary> MarketDataSummaries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // UserStrategy configuration - MUST come FIRST to override any naming conventions
+        modelBuilder.Entity<UserStrategy>(entity =>
+        {
+            entity.ToTable("user_strategies");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.TemplateId).HasColumnName("template_id");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
+
+            // Configure JsonDocument properties - ignore for in-memory database
+            if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+            {
+                // For in-memory database, ignore JsonDocument properties to avoid conversion issues
+                entity.Ignore(e => e.Parameters);
+                entity.Ignore(e => e.CustomEntryRules);
+                entity.Ignore(e => e.CustomExitRules);
+                entity.Ignore(e => e.CustomRiskManagement);
+                entity.Ignore(e => e.LastBacktestResults);
+                entity.Ignore(e => e.PerformanceStats);
+            }
+            else
+            {
+                entity.Property(e => e.Parameters).HasColumnName("parameters").HasColumnType("jsonb");
+                entity.Property(e => e.CustomEntryRules).HasColumnName("custom_entry_rules").HasColumnType("jsonb");
+                entity.Property(e => e.CustomExitRules).HasColumnName("custom_exit_rules").HasColumnType("jsonb");
+                entity.Property(e => e.CustomRiskManagement).HasColumnName("custom_risk_management").HasColumnType("jsonb");
+                entity.Property(e => e.LastBacktestResults).HasColumnName("last_backtest_results").HasColumnType("jsonb");
+                entity.Property(e => e.PerformanceStats).HasColumnName("performance_stats").HasColumnType("jsonb");
+            }
+
+            entity.Property(e => e.TargetSymbols).HasColumnName("target_symbols").HasMaxLength(1000);
+            entity.Property(e => e.Timeframe).HasColumnName("timeframe").HasMaxLength(10).IsRequired();
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.IsCustom).HasColumnName("is_custom");
+            entity.Property(e => e.IsFavorite).HasColumnName("is_favorite");
+            entity.Property(e => e.InitialCapital).HasColumnName("initial_capital").HasPrecision(18, 8);
+            entity.Property(e => e.MaxPositionSizePercent).HasColumnName("max_position_size_percent").HasPrecision(5, 2);
+            entity.Property(e => e.TemplateVersion).HasColumnName("template_version").HasMaxLength(20);
+            entity.Property(e => e.LastBacktestAt).HasColumnName("last_backtest_at");
+            entity.Property(e => e.Notes).HasColumnName("notes").HasMaxLength(2000);
+            entity.Property(e => e.Tags).HasColumnName("tags").HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        });
+
+        // CRITICAL: Disable any default naming conventions AFTER our explicit configuration
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            // Skip UserStrategy as we've already configured it explicitly
+            if (entity.ClrType == typeof(UserStrategy))
+                continue;
+                
+            // Ensure table names are not converted for other entities
+            if (entity.GetTableName() != null)
+            {
+                // Keep table names as defined
+            }
+            
+            // Ensure property names match exactly what we specify for other entities
+            foreach (var property in entity.GetProperties())
+            {
+                if (property.GetColumnName() == null)
+                {
+                    // For properties without explicit column mapping, use property name as-is
+                    property.SetColumnName(property.Name);
+                }
+            }
+        }
 
         // User configuration
         modelBuilder.Entity<User>(entity =>
@@ -476,6 +558,402 @@ public class TradingDbContext : DbContext, ITradingDbContext
                   .WithMany()
                   .HasForeignKey(e => e.SymbolId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
+        // AssetClass configuration
+        modelBuilder.Entity<AssetClass>(entity =>
+        {
+            entity.ToTable("asset_classes");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Code).IsUnique();
+            entity.HasIndex(e => new { e.IsActive, e.DisplayOrder });
+
+            entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NameTurkish).HasColumnName("name_tr").HasMaxLength(100);
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(500);
+            entity.Property(e => e.PrimaryCurrency).HasColumnName("primary_currency").HasMaxLength(12).IsRequired();
+            entity.Property(e => e.DefaultPricePrecision).HasColumnName("default_price_precision");
+            entity.Property(e => e.DefaultQuantityPrecision).HasColumnName("default_quantity_precision");
+            entity.Property(e => e.Supports24x7Trading).HasColumnName("supports_24_7_trading");
+            entity.Property(e => e.SupportsFractional).HasColumnName("supports_fractional");
+            entity.Property(e => e.MinTradeAmount).HasColumnName("min_trade_amount").HasPrecision(18, 8);
+            entity.Property(e => e.Configuration).HasColumnName("configuration").HasColumnType("jsonb");
+            entity.Property(e => e.RegulatoryClass).HasColumnName("regulatory_class").HasMaxLength(50);
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.DisplayOrder).HasColumnName("display_order");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        });
+
+        // Market configuration
+        modelBuilder.Entity<Market>(entity =>
+        {
+            entity.ToTable("markets");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Code).IsUnique();
+            entity.HasIndex(e => new { e.IsActive, e.DisplayOrder });
+            entity.HasIndex(e => e.AssetClassId);
+
+            entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.NameTurkish).HasColumnName("name_tr").HasMaxLength(200);
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
+            entity.Property(e => e.CountryCode).HasColumnName("country_code").HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Timezone).HasColumnName("timezone").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.PrimaryCurrency).HasColumnName("primary_currency").HasMaxLength(12).IsRequired();
+            entity.Property(e => e.MarketMaker).HasColumnName("market_maker").HasMaxLength(50);
+            entity.Property(e => e.ApiBaseUrl).HasColumnName("api_base_url").HasMaxLength(200);
+            entity.Property(e => e.WebSocketUrl).HasColumnName("websocket_url").HasMaxLength(200);
+            entity.Property(e => e.DefaultCommissionRate).HasColumnName("default_commission_rate").HasPrecision(10, 6);
+            entity.Property(e => e.MinCommission).HasColumnName("min_commission").HasPrecision(18, 8);
+            entity.Property(e => e.MarketConfig).HasColumnName("market_config").HasColumnType("jsonb");
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.StatusUpdatedAt).HasColumnName("status_updated_at");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.HasRealtimeData).HasColumnName("has_realtime_data");
+            entity.Property(e => e.DataDelayMinutes).HasColumnName("data_delay_minutes");
+            entity.Property(e => e.DisplayOrder).HasColumnName("display_order");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+
+            entity.HasOne(e => e.AssetClass)
+                  .WithMany(a => a.Markets)
+                  .HasForeignKey(e => e.AssetClassId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // TradingSession configuration
+        modelBuilder.Entity<TradingSession>(entity =>
+        {
+            entity.ToTable("trading_sessions");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.MarketId);
+            entity.HasIndex(e => new { e.MarketId, e.DayOfWeek, e.IsPrimary });
+
+            entity.Property(e => e.SessionName).HasColumnName("session_name").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SessionType).HasColumnName("session_type").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.DayOfWeek).HasColumnName("day_of_week");
+            entity.Property(e => e.StartTime).HasColumnName("start_time");
+            entity.Property(e => e.EndTime).HasColumnName("end_time");
+            entity.Property(e => e.SpansMidnight).HasColumnName("spans_midnight");
+            entity.Property(e => e.IsPrimary).HasColumnName("is_primary");
+            entity.Property(e => e.IsTradingEnabled).HasColumnName("is_trading_enabled");
+            entity.Property(e => e.VolumeMultiplier).HasColumnName("volume_multiplier").HasPrecision(10, 4);
+            entity.Property(e => e.EffectiveFrom).HasColumnName("effective_from");
+            entity.Property(e => e.EffectiveTo).HasColumnName("effective_to");
+            entity.Property(e => e.SessionConfig).HasColumnName("session_config").HasColumnType("jsonb");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.DisplayOrder).HasColumnName("display_order");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+
+            entity.HasOne(e => e.Market)
+                  .WithMany(m => m.TradingSessions)
+                  .HasForeignKey(e => e.MarketId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DataProvider configuration
+        modelBuilder.Entity<DataProvider>(entity =>
+        {
+            entity.ToTable("data_providers");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Code).IsUnique();
+            entity.HasIndex(e => e.MarketId);
+            entity.HasIndex(e => new { e.MarketId, e.IsActive, e.Priority });
+
+            entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
+            entity.Property(e => e.ProviderType).HasColumnName("provider_type").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.FeedType).HasColumnName("feed_type").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.EndpointUrl).HasColumnName("endpoint_url").HasMaxLength(500);
+            entity.Property(e => e.WebSocketUrl).HasColumnName("websocket_url").HasMaxLength(500);
+            entity.Property(e => e.BackupEndpointUrl).HasColumnName("backup_endpoint_url").HasMaxLength(500);
+            entity.Property(e => e.AuthType).HasColumnName("auth_type").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ApiKey).HasColumnName("api_key").HasMaxLength(500);
+            entity.Property(e => e.ApiSecret).HasColumnName("api_secret").HasMaxLength(500);
+            entity.Property(e => e.AuthConfig).HasColumnName("auth_config").HasColumnType("jsonb");
+            entity.Property(e => e.RateLimitPerMinute).HasColumnName("rate_limit_per_minute");
+            entity.Property(e => e.TimeoutSeconds).HasColumnName("timeout_seconds");
+            entity.Property(e => e.MaxRetries).HasColumnName("max_retries");
+            entity.Property(e => e.RetryDelayMs).HasColumnName("retry_delay_ms");
+            entity.Property(e => e.DataDelayMinutes).HasColumnName("data_delay_minutes");
+            entity.Property(e => e.SupportedDataTypes).HasColumnName("supported_data_types").HasColumnType("jsonb");
+            entity.Property(e => e.ProviderConfig).HasColumnName("provider_config").HasColumnType("jsonb");
+            entity.Property(e => e.ConnectionStatus).HasColumnName("connection_status").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.LastConnectedAt).HasColumnName("last_connected_at");
+            entity.Property(e => e.LastError).HasColumnName("last_error").HasMaxLength(1000);
+            entity.Property(e => e.ErrorCountHourly).HasColumnName("error_count_hourly");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.IsPrimary).HasColumnName("is_primary");
+            entity.Property(e => e.Priority).HasColumnName("priority");
+            entity.Property(e => e.CostPer1kCalls).HasColumnName("cost_per_1k_calls").HasPrecision(10, 6);
+            entity.Property(e => e.MonthlyLimit).HasColumnName("monthly_limit");
+            entity.Property(e => e.MonthlyUsage).HasColumnName("monthly_usage");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+
+            entity.HasOne(e => e.Market)
+                  .WithMany(m => m.DataProviders)
+                  .HasForeignKey(e => e.MarketId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Update Symbol configuration to include new relationships
+        modelBuilder.Entity<Symbol>(entity =>
+        {
+            // Add new foreign key relationships
+            entity.HasOne(e => e.AssetClassEntity)
+                  .WithMany(a => a.Symbols)
+                  .HasForeignKey(e => e.AssetClassId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Market)
+                  .WithMany(m => m.Symbols)
+                  .HasForeignKey(e => e.MarketId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Add new indexes for performance
+            entity.HasIndex(e => new { e.Ticker, e.Venue });
+            entity.HasIndex(e => new { e.AssetClass, e.IsActive, e.IsPopular });
+            entity.HasIndex(e => new { e.Sector, e.Industry });
+            entity.HasIndex(e => e.Volume24h);
+            entity.HasIndex(e => e.AssetClassId);
+            entity.HasIndex(e => e.MarketId);
+        });
+
+        // === HISTORICAL MARKET DATA CONFIGURATION ===
+        ConfigureHistoricalMarketData(modelBuilder);
+        ConfigureMarketDataSummaries(modelBuilder);
+    }
+
+    /// <summary>
+    /// Configure HistoricalMarketData entity with comprehensive mappings and indexes
+    /// </summary>
+    private void ConfigureHistoricalMarketData(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HistoricalMarketData>(entity =>
+        {
+            entity.ToTable("historical_market_data");
+            entity.HasKey(e => new { e.Id, e.TradeDate }); // Composite key for partitioning
+
+            // === BASIC PROPERTIES ===
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.SymbolId).HasColumnName("symbol_id").IsRequired();
+            entity.Property(e => e.SymbolTicker).HasColumnName("symbol_ticker").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.DataSource).HasColumnName("data_source").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.MarketCode).HasColumnName("market_code").HasMaxLength(20);
+            entity.Property(e => e.TradeDate).HasColumnName("trade_date").IsRequired();
+            entity.Property(e => e.Timeframe).HasColumnName("timeframe").HasMaxLength(10).IsRequired().HasDefaultValue("DAILY");
+            entity.Property(e => e.Timestamp).HasColumnName("timestamp");
+
+            // === STANDARD OHLCV DATA ===
+            entity.Property(e => e.OpenPrice).HasColumnName("open_price").HasPrecision(18, 8);
+            entity.Property(e => e.HighPrice).HasColumnName("high_price").HasPrecision(18, 8);
+            entity.Property(e => e.LowPrice).HasColumnName("low_price").HasPrecision(18, 8);
+            entity.Property(e => e.ClosePrice).HasColumnName("close_price").HasPrecision(18, 8);
+            entity.Property(e => e.AdjustedClosePrice).HasColumnName("adjusted_close_price").HasPrecision(18, 8);
+            entity.Property(e => e.Volume).HasColumnName("volume").HasPrecision(38, 18);
+            entity.Property(e => e.VWAP).HasColumnName("vwap").HasPrecision(18, 8);
+
+            // === BIST SPECIFIC DATA ===
+            entity.Property(e => e.BistCode).HasColumnName("bist_code").HasMaxLength(20);
+            entity.Property(e => e.PreviousClose).HasColumnName("previous_close").HasPrecision(18, 8);
+            entity.Property(e => e.PriceChange).HasColumnName("price_change").HasPrecision(18, 8);
+            entity.Property(e => e.PriceChangePercent).HasColumnName("price_change_percent").HasPrecision(10, 4);
+            entity.Property(e => e.TradingValue).HasColumnName("trading_value").HasPrecision(38, 18);
+            entity.Property(e => e.TransactionCount).HasColumnName("transaction_count");
+            entity.Property(e => e.MarketCap).HasColumnName("market_cap").HasPrecision(38, 18);
+            entity.Property(e => e.FreeFloatMarketCap).HasColumnName("free_float_market_cap").HasPrecision(38, 18);
+            entity.Property(e => e.SharesOutstanding).HasColumnName("shares_outstanding").HasPrecision(38, 18);
+            entity.Property(e => e.FreeFloatShares).HasColumnName("free_float_shares").HasPrecision(38, 18);
+
+            // === INDEX AND CURRENCY DATA ===
+            entity.Property(e => e.IndexValue).HasColumnName("index_value").HasPrecision(18, 8);
+            entity.Property(e => e.IndexChangePercent).HasColumnName("index_change_percent").HasPrecision(10, 4);
+            entity.Property(e => e.UsdTryRate).HasColumnName("usd_try_rate").HasPrecision(18, 8);
+            entity.Property(e => e.EurTryRate).HasColumnName("eur_try_rate").HasPrecision(18, 8);
+
+            // === TECHNICAL INDICATORS ===
+            entity.Property(e => e.RSI).HasColumnName("rsi").HasPrecision(10, 4);
+            entity.Property(e => e.MACD).HasColumnName("macd").HasPrecision(18, 8);
+            entity.Property(e => e.MACDSignal).HasColumnName("macd_signal").HasPrecision(18, 8);
+            entity.Property(e => e.BollingerUpper).HasColumnName("bollinger_upper").HasPrecision(18, 8);
+            entity.Property(e => e.BollingerLower).HasColumnName("bollinger_lower").HasPrecision(18, 8);
+            entity.Property(e => e.SMA20).HasColumnName("sma_20").HasPrecision(18, 8);
+            entity.Property(e => e.SMA50).HasColumnName("sma_50").HasPrecision(18, 8);
+            entity.Property(e => e.SMA200).HasColumnName("sma_200").HasPrecision(18, 8);
+
+            // === METADATA ===
+            entity.Property(e => e.Currency).HasColumnName("currency").HasMaxLength(12).HasDefaultValue("USD");
+            entity.Property(e => e.DataQualityScore).HasColumnName("data_quality_score");
+
+            // Configure JsonDocument properties - ignore for in-memory database
+            if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+            {
+                entity.Ignore(e => e.ExtendedData);
+                entity.Ignore(e => e.SourceMetadata);
+            }
+            else
+            {
+                entity.Property(e => e.ExtendedData).HasColumnName("extended_data").HasColumnType("jsonb");
+                entity.Property(e => e.SourceMetadata).HasColumnName("source_metadata").HasColumnType("jsonb");
+            }
+
+            entity.Property(e => e.DataFlags).HasColumnName("data_flags").HasDefaultValue(0);
+            entity.Property(e => e.SourcePriority).HasColumnName("source_priority").HasDefaultValue(10);
+
+            // === AUDIT FIELDS ===
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.DataCollectedAt).HasColumnName("data_collected_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // === RELATIONSHIPS ===
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // === INDEXES FOR PERFORMANCE ===
+            // Primary time-series index
+            entity.HasIndex(e => new { e.SymbolTicker, e.Timeframe, e.TradeDate })
+                  .HasDatabaseName("idx_historical_market_data_primary")
+                  .IsUnique();
+
+            // Symbol-based queries
+            entity.HasIndex(e => new { e.SymbolId, e.TradeDate, e.Timeframe })
+                  .HasDatabaseName("idx_historical_market_data_symbol_date");
+
+            // Date partitioning support
+            entity.HasIndex(e => new { e.TradeDate, e.DataSource, e.SourcePriority })
+                  .HasDatabaseName("idx_historical_market_data_date_source");
+
+            // Data quality index
+            entity.HasIndex(e => new { e.SymbolTicker, e.TradeDate, e.Timeframe, e.DataSource, e.SourcePriority })
+                  .HasDatabaseName("idx_historical_market_data_dedup");
+
+            // BIST specific index
+            entity.HasIndex(e => new { e.BistCode, e.TradeDate })
+                  .HasDatabaseName("idx_historical_market_data_bist")
+                  .HasFilter("bist_code IS NOT NULL");
+
+            // Volume analysis index
+            entity.HasIndex(e => new { e.TradeDate, e.Volume })
+                  .HasDatabaseName("idx_historical_market_data_volume")
+                  .IsDescending(true, true)
+                  .HasFilter("volume IS NOT NULL");
+
+            // Technical indicators index
+            entity.HasIndex(e => new { e.TradeDate, e.RSI, e.MACD })
+                  .HasDatabaseName("idx_historical_market_data_technical")
+                  .HasFilter("rsi IS NOT NULL OR macd IS NOT NULL");
+
+            // Intraday data index
+            entity.HasIndex(e => new { e.SymbolTicker, e.Timestamp })
+                  .HasDatabaseName("idx_historical_market_data_intraday")
+                  .IsDescending(false, true)
+                  .HasFilter("timestamp IS NOT NULL");
+        });
+    }
+
+    /// <summary>
+    /// Configure MarketDataSummary entity for pre-aggregated analytics
+    /// </summary>
+    private void ConfigureMarketDataSummaries(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MarketDataSummary>(entity =>
+        {
+            entity.ToTable("market_data_summaries");
+            entity.HasKey(e => new { e.Id, e.PeriodStart }); // Composite key for partitioning
+
+            // === BASIC PROPERTIES ===
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.SymbolId).HasColumnName("symbol_id").IsRequired();
+            entity.Property(e => e.SymbolTicker).HasColumnName("symbol_ticker").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.PeriodType).HasColumnName("period_type").HasMaxLength(10).IsRequired();
+            entity.Property(e => e.PeriodStart).HasColumnName("period_start").IsRequired();
+            entity.Property(e => e.PeriodEnd).HasColumnName("period_end").IsRequired();
+            entity.Property(e => e.TradingDays).HasColumnName("trading_days");
+
+            // === PRICE STATISTICS ===
+            entity.Property(e => e.PeriodOpen).HasColumnName("period_open").HasPrecision(18, 8);
+            entity.Property(e => e.PeriodClose).HasColumnName("period_close").HasPrecision(18, 8);
+            entity.Property(e => e.PeriodHigh).HasColumnName("period_high").HasPrecision(18, 8);
+            entity.Property(e => e.PeriodLow).HasColumnName("period_low").HasPrecision(18, 8);
+            entity.Property(e => e.PeriodVWAP).HasColumnName("period_vwap").HasPrecision(18, 8);
+            entity.Property(e => e.TotalReturnPercent).HasColumnName("total_return_percent").HasPrecision(10, 4);
+            entity.Property(e => e.AvgDailyReturnPercent).HasColumnName("avg_daily_return_percent").HasPrecision(10, 4);
+            entity.Property(e => e.Volatility).HasColumnName("volatility").HasPrecision(10, 6);
+            entity.Property(e => e.AnnualizedVolatility).HasColumnName("annualized_volatility").HasPrecision(10, 6);
+            entity.Property(e => e.SharpeRatio).HasColumnName("sharpe_ratio").HasPrecision(10, 4);
+            entity.Property(e => e.MaxDrawdownPercent).HasColumnName("max_drawdown_percent").HasPrecision(10, 4);
+            entity.Property(e => e.Beta).HasColumnName("beta").HasPrecision(10, 4);
+
+            // === VOLUME STATISTICS ===
+            entity.Property(e => e.TotalVolume).HasColumnName("total_volume").HasPrecision(38, 18);
+            entity.Property(e => e.AvgDailyVolume).HasColumnName("avg_daily_volume").HasPrecision(38, 18);
+            entity.Property(e => e.TotalTradingValue).HasColumnName("total_trading_value").HasPrecision(38, 18);
+            entity.Property(e => e.AvgDailyTradingValue).HasColumnName("avg_daily_trading_value").HasPrecision(38, 18);
+            entity.Property(e => e.TotalTransactions).HasColumnName("total_transactions");
+            entity.Property(e => e.AvgDailyTransactions).HasColumnName("avg_daily_transactions");
+
+            // === PRICE LEVELS ===
+            entity.Property(e => e.SupportLevel).HasColumnName("support_level").HasPrecision(18, 8);
+            entity.Property(e => e.ResistanceLevel).HasColumnName("resistance_level").HasPrecision(18, 8);
+            entity.Property(e => e.Week52High).HasColumnName("week_52_high").HasPrecision(18, 8);
+            entity.Property(e => e.Week52Low).HasColumnName("week_52_low").HasPrecision(18, 8);
+
+            // === TECHNICAL INDICATORS SUMMARY ===
+            entity.Property(e => e.AvgRSI).HasColumnName("avg_rsi").HasPrecision(10, 4);
+            entity.Property(e => e.AvgMACD).HasColumnName("avg_macd").HasPrecision(18, 8);
+            entity.Property(e => e.DaysAboveSMA20Percent).HasColumnName("days_above_sma20_percent").HasPrecision(10, 2);
+            entity.Property(e => e.DaysAboveSMA50Percent).HasColumnName("days_above_sma50_percent").HasPrecision(10, 2);
+
+            // === MARKET COMPARISON ===
+            entity.Property(e => e.VsMarketPercent).HasColumnName("vs_market_percent").HasPrecision(10, 4);
+            entity.Property(e => e.MarketCorrelation).HasColumnName("market_correlation").HasPrecision(10, 6);
+
+            // === RANKING METRICS ===
+            entity.Property(e => e.PerformancePercentile).HasColumnName("performance_percentile");
+            entity.Property(e => e.VolumePercentile).HasColumnName("volume_percentile");
+            entity.Property(e => e.QualityScore).HasColumnName("quality_score").HasDefaultValue(100);
+
+            // === AUDIT FIELDS ===
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.CalculatedAt).HasColumnName("calculated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // === RELATIONSHIPS ===
+            entity.HasOne(e => e.Symbol)
+                  .WithMany()
+                  .HasForeignKey(e => e.SymbolId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // === INDEXES ===
+            // Primary lookup index
+            entity.HasIndex(e => new { e.SymbolTicker, e.PeriodType, e.PeriodStart })
+                  .HasDatabaseName("idx_market_data_summaries_primary")
+                  .IsUnique()
+                  .IsDescending(false, false, true);
+
+            // Performance ranking
+            entity.HasIndex(e => new { e.PeriodType, e.PeriodStart, e.TotalReturnPercent })
+                  .HasDatabaseName("idx_market_data_summaries_performance")
+                  .IsDescending(false, true, true);
+
+            // Volume ranking
+            entity.HasIndex(e => new { e.PeriodType, e.PeriodStart, e.AvgDailyVolume })
+                  .HasDatabaseName("idx_market_data_summaries_volume")
+                  .IsDescending(false, true, true);
+
+            // Quality filtering
+            entity.HasIndex(e => new { e.PeriodType, e.QualityScore, e.PeriodStart })
+                  .HasDatabaseName("idx_market_data_summaries_quality")
+                  .IsDescending(false, true, true)
+                  .HasFilter("quality_score >= 80");
         });
     }
 }

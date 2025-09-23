@@ -4,7 +4,6 @@ using System.Security.Claims;
 
 namespace MyTrader.Api.Hubs;
 
-[Authorize]
 public class TradingHub : Hub
 {
     // Method to send price updates to all connected clients

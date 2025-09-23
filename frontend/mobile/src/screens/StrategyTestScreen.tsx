@@ -166,7 +166,7 @@ const StrategyTestScreen: React.FC = () => {
       
       // Save strategy via API
       console.log('Saving strategy:', strategyConfig);
-      const result = await apiService.createStrategy(strategyConfig);
+      const result = await apiService.createStrategy(strategyConfig, symbol);
       
       if (result.success) {
         Alert.alert('Başarılı', 'Strateji başarıyla kaydedildi', [

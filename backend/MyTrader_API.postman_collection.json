@@ -1,0 +1,855 @@
+{
+  "info": {
+    "name": "MyTrader API",
+    "description": "Complete API collection for MyTrader trading platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "mytrader-api-collection",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check API health status"
+          },
+          "response": []
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Get API information and available endpoints"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"phone\": \"+1234567890\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"verificationCode\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-email"]
+            },
+            "description": "Verify email address with verification code"
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Verification Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "resend-verification"]
+            },
+            "description": "Resend verification code to email"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has access token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accessToken');",
+                  "    ",
+                  "    // Store tokens for subsequent requests",
+                  "    if (jsonData.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                  "    }",
+                  "    if (jsonData.refreshToken) {",
+                  "        pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticate user and get access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Get current user profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"+9876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Update user profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has new access token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('accessToken');",
+                  "    ",
+                  "    // Update stored token",
+                  "    if (jsonData.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Refresh access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "sessions"]
+            },
+            "description": "Get all user sessions"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout from current session"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout All Sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout-all"]
+            },
+            "description": "Logout from all sessions"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Password Reset",
+      "item": [
+        {
+          "name": "Request Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/request-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "request-password-reset"]
+            },
+            "description": "Request password reset code"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"verificationCode\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-password-reset",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-password-reset"]
+            },
+            "description": "Verify password reset code"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"newPassword\": \"NewPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "Reset password with new password"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Portfolio Management",
+      "item": [
+        {
+          "name": "Get Portfolios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "portfolio"]
+            },
+            "description": "Get user portfolios"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Portfolio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Trading Portfolio\",\n  \"description\": \"Main trading portfolio\",\n  \"baseCurrency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "portfolio"]
+            },
+            "description": "Create new portfolio"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Portfolio Positions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolio/:portfolioId/positions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "portfolio", ":portfolioId", "positions"],
+              "variable": [
+                {
+                  "key": "portfolioId",
+                  "value": "portfolio-uuid-here"
+                }
+              ]
+            },
+            "description": "Get portfolio positions"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portfolioId\": \"portfolio-uuid-here\",\n  \"symbol\": \"BTC\",\n  \"type\": \"BUY\",\n  \"quantity\": 0.1,\n  \"price\": 45000,\n  \"fee\": 10,\n  \"notes\": \"Bitcoin purchase\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolio/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "portfolio", "transactions"]
+            },
+            "description": "Create new transaction"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Trading Strategies",
+      "item": [
+        {
+          "name": "Get User Strategies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/strategies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "strategies"]
+            },
+            "description": "Get user's trading strategies"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Strategy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"RSI Strategy\",\n  \"description\": \"RSI based trading strategy\",\n  \"templateId\": \"custom\",\n  \"symbol\": \"BTC\",\n  \"parameters\": {\n    \"rsiPeriod\": 14,\n    \"oversoldLevel\": 30,\n    \"overboughtLevel\": 70\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/strategies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "strategies"]
+            },
+            "description": "Create new trading strategy"
+          },
+          "response": []
+        },
+        {
+          "name": "Activate Strategy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/strategies/:strategyId/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "strategies", ":strategyId", "activate"],
+              "variable": [
+                {
+                  "key": "strategyId",
+                  "value": "strategy-uuid-here"
+                }
+              ]
+            },
+            "description": "Activate trading strategy"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Market Data",
+      "item": [
+        {
+          "name": "Get Symbols",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/symbols",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "symbols"]
+            },
+            "description": "Get available trading symbols"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Asset Classes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/asset-classes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "asset-classes"]
+            },
+            "description": "Get available asset classes"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Markets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/markets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "markets"]
+            },
+            "description": "Get available markets"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Market Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/markets/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "markets", "status"]
+            },
+            "description": "Get all market statuses"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Real-time Market Data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/market-data/:symbolId/realtime",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "market-data", ":symbolId", "realtime"],
+              "variable": [
+                {
+                  "key": "symbolId",
+                  "value": "BTC"
+                }
+              ]
+            },
+            "description": "Get real-time market data for symbol"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gamification",
+      "item": [
+        {
+          "name": "Get Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/gamification/leaderboard?period=weekly&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "gamification", "leaderboard"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get trading competition leaderboard"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Achievements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/gamification/achievements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "gamification", "achievements"]
+            },
+            "description": "Get user achievements"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Level",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/gamification/level",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "gamification", "level"]
+            },
+            "description": "Get user level and points"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "News & Information",
+      "item": [
+        {
+          "name": "Get Market News",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/news/market?limit=20&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "news", "market"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Get market news"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Crypto News",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/news/crypto?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "news", "crypto"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get cryptocurrency news"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

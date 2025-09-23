@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MyTrader SignalR Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        #messages {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MyTrader SignalR Connection Test</h1>
+
+        <div class="status warning">
+            <strong>API Status:</strong> Testing connectivity to http://localhost:8080
+        </div>
+
+        <div id="connectionStatus" class="status">
+            <strong>SignalR Status:</strong> Not connected
+        </div>
+
+        <h2>Hub Connections</h2>
+        <button id="connectTrading" onclick="connectToHub('trading')">Connect to Trading Hub</button>
+        <button id="connectMarketData" onclick="connectToHub('market-data')">Connect to Market Data Hub</button>
+        <button id="connectPortfolio" onclick="connectToHub('portfolio')">Connect to Portfolio Hub</button>
+        <button id="disconnectAll" onclick="disconnectAll()">Disconnect All</button>
+
+        <h2>Market Data Test</h2>
+        <div>
+            <input type="text" id="symbolInput" placeholder="Enter symbol (e.g., BTCUSDT)" value="BTCUSDT">
+            <button onclick="subscribeToSymbol()">Subscribe to Symbol</button>
+            <button onclick="testMarketDataBroadcast()">Test Market Data Broadcast</button>
+        </div>
+
+        <h2>Messages & Updates</h2>
+        <div id="messages"></div>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        const API_BASE_URL = 'http://localhost:8080';
+        let connections = {};
+        let isConnected = false;
+
+        function log(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            messagesDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateStatus(message, isSuccess = true) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = `status ${isSuccess ? 'success' : 'error'}`;
+            statusDiv.innerHTML = `<strong>SignalR Status:</strong> ${message}`;
+        }
+
+        async function connectToHub(hubName) {
+            try {
+                if (connections[hubName]) {
+                    log(`Already connected to ${hubName} hub`, 'warning');
+                    return;
+                }
+
+                log(`Connecting to ${hubName} hub at ${API_BASE_URL}/hubs/${hubName}...`);
+
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${API_BASE_URL}/hubs/${hubName}`, {
+                        skipNegotiation: false,
+                        transport: signalR.HttpTransportType.WebSockets
+                    })
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Common event handlers
+                connection.onreconnecting((error) => {
+                    log(`${hubName} hub reconnecting: ${error}`, 'warning');
+                });
+
+                connection.onreconnected((connectionId) => {
+                    log(`${hubName} hub reconnected: ${connectionId}`, 'success');
+                });
+
+                connection.onclose((error) => {
+                    log(`${hubName} hub connection closed: ${error}`, 'error');
+                    connections[hubName] = null;
+                    updateConnectionStatus();
+                });
+
+                // Hub-specific event handlers
+                if (hubName === 'trading') {
+                    connection.on('ReceivePriceUpdate', (data) => {
+                        log(`🔄 Price Update: ${data.symbol} = $${data.price} (${data.change > 0 ? '+' : ''}${data.change})`, 'success');
+                    });
+
+                    connection.on('ReceiveSignalUpdate', (data) => {
+                        log(`📊 Signal Update: ${data.symbol} - ${data.signal}`, 'success');
+                    });
+
+                    connection.on('ReceiveMarketData', (data) => {
+                        log(`📈 Market Data Batch: ${Object.keys(data.symbols).length} symbols updated`, 'success');
+                    });
+                }
+
+                if (hubName === 'market-data') {
+                    connection.on('ConnectionStatus', (data) => {
+                        log(`Market Data Hub Status: ${data.message}`, 'success');
+                    });
+
+                    connection.on('SubscriptionConfirmed', (data) => {
+                        log(`Subscription confirmed for ${data.assetClass}: ${data.symbols?.join(', ')}`, 'success');
+                    });
+
+                    connection.on('SubscriptionError', (data) => {
+                        log(`Subscription error: ${data.message}`, 'error');
+                    });
+
+                    connection.on('PriceUpdate', (data) => {
+                        log(`💰 Price: ${data.symbol} = $${data.price} (${data.changePercent}%)`, 'success');
+                    });
+
+                    connection.on('MarketStatusUpdate', (data) => {
+                        log(`🏦 Market Status: ${data.market} is ${data.status}`, 'success');
+                    });
+                }
+
+                if (hubName === 'portfolio') {
+                    connection.on('PortfolioConnectionEstablished', (data) => {
+                        log(`Portfolio connection established: ${data.Message}`, 'success');
+                    });
+
+                    connection.on('PortfolioUpdated', (data) => {
+                        log(`💼 Portfolio Updated: Total Value = $${data.totalValue}`, 'success');
+                    });
+
+                    connection.on('PositionUpdated', (data) => {
+                        log(`📊 Position Updated: ${data.symbol} - ${data.quantity} units`, 'success');
+                    });
+                }
+
+                await connection.start();
+                connections[hubName] = connection;
+                log(`✅ Successfully connected to ${hubName} hub!`, 'success');
+                updateConnectionStatus();
+
+            } catch (error) {
+                log(`❌ Failed to connect to ${hubName} hub: ${error.message}`, 'error');
+                updateStatus(`Failed to connect to ${hubName} hub: ${error.message}`, false);
+            }
+        }
+
+        async function disconnectAll() {
+            for (const [hubName, connection] of Object.entries(connections)) {
+                if (connection) {
+                    try {
+                        await connection.stop();
+                        log(`Disconnected from ${hubName} hub`);
+                    } catch (error) {
+                        log(`Error disconnecting from ${hubName}: ${error.message}`, 'error');
+                    }
+                }
+            }
+            connections = {};
+            updateConnectionStatus();
+        }
+
+        function updateConnectionStatus() {
+            const connectedHubs = Object.entries(connections).filter(([name, conn]) => conn !== null).map(([name]) => name);
+            if (connectedHubs.length > 0) {
+                updateStatus(`Connected to: ${connectedHubs.join(', ')}`, true);
+                isConnected = true;
+            } else {
+                updateStatus('No active connections', false);
+                isConnected = false;
+            }
+        }
+
+        async function subscribeToSymbol() {
+            const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            if (!symbol) {
+                log('Please enter a symbol', 'error');
+                return;
+            }
+
+            const marketDataConnection = connections['market-data'];
+            if (!marketDataConnection) {
+                log('Please connect to Market Data hub first', 'error');
+                return;
+            }
+
+            try {
+                log(`Subscribing to ${symbol} price updates...`);
+                await marketDataConnection.invoke('SubscribeToPriceUpdates', 'CRYPTO', [symbol]);
+            } catch (error) {
+                log(`Failed to subscribe to ${symbol}: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMarketDataBroadcast() {
+            const tradingConnection = connections['trading'];
+            if (!tradingConnection) {
+                log('Please connect to Trading hub first', 'error');
+                return;
+            }
+
+            try {
+                log('Testing market data broadcast...');
+                // Simulate broadcasting price updates
+                await tradingConnection.invoke('BroadcastPriceUpdate', 'BTCUSDT', 45000.50, 250.30);
+                await tradingConnection.invoke('BroadcastPriceUpdate', 'ETHUSDT', 3200.75, -15.20);
+                log('Market data broadcast test completed');
+            } catch (error) {
+                log(`Market data broadcast test failed: ${error.message}`, 'error');
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Test API health on page load
+        window.onload = async function() {
+            try {
+                log('Testing API health endpoint...');
+                const response = await fetch(`${API_BASE_URL}/health`);
+                const data = await response.json();
+                log(`✅ API Health Check: ${data.message}`, 'success');
+
+                // Update API status
+                const apiStatusDiv = document.querySelector('.status.warning');
+                apiStatusDiv.className = 'status success';
+                apiStatusDiv.innerHTML = '<strong>API Status:</strong> ✅ Connected to http://localhost:8080';
+            } catch (error) {
+                log(`❌ API Health Check Failed: ${error.message}`, 'error');
+                const apiStatusDiv = document.querySelector('.status.warning');
+                apiStatusDiv.className = 'status error';
+                apiStatusDiv.innerHTML = '<strong>API Status:</strong> ❌ Failed to connect to http://localhost:8080';
+            }
+        };
+    </script>
+</body>
+</html>

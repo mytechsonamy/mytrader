@@ -47,6 +47,13 @@ public class UsersController : ControllerBase
         return Ok(dto);
     }
 
+    [HttpGet("profile")]
+    public async Task<ActionResult> GetProfile()
+    {
+        // Alias for GetMe to match frontend expectations
+        return await GetMe();
+    }
+
     [HttpPatch("me")]
     public async Task<ActionResult> PatchMe([FromBody] PatchUserRequest req)
     {

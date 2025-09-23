@@ -6,7 +6,7 @@ using System.Security.Claims;
 namespace MyTrader.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/gamification")]
+[Route("api/v1/competition")]
 [Tags("Gamification & Achievements")]
 [Authorize]
 public class GamificationController : ControllerBase
@@ -82,11 +82,30 @@ public class GamificationController : ControllerBase
     }
 
     [HttpGet("leaderboard")]
+    [AllowAnonymous] // Allow public access for leaderboard
     public async Task<ActionResult> GetLeaderboard([FromQuery] string metric = "TotalReturn", [FromQuery] int limit = 10)
     {
         try
         {
             var leaderboard = await _gamificationService.GetLeaderboardAsync(metric, limit);
+
+            object entries;
+            if (leaderboard == null)
+            {
+                entries = new List<object>();
+            }
+            else
+            {
+                entries = leaderboard.Select(e => new
+                {
+                    user_id = e.UserId,
+                    user_name = e.UserName,
+                    value = e.Value,
+                    rank = e.Rank,
+                    total_achievements = e.TotalAchievements,
+                    total_points = e.TotalPoints
+                }).ToList();
+            }
 
             return Ok(new
             {
@@ -94,21 +113,13 @@ public class GamificationController : ControllerBase
                 data = new
                 {
                     metric = metric,
-                    entries = leaderboard.Select(e => new
-                    {
-                        user_id = e.UserId,
-                        user_name = e.UserName,
-                        value = e.Value,
-                        rank = e.Rank,
-                        total_achievements = e.TotalAchievements,
-                        total_points = e.TotalPoints
-                    })
+                    entries = entries
                 }
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = "Failed to load leaderboard" });
+            return StatusCode(500, new { success = false, message = "Failed to load leaderboard", error = ex.Message });
         }
     }
 

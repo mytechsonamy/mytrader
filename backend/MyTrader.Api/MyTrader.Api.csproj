@@ -16,12 +16,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.9" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Grafana.Loki" Version="8.3.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.9.11" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
+    <!-- Hangfire packages removed - replaced with native .NET background services -->
   </ItemGroup>
 
   <ItemGroup>
@@ -36,9 +38,10 @@
     <Compile Remove="Controllers/NotificationsController.cs" />
     <Compile Remove="Controllers/AnalyticsController.cs" />
     <Compile Remove="Controllers/EducationController.cs" />
-    <Compile Remove="Controllers/StrategiesController.cs" />
     <Compile Remove="Hubs/DashboardHub.cs" />
     <Compile Remove="Services/PriceBroadcastService.cs" />
   </ItemGroup>
+
+  <!-- Hangfire-dependent files removed - replaced with native implementations -->
 
 </Project>

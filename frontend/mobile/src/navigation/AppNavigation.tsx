@@ -13,14 +13,11 @@ import ForgotPasswordStart from '../screens/ForgotPasswordStart';
 import ForgotPasswordVerify from '../screens/ForgotPasswordVerify';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import DashboardScreen from '../screens/DashboardScreen';
-import NewsScreen from '../screens/NewsScreen';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import StrategiesScreen from '../screens/StrategiesScreen';
 import StrategyTestScreen from '../screens/StrategyTestScreen';
-import GamificationScreen from '../screens/GamificationScreen';
-import AlarmsScreen from '../screens/AlarmsScreen';
-import EducationScreen from '../screens/EducationScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import EnhancedLeaderboardScreen from '../screens/EnhancedLeaderboardScreen';
+import EnhancedProfileScreen from '../screens/EnhancedProfileScreen';
 
 const RootStack = createStackNavigator<RootStackParamList>();
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -102,7 +99,7 @@ const MainTabsNavigator = () => (
       component={DashboardScreen}
       options={{
         tabBarLabel: 'Ana Sayfa',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📊</Text>,
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text>,
       }}
     />
     <MainTabs.Screen
@@ -114,48 +111,24 @@ const MainTabsNavigator = () => (
       }}
     />
     <MainTabs.Screen
-      name="News"
-      component={NewsScreen}
-      options={{
-        tabBarLabel: 'Haberler',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📰</Text>,
-      }}
-    />
-    <MainTabs.Screen
       name="Strategies"
       component={StrategiesScreen}
       options={{
         tabBarLabel: 'Stratejiler',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🎯</Text>,
+        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>⚡</Text>,
       }}
     />
     <MainTabs.Screen
       name="Gamification"
-      component={GamificationScreen}
+      component={EnhancedLeaderboardScreen}
       options={{
-        tabBarLabel: 'Oyunlaştırma',
+        tabBarLabel: 'Strategist',
         tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
       }}
     />
     <MainTabs.Screen
-      name="Alarms"
-      component={AlarmsScreen}
-      options={{
-        tabBarLabel: 'Alarmlar',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔔</Text>,
-      }}
-    />
-    <MainTabs.Screen
-      name="Education"
-      component={EducationScreen}
-      options={{
-        tabBarLabel: 'Eğitim',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📚</Text>,
-      }}
-    />
-    <MainTabs.Screen
       name="Profile"
-      component={ProfileScreen}
+      component={EnhancedProfileScreen}
       options={{
         tabBarLabel: 'Profil',
         tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,

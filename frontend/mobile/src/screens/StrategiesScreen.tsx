@@ -211,12 +211,27 @@ const StrategiesScreen: React.FC = () => {
         }));
         setStrategies(apiStrategies);
       } else {
-        console.error('Failed to load strategies:', result.message);
+        // Handle API errors gracefully - don't show errors to users
+        // 404 errors are expected when user has no strategies yet
+        if (result.message?.includes('404')) {
+          // User has no strategies yet, this is normal
+          setStrategies([]);
+        } else {
+          // Only log other types of errors for debugging
+          console.error('Failed to load strategies:', result.message);
+          setStrategies([]);
+        }
+      }
+    } catch (error: any) {
+      // Handle network/connection errors gracefully
+      if (error?.message?.includes('404')) {
+        // User has no strategies yet, this is normal
+        setStrategies([]);
+      } else {
+        // Only log other types of errors for debugging
+        console.error('Error loading strategies:', error);
         setStrategies([]);
       }
-    } catch (error) {
-      console.error('Error loading strategies:', error);
-      setStrategies([]);
     }
   };
 

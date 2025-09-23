@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import Constants from 'expo-constants';
 import { API_BASE_URL as CFG_API_BASE_URL, WS_BASE_URL as CFG_WS_BASE_URL } from '../config';
 import * as signalR from '@microsoft/signalr';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { websocketService } from '../services/websocketService';
+import { multiAssetApiService } from '../services/multiAssetApi';
+import { UnifiedMarketDataDto, EnhancedSymbolDto, AssetClassType } from '../types';
 
-interface PriceData {
+// Legacy price data interface (maintained for backward compatibility)
+interface LegacyPriceData {
   [symbol: string]: {
     price: number;
     change: number;
@@ -12,20 +16,79 @@ interface PriceData {
   };
 }
 
-type SymbolRow = { id: string; ticker: string; display: string; venue: string; baseCcy: string; quoteCcy: string; isTracked: boolean };
+// Enhanced price data interface
+interface EnhancedPriceData {
+  [symbolId: string]: UnifiedMarketDataDto;
+}
+
+// Legacy symbol row (maintained for backward compatibility)
+type LegacySymbolRow = { id: string; ticker: string; display: string; venue: string; baseCcy: string; quoteCcy: string; isTracked: boolean };
+
+// Enhanced symbol data
+interface SymbolSubscription {
+  symbolId: string;
+  assetClass: AssetClassType;
+  subscriptionId?: string;
+}
+
+// Combined price data for backward compatibility
+type CombinedPriceData = LegacyPriceData & EnhancedPriceData;
 
 interface PriceContextType {
-  prices: PriceData;
+  // Legacy properties (maintained for backward compatibility)
+  prices: LegacyPriceData;
   isConnected: boolean;
-  symbols: SymbolRow[];
+  symbols: LegacySymbolRow[];
   getPrice: (symbol: string) => { price: number; change: number } | null;
+
+  // Enhanced multi-asset properties
+  enhancedPrices: EnhancedPriceData;
+  trackedSymbols: EnhancedSymbolDto[];
+  subscriptions: SymbolSubscription[];
+  connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
+
+  // Enhanced methods
+  getEnhancedPrice: (symbolId: string) => UnifiedMarketDataDto | null;
+  getPriceBySymbol: (symbol: string, assetClass?: AssetClassType) => UnifiedMarketDataDto | null;
+  subscribeToSymbols: (symbolIds: string[], assetClass?: AssetClassType) => Promise<void>;
+  unsubscribeFromSymbols: (symbolIds: string[]) => Promise<void>;
+  addTrackedSymbol: (symbol: EnhancedSymbolDto) => Promise<void>;
+  removeTrackedSymbol: (symbolId: string) => Promise<void>;
+  getSymbolsByAssetClass: (assetClass: AssetClassType) => EnhancedSymbolDto[];
+  refreshPrices: () => Promise<void>;
+  isSymbolTracked: (symbolId: string) => boolean;
+
+  // Utility methods
+  getAssetClassSummary: () => Record<AssetClassType, {
+    totalSymbols: number;
+    gainers: number;
+    losers: number;
+    averageChange: number;
+  }>;
 }
 
 const PriceContext = createContext<PriceContextType>({
+  // Legacy defaults
   prices: {},
   isConnected: false,
   symbols: [],
   getPrice: () => null,
+
+  // Enhanced defaults
+  enhancedPrices: {},
+  trackedSymbols: [],
+  subscriptions: [],
+  connectionStatus: 'disconnected',
+  getEnhancedPrice: () => null,
+  getPriceBySymbol: () => null,
+  subscribeToSymbols: async () => {},
+  unsubscribeFromSymbols: async () => {},
+  addTrackedSymbol: async () => {},
+  removeTrackedSymbol: async () => {},
+  getSymbolsByAssetClass: () => [],
+  refreshPrices: async () => {},
+  isSymbolTracked: () => false,
+  getAssetClassSummary: () => ({} as any),
 });
 
 export const usePrices = () => useContext(PriceContext);
@@ -35,10 +98,17 @@ interface PriceProviderProps {
 }
 
 export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
-  const [prices, setPrices] = useState<PriceData>({});
-  const [symbols, setSymbols] = useState<SymbolRow[]>([]);
+  // Legacy state (maintained for backward compatibility)
+  const [prices, setPrices] = useState<LegacyPriceData>({});
+  const [symbols, setSymbols] = useState<LegacySymbolRow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
+
+  // Enhanced multi-asset state
+  const [enhancedPrices, setEnhancedPrices] = useState<EnhancedPriceData>({});
+  const [trackedSymbols, setTrackedSymbols] = useState<EnhancedSymbolDto[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SymbolSubscription[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 
   const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:8080/api';
   // Prefer explicit WS_BASE_URL from config; fall back to API->hubs/trading
@@ -80,11 +150,71 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
       } catch (error) {
         console.warn('Error fetching initial data:', error);
         // Fallback to mock data if needed
-        const fallbackPrices: PriceData = {
+        const fallbackPrices: LegacyPriceData = {
           BTCUSDT: { price: 43250.67, change: 2.34, timestamp: new Date().toISOString() },
           ETHUSDT: { price: 2634.89, change: -1.23, timestamp: new Date().toISOString() },
         };
         setPrices(fallbackPrices);
+
+        // Also set some mock enhanced prices for testing
+        const mockEnhancedPrices: EnhancedPriceData = {
+          'btc-usdt': {
+            symbolId: 'btc-usdt',
+            symbol: 'BTCUSDT',
+            price: 43250.67,
+            change: 1012.34,
+            changePercent: 2.34,
+            timestamp: new Date().toISOString(),
+            marketStatus: 'OPEN',
+            dataSource: 'SIMULATED',
+            lastUpdated: new Date().toISOString(),
+          },
+          'eth-usdt': {
+            symbolId: 'eth-usdt',
+            symbol: 'ETHUSDT',
+            price: 2634.89,
+            change: -32.45,
+            changePercent: -1.23,
+            timestamp: new Date().toISOString(),
+            marketStatus: 'OPEN',
+            dataSource: 'SIMULATED',
+            lastUpdated: new Date().toISOString(),
+          },
+        };
+        setEnhancedPrices(mockEnhancedPrices);
+
+        // Set mock tracked symbols
+        const mockTrackedSymbols: EnhancedSymbolDto[] = [
+          {
+            id: 'btc-usdt',
+            symbol: 'BTCUSDT',
+            displayName: 'Bitcoin',
+            assetClassId: 'CRYPTO',
+            marketId: 'crypto-market',
+            baseCurrency: 'BTC',
+            quoteCurrency: 'USDT',
+            isActive: true,
+            isTracked: true,
+            priceDecimalPlaces: 2,
+            quantityDecimalPlaces: 8,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 'eth-usdt',
+            symbol: 'ETHUSDT',
+            displayName: 'Ethereum',
+            assetClassId: 'CRYPTO',
+            marketId: 'crypto-market',
+            baseCurrency: 'ETH',
+            quoteCurrency: 'USDT',
+            isActive: true,
+            isTracked: true,
+            priceDecimalPlaces: 2,
+            quantityDecimalPlaces: 8,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+        setTrackedSymbols(mockTrackedSymbols);
       }
     };
 
@@ -148,12 +278,31 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
             if (data.symbol && data.price) {
               const symbol = data.symbol.replace('USDT', ''); // Clean symbol (BTC, ETH, etc.)
               console.log(`Updating price for ${symbol}: $${data.price}`);
+
+              // Update legacy prices
               setPrices(prev => ({
                 ...prev,
                 [symbol]: {
                   price: data.price,
                   change: data.change || 0,
                   timestamp: data.timestamp || new Date().toISOString(),
+                }
+              }));
+
+              // Update enhanced prices
+              const symbolId = data.symbol.toLowerCase();
+              setEnhancedPrices(prev => ({
+                ...prev,
+                [symbolId]: {
+                  symbolId,
+                  symbol: data.symbol,
+                  price: data.price,
+                  change: data.change || 0,
+                  changePercent: data.changePercent || 0,
+                  timestamp: data.timestamp || new Date().toISOString(),
+                  marketStatus: 'OPEN',
+                  dataSource: 'REAL_TIME',
+                  lastUpdated: new Date().toISOString(),
                 }
               }));
             }
@@ -176,19 +325,39 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
             console.log('Received SignalR market data:', data);
             // Handle batch market data updates
             if (data.symbols) {
-              const updates: PriceData = {};
+              const updates: LegacyPriceData = {};
+              const enhancedUpdates: EnhancedPriceData = {};
+
               Object.keys(data.symbols).forEach(symbol => {
                 const symbolData = data.symbols[symbol];
                 if (symbolData.price) {
                   const cleanSymbol = symbol.replace('USDT', '');
+
+                  // Legacy format
                   updates[cleanSymbol] = {
                     price: symbolData.price,
                     change: symbolData.change || 0,
                     timestamp: symbolData.timestamp || new Date().toISOString(),
                   };
+
+                  // Enhanced format
+                  const symbolId = symbol.toLowerCase();
+                  enhancedUpdates[symbolId] = {
+                    symbolId,
+                    symbol,
+                    price: symbolData.price,
+                    change: symbolData.change || 0,
+                    changePercent: symbolData.changePercent || 0,
+                    timestamp: symbolData.timestamp || new Date().toISOString(),
+                    marketStatus: 'OPEN',
+                    dataSource: 'REAL_TIME',
+                    lastUpdated: new Date().toISOString(),
+                  };
                 }
               });
+
               setPrices(prev => ({ ...prev, ...updates }));
+              setEnhancedPrices(prev => ({ ...prev, ...enhancedUpdates }));
             }
           } catch (error) {
             console.warn('Error processing SignalR market data:', error);
@@ -239,8 +408,130 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
     return null;
   };
 
+  // Enhanced methods implementation
+  const getEnhancedPrice = useCallback((symbolId: string): UnifiedMarketDataDto | null => {
+    return enhancedPrices[symbolId] || null;
+  }, [enhancedPrices]);
+
+  const getPriceBySymbol = useCallback((symbol: string, assetClass?: AssetClassType): UnifiedMarketDataDto | null => {
+    // First try direct symbol lookup
+    const direct = Object.values(enhancedPrices).find(price => price.symbol === symbol);
+    if (direct) return direct;
+
+    // If asset class is provided, filter by it
+    if (assetClass) {
+      const filtered = trackedSymbols
+        .filter(s => s.assetClassId === assetClass && s.symbol === symbol)
+        .map(s => enhancedPrices[s.id])
+        .find(Boolean);
+      if (filtered) return filtered;
+    }
+
+    return null;
+  }, [enhancedPrices, trackedSymbols]);
+
+  const subscribeToSymbols = useCallback(async (symbolIds: string[], assetClass?: AssetClassType): Promise<void> => {
+    // Implementation for subscribing to symbols
+    console.log('Subscribing to symbols:', symbolIds, assetClass);
+    // This would connect to enhanced WebSocket service
+  }, []);
+
+  const unsubscribeFromSymbols = useCallback(async (symbolIds: string[]): Promise<void> => {
+    console.log('Unsubscribing from symbols:', symbolIds);
+    // Implementation for unsubscribing
+  }, []);
+
+  const addTrackedSymbol = useCallback(async (symbol: EnhancedSymbolDto): Promise<void> => {
+    setTrackedSymbols(prev => {
+      const exists = prev.find(s => s.id === symbol.id);
+      if (exists) return prev;
+      return [...prev, symbol];
+    });
+  }, []);
+
+  const removeTrackedSymbol = useCallback(async (symbolId: string): Promise<void> => {
+    setTrackedSymbols(prev => prev.filter(s => s.id !== symbolId));
+  }, []);
+
+  const getSymbolsByAssetClass = useCallback((assetClass: AssetClassType): EnhancedSymbolDto[] => {
+    return trackedSymbols.filter(symbol => symbol.assetClassId === assetClass);
+  }, [trackedSymbols]);
+
+  const refreshPrices = useCallback(async (): Promise<void> => {
+    console.log('Refreshing prices...');
+    // Implementation for refreshing prices
+  }, []);
+
+  const isSymbolTracked = useCallback((symbolId: string): boolean => {
+    return trackedSymbols.some(symbol => symbol.id === symbolId);
+  }, [trackedSymbols]);
+
+  const getAssetClassSummary = useCallback(() => {
+    const summary: Record<AssetClassType, {
+      totalSymbols: number;
+      gainers: number;
+      losers: number;
+      averageChange: number;
+    }> = {
+      CRYPTO: { totalSymbols: 0, gainers: 0, losers: 0, averageChange: 0 },
+      STOCK: { totalSymbols: 0, gainers: 0, losers: 0, averageChange: 0 },
+      FOREX: { totalSymbols: 0, gainers: 0, losers: 0, averageChange: 0 },
+      COMMODITY: { totalSymbols: 0, gainers: 0, losers: 0, averageChange: 0 },
+      INDEX: { totalSymbols: 0, gainers: 0, losers: 0, averageChange: 0 },
+    };
+
+    // Group tracked symbols by asset class
+    const symbolsByClass = trackedSymbols.reduce((acc, symbol) => {
+      const assetClass = symbol.assetClassId as AssetClassType;
+      if (!acc[assetClass]) acc[assetClass] = [];
+      acc[assetClass].push(symbol);
+      return acc;
+    }, {} as Record<AssetClassType, EnhancedSymbolDto[]>);
+
+    // Calculate summary for each asset class
+    Object.entries(symbolsByClass).forEach(([assetClass, symbols]) => {
+      const ac = assetClass as AssetClassType;
+      const prices = symbols.map(s => enhancedPrices[s.id]).filter(Boolean);
+
+      summary[ac].totalSymbols = symbols.length;
+      summary[ac].gainers = prices.filter(p => p.changePercent > 0).length;
+      summary[ac].losers = prices.filter(p => p.changePercent < 0).length;
+
+      if (prices.length > 0) {
+        const totalChange = prices.reduce((sum, p) => sum + p.changePercent, 0);
+        summary[ac].averageChange = totalChange / prices.length;
+      }
+    });
+
+    return summary;
+  }, [trackedSymbols, enhancedPrices]);
+
   return (
-    <PriceContext.Provider value={{ prices, isConnected, symbols, getPrice }}>
+    <PriceContext.Provider value={{
+      // Legacy properties
+      prices,
+      isConnected,
+      symbols,
+      getPrice,
+
+      // Enhanced properties
+      enhancedPrices,
+      trackedSymbols,
+      subscriptions,
+      connectionStatus,
+
+      // Enhanced methods
+      getEnhancedPrice,
+      getPriceBySymbol,
+      subscribeToSymbols,
+      unsubscribeFromSymbols,
+      addTrackedSymbol,
+      removeTrackedSymbol,
+      getSymbolsByAssetClass,
+      refreshPrices,
+      isSymbolTracked,
+      getAssetClassSummary,
+    }}>
       {children}
     </PriceContext.Provider>
   );

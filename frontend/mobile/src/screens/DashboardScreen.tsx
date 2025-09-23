@@ -1,513 +1,574 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
-  Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Dimensions,
+  Alert,
+  Modal,
+  Text,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList, SymbolData, WebSocketMessage } from '../types';
+import {
+  RootStackParamList,
+  EnhancedSymbolDto,
+  UnifiedMarketDataDto,
+  LeaderboardEntry,
+  UserRanking,
+  CompetitionStats,
+  NewsItem,
+  Portfolio,
+  MarketStatusDto,
+  AssetClassType,
+} from '../types';
 import { apiService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePrices } from '../context/PriceContext';
+import {
+  SmartOverviewHeader,
+  AssetClassAccordion,
+  CompactLeaderboard,
+  DashboardErrorBoundary,
+  AccordionErrorBoundary,
+} from '../components/dashboard';
+import { EnhancedNewsPreview } from '../components/news';
+import EnhancedNewsScreen from './EnhancedNewsScreen';
+import { usePerformanceOptimization } from '../hooks/usePerformanceOptimization';
 
 type DashboardNavigationProp = StackNavigationProp<RootStackParamList>;
 
-const { width } = Dimensions.get('window');
+interface DashboardState {
+  portfolio: Portfolio | null;
+  cryptoSymbols: EnhancedSymbolDto[];
+  bistSymbols: EnhancedSymbolDto[];
+  nasdaqSymbols: EnhancedSymbolDto[];
+  marketStatuses: MarketStatusDto[];
+  leaderboard: LeaderboardEntry[];
+  userRanking: UserRanking | null;
+  competitionStats: CompetitionStats | null;
+  news: NewsItem[];
+  expandedSections: Record<AssetClassType, boolean>;
+  isLoading: boolean;
+  error: string | null;
+}
 
-interface CryptoCard {
-  symbol: string;
-  display_name: string;
-  price: number;
-  signal: 'BUY' | 'SELL' | 'NEUTRAL';
-  indicators: {
-    RSI: number;
-    MACD: number;
-    BB_UPPER: number;
-    BB_LOWER: number;
-  };
-  timestamp: string;
-  strategy_type: string;
+interface AssetClassConfig {
+  type: AssetClassType;
+  title: string;
+  icon: string;
+  priority: number;
 }
 
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<DashboardNavigationProp>();
-  const defaultSymbolConfig: { [key: string]: any } = {
-    BTC: { symbol: 'BTCUSDT', display_name: 'Bitcoin', precision: 2, strategy_type: 'quality_over_quantity' },
-    ETH: { symbol: 'ETHUSDT', display_name: 'Ethereum', precision: 2, strategy_type: 'trend_momentum' },
-    XRP: { symbol: 'XRPUSDT', display_name: 'Ripple', precision: 4, strategy_type: 'volatility_breakout' },
-    BNB: { symbol: 'BNBUSDT', display_name: 'Binance Coin', precision: 2, strategy_type: 'quality_over_quantity' },
-    ADA: { symbol: 'ADAUSDT', display_name: 'Cardano', precision: 4, strategy_type: 'trend_momentum' },
-    SOL: { symbol: 'SOLUSDT', display_name: 'Solana', precision: 2, strategy_type: 'volatility_breakout' },
-    DOT: { symbol: 'DOTUSDT', display_name: 'Polkadot', precision: 3, strategy_type: 'signal_rich' },
-    POL: { symbol: 'POLUSDT', display_name: 'Polygon', precision: 4, strategy_type: 'trend_following' },
-    AVAX: { symbol: 'AVAXUSDT', display_name: 'Avalanche', precision: 3, strategy_type: 'mean_reversion' },
-    LINK: { symbol: 'LINKUSDT', display_name: 'Chainlink', precision: 3, strategy_type: 'signal_rich' },
-  };
-  const defaultSymbols = Object.keys(defaultSymbolConfig);
-
-  const [symbolConfig, setSymbolConfig] = useState<{ [key: string]: any }>(defaultSymbolConfig);
-  const [symbols, setSymbols] = useState<string[]>(defaultSymbols);
-
-  const buildInitialData = (): { [key: string]: CryptoCard } => {
-    const initial: { [key: string]: CryptoCard } = {};
-    symbols.forEach((symbol) => {
-      const config = symbolConfig[symbol];
-      initial[symbol] = {
-        symbol,
-        display_name: config?.display_name || symbol,
-        price: 0,
-        signal: 'NEUTRAL',
-        indicators: { RSI: 0, MACD: 0, BB_UPPER: 0, BB_LOWER: 0 },
-        timestamp: new Date().toISOString(),
-        strategy_type: config?.strategy_type || 'quality_over_quantity',
-      };
-    });
-    return initial;
-  };
-
-  const [cryptoData, setCryptoData] = useState<{ [key: string]: CryptoCard }>(() => buildInitialData());
-  const [symbolErrors, setSymbolErrors] = useState<{ [key: string]: string | null }>({});
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const { user } = useAuth();
-  const { prices, isConnected, getPrice } = usePrices();
+  const {
+    enhancedPrices,
+    getSymbolsByAssetClass,
+    getAssetClassSummary,
+    refreshPrices,
+    connectionStatus,
+  } = usePrices();
 
-  // Simple reorder state - just track if we're in reorder mode
-  const [isReordering, setIsReordering] = useState(false);
+  // Performance optimization
+  const {
+    startRender,
+    endRender,
+    throttledUpdate,
+    batchedSetState,
+    performanceUtils,
+    metrics,
+    isActive,
+  } = usePerformanceOptimization({
+    updateInterval: 1000,
+    maxUpdateFrequency: 30, // 30 FPS for dashboard updates
+    pauseOnBackground: true,
+    enableBatching: true,
+    debounceDelay: 200,
+  });
 
-  
+  // Asset class configurations
+  const assetClassConfigs: AssetClassConfig[] = [
+    { type: 'CRYPTO', title: '🚀 Kripto', icon: '🚀', priority: 1 },
+    { type: 'STOCK', title: '🏢 BIST Hisseleri', icon: '🏢', priority: 2 },
+    { type: 'STOCK', title: '🇺🇸 NASDAQ Hisseleri', icon: '🇺🇸', priority: 3 },
+  ];
 
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const cfg = await apiService.getSymbolsCached();
-        if (cfg?.symbols && Object.keys(cfg.symbols).length > 0) {
-          setSymbolConfig(cfg.symbols);
-          setSymbols(Object.keys(cfg.symbols));
-          // rebuild initial data using fetched config
-          setCryptoData(() => {
-            const initial: { [key: string]: CryptoCard } = {};
-            Object.keys(cfg.symbols).forEach((k) => {
-              const c = cfg.symbols[k];
-              initial[k] = {
-                symbol: k,
-                display_name: c?.display_name || k,
-                price: 0,
-                signal: 'NEUTRAL',
-                indicators: { RSI: 0, MACD: 0, BB_UPPER: 0, BB_LOWER: 0 },
-                timestamp: new Date().toISOString(),
-                strategy_type: c?.strategy_type || 'quality_over_quantity',
-              };
-            });
-            return initial;
-          });
-        }
-      } catch (e) {
-        console.warn('Symbols config init failed:', e);
-      }
-    };
-    init();
+  const [state, setState] = useState<DashboardState>({
+    portfolio: null,
+    cryptoSymbols: [],
+    bistSymbols: [],
+    nasdaqSymbols: [],
+    marketStatuses: [],
+    leaderboard: [],
+    userRanking: null,
+    competitionStats: null,
+    news: [],
+    expandedSections: {
+      CRYPTO: true,
+      STOCK: false,
+      FOREX: false,
+      COMMODITY: false,
+      INDEX: false,
+    },
+    isLoading: true,
+    error: null,
+  });
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showNewsModal, setShowNewsModal] = useState(false);
+
+  // Helper function to update state with performance optimization
+  const updateState = useCallback((updates: Partial<DashboardState>) => {
+    setState(prev => ({ ...prev, ...updates }));
   }, []);
 
-  // Load user preferences when user changes
-  useEffect(() => {
-    loadUserPreferences();
-  }, [user]);
+  // Asset class summary data
+  const assetClassSummary = useMemo(() => {
+    return getAssetClassSummary();
+  }, [getAssetClassSummary]);
 
-  // Update crypto data with prices from PriceContext
-  useEffect(() => {
-    setCryptoData(prevData => {
-      const newData = { ...prevData };
-      let hasUpdates = false;
-      
-      symbols.forEach(symbol => {
-        const config = symbolConfig[symbol];
-        const priceData = getPrice(config?.symbol || `${symbol}USDT`);
-        
-        if (priceData && newData[symbol]) {
-          newData[symbol] = {
-            ...newData[symbol],
-            price: priceData.price,
-            timestamp: new Date().toISOString(),
-          };
-          hasUpdates = true;
-        }
-      });
-      
-      return hasUpdates ? newData : prevData;
+  // Market data organized by symbol ID
+  const marketDataBySymbol = useMemo(() => {
+    const data: Record<string, UnifiedMarketDataDto> = {};
+    Object.entries(enhancedPrices).forEach(([symbolId, marketData]) => {
+      data[symbolId] = marketData;
+      data[marketData.symbol] = marketData; // Also index by symbol for compatibility
     });
-  }, [prices, symbols, symbolConfig, getPrice]);
+    return data;
+  }, [enhancedPrices]);
 
-  // Connection status and errors are now handled by PriceContext
+  // Initialize dashboard data
+  const initializeDashboard = useCallback(async () => {
+    try {
+      updateState({ isLoading: true, error: null });
 
-  const onRefresh = async () => {
+      // Fetch portfolio data if user is logged in
+      let portfolio = null;
+      if (user) {
+        try {
+          const portfolios = await apiService.getPortfolios();
+          portfolio = portfolios[0] || null;
+        } catch (error) {
+          console.warn('Failed to fetch portfolio:', error);
+        }
+      }
+
+      // Fetch symbols by asset class
+      const [cryptoSymbols, marketStatuses] = await Promise.allSettled([
+        apiService.getSymbolsByAssetClass('CRYPTO'),
+        apiService.getAllMarketStatuses(),
+      ]);
+
+      // Fetch BIST symbols (Turkish stocks)
+      let bistSymbols: EnhancedSymbolDto[] = [];
+      try {
+        const allStocks = await apiService.getSymbolsByAssetClass('STOCK');
+        bistSymbols = allStocks.filter(symbol =>
+          symbol.marketId?.includes('BIST') ||
+          symbol.quoteCurrency === 'TRY'
+        );
+      } catch (error) {
+        console.warn('Failed to fetch BIST symbols:', error);
+      }
+
+      // Fetch NASDAQ symbols (US stocks)
+      let nasdaqSymbols: EnhancedSymbolDto[] = [];
+      try {
+        const allStocks = await apiService.getSymbolsByAssetClass('STOCK');
+        nasdaqSymbols = allStocks.filter(symbol =>
+          symbol.marketId?.includes('NASDAQ') ||
+          symbol.quoteCurrency === 'USD'
+        );
+      } catch (error) {
+        console.warn('Failed to fetch NASDAQ symbols:', error);
+      }
+
+      // Fetch gamification data if user is logged in
+      let leaderboard: LeaderboardEntry[] = [];
+      let userRanking: UserRanking | null = null;
+      let competitionStats: CompetitionStats | null = null;
+
+      if (user) {
+        try {
+          const [leaderboardResult, userRankingResult, statsResult] = await Promise.allSettled([
+            apiService.getLeaderboard('weekly', 10),
+            apiService.getUserRanking('weekly'),
+            apiService.getCompetitionStats(),
+          ]);
+
+          if (leaderboardResult.status === 'fulfilled') {
+            leaderboard = leaderboardResult.value;
+          }
+          if (userRankingResult.status === 'fulfilled') {
+            userRanking = userRankingResult.value;
+          }
+          if (statsResult.status === 'fulfilled') {
+            competitionStats = statsResult.value;
+          }
+        } catch (error) {
+          console.warn('Failed to fetch gamification data:', error);
+        }
+      }
+
+      // Fetch news
+      let news: NewsItem[] = [];
+      try {
+        news = await apiService.getMarketNews(undefined, 6);
+      } catch (error) {
+        console.warn('Failed to fetch news:', error);
+      }
+
+      // Update state with all fetched data
+      updateState({
+        portfolio,
+        cryptoSymbols: cryptoSymbols.status === 'fulfilled' ? cryptoSymbols.value : [],
+        bistSymbols,
+        nasdaqSymbols,
+        marketStatuses: marketStatuses.status === 'fulfilled' ? marketStatuses.value : [],
+        leaderboard,
+        userRanking,
+        competitionStats,
+        news,
+        isLoading: false,
+      });
+
+    } catch (error) {
+      console.error('Failed to initialize dashboard:', error);
+      updateState({
+        error: 'Dashboard yüklenirken bir hata oluştu.',
+        isLoading: false,
+      });
+    }
+  }, [user, updateState]);
+
+  useEffect(() => {
+    initializeDashboard();
+  }, [initializeDashboard]);
+
+  // Refresh function
+  const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      // reset to initial, keep UI responsive
-      setCryptoData(buildInitialData());
-      // PriceContext will automatically reconnect if needed
+      await Promise.all([
+        refreshPrices(),
+        initializeDashboard(),
+      ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      console.error('Error refreshing dashboard:', error);
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [refreshPrices, initializeDashboard]);
 
-  const handleStrategyTest = (symbol: string, displayName: string) => {
-    navigation.navigate('StrategyTest', { symbol, displayName });
-  };
+  // Handle section toggle
+  const handleSectionToggle = useCallback((assetClass: AssetClassType, expanded: boolean) => {
+    updateState({
+      expandedSections: {
+        ...state.expandedSections,
+        [assetClass]: expanded,
+      },
+    });
+  }, [state.expandedSections, updateState]);
 
-  // User preferences functions
-  const loadUserPreferences = async () => {
-    if (!user) return;
-    try {
-      const response = await apiService.getUserLayoutPreferences();
-      if (response.asset_order && Array.isArray(response.asset_order)) {
-        const orderedSymbols = response.asset_order.filter(s => symbols.includes(s));
-        const remainingSymbols = symbols.filter(s => !orderedSymbols.includes(s));
-        setSymbols([...orderedSymbols, ...remainingSymbols]);
-      }
-    } catch (error) {
-      console.warn('Failed to load user preferences:', error);
-    }
-  };
+  // Navigation handlers
+  const handleSymbolPress = useCallback((symbol: EnhancedSymbolDto) => {
+    // Navigate to symbol details or trading screen
+    console.log('Symbol pressed:', symbol.symbol);
+  }, []);
 
-  const saveUserPreferences = async (newOrder: string[]) => {
-    if (!user) return;
-    try {
-      await apiService.saveUserLayoutPreferences({ asset_order: newOrder });
-    } catch (error) {
-      console.warn('Failed to save user preferences:', error);
-    }
-  };
+  const handleStrategyTest = useCallback((symbol: EnhancedSymbolDto) => {
+    navigation.navigate('StrategyTest', {
+      symbol: symbol.symbol,
+      displayName: symbol.displayName,
+    });
+  }, [navigation]);
 
-  // Simple move to top functionality
-  const moveToTop = (symbol: string) => {
-    console.log('moveToTop called with symbol:', symbol);
-    console.log('Current symbols:', symbols);
-    const newSymbols = [symbol, ...symbols.filter(s => s !== symbol)];
-    console.log('New symbols order:', newSymbols);
-    setSymbols(newSymbols);
-    saveUserPreferences(newSymbols);
-    setIsReordering(false);
-  };
-
-  const formatPrice = (price: number, precision: number = 2): string => {
-    if (price === 0) return '$0.00';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: precision,
-      maximumFractionDigits: Math.max(precision, 8),
-    }).format(price);
-  };
-
-  const getSignalColor = (signal: string): string => {
-    switch (signal) {
-      case 'BUY': return '#10b981';
-      case 'SELL': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const renderCryptoCard = (symbol: string, data: CryptoCard, index: number) => {
-    if (!data) {
-      return (
-        <View key={symbol} style={styles.cryptoCard}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cryptoName}>{symbol}</Text>
-            <Text style={styles.price}>Yükleniyor...</Text>
-          </View>
-          {symbolErrors[symbol] && (
-            <Text style={styles.errorText}>{symbolErrors[symbol]}</Text>
-          )}
-        </View>
+  const handleAddToWatchlist = useCallback((symbol: EnhancedSymbolDto) => {
+    if (!user) {
+      Alert.alert(
+        'Giriş Gerekli',
+        'İzleme listesine eklemek için giriş yapmanız gerekiyor.',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Giriş Yap', onPress: () => navigation.navigate('AuthStack', { screen: 'Login' }) },
+        ]
       );
+      return;
     }
 
-    return (
-      <TouchableOpacity
-        key={symbol}
-        style={styles.cryptoCard}
-        activeOpacity={0.8}
-        onLongPress={() => {
-          console.log('Long press detected on:', symbol, 'User:', !!user);
-          console.log('Moving to top:', symbol);
-          moveToTop(symbol);
-        }}
-        delayLongPress={500}
-      >
-        <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.cryptoName}>{data.display_name || symbol} ({symbol})</Text>
-            <Text style={styles.price}>{formatPrice(data.price || 0)}</Text>
-          </View>
-          <View style={[styles.signalBadge, { backgroundColor: getSignalColor(data.signal) }]}>
-            <Text style={styles.signalText}>{data.signal}</Text>
-          </View>
-        </View>
+    // Add to watchlist logic here
+    console.log('Add to watchlist:', symbol.symbol);
+  }, [user, navigation]);
 
-        <View style={styles.indicatorsGrid}>
-          <View style={styles.indicator}>
-            <Text style={styles.indicatorLabel}>RSI</Text>
-            <Text style={styles.indicatorValue}>{data.indicators.RSI.toFixed(2)}</Text>
-          </View>
-          <View style={styles.indicator}>
-            <Text style={styles.indicatorLabel}>MACD</Text>
-            <Text style={styles.indicatorValue}>{data.indicators.MACD.toFixed(2)}</Text>
-          </View>
-          <View style={styles.indicator}>
-            <Text style={styles.indicatorLabel}>BB Üst</Text>
-            <Text style={styles.indicatorValue}>{data.indicators.BB_UPPER.toFixed(2)}</Text>
-          </View>
-          <View style={styles.indicator}>
-            <Text style={styles.indicatorLabel}>BB Alt</Text>
-            <Text style={styles.indicatorValue}>{data.indicators.BB_LOWER.toFixed(2)}</Text>
-          </View>
-        </View>
+  const handleProfilePress = useCallback(() => {
+    navigation.navigate('MainTabs', { screen: 'Profile' });
+  }, [navigation]);
 
-        <TouchableOpacity
-          style={styles.strategyButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleStrategyTest(symbol, data.display_name);
-          }}
+  const handleLoginPress = useCallback(() => {
+    navigation.navigate('AuthStack', { screen: 'Login', params: { returnTo: 'Dashboard' } });
+  }, [navigation]);
+
+  const handleLeaderboardPress = useCallback(() => {
+    navigation.navigate('MainTabs', { screen: 'Gamification' });
+  }, [navigation]);
+
+  const handleNewsPress = useCallback(() => {
+    setShowNewsModal(true);
+  }, []);
+
+  const handleNewsItemPress = useCallback((newsItem: NewsItem) => {
+    // Navigate to news detail or open URL
+    console.log('News item pressed:', newsItem.title);
+  }, []);
+
+  const handleChallengePress = useCallback(() => {
+    if (!user) {
+      Alert.alert(
+        'Giriş Gerekli',
+        'Yarışmaya katılmak için giriş yapmanız gerekiyor.',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Giriş Yap', onPress: () => navigation.navigate('AuthStack', { screen: 'Login' }) },
+        ]
+      );
+      return;
+    }
+
+    navigation.navigate('MainTabs', { screen: 'Gamification' });
+  }, [user, navigation]);
+
+  // Get market status for specific asset class
+  const getMarketStatusForAssetClass = useCallback((assetClass: AssetClassType): MarketStatusDto | undefined => {
+    if (!state.marketStatuses || !Array.isArray(state.marketStatuses)) {
+      return undefined;
+    }
+    return state.marketStatuses.find(status => {
+      switch (assetClass) {
+        case 'CRYPTO':
+          return status.marketName.toLowerCase().includes('crypto');
+        case 'STOCK':
+          return status.marketName.toLowerCase().includes('stock') ||
+                 status.marketName.toLowerCase().includes('bist') ||
+                 status.marketName.toLowerCase().includes('nasdaq');
+        default:
+          return false;
+      }
+    });
+  }, [state.marketStatuses]);
+
+  // Get symbols for specific section
+  const getSymbolsForSection = useCallback((sectionType: string): EnhancedSymbolDto[] => {
+    switch (sectionType) {
+      case 'crypto':
+        return state.cryptoSymbols;
+      case 'bist':
+        return state.bistSymbols;
+      case 'nasdaq':
+        return state.nasdaqSymbols;
+      default:
+        return [];
+    }
+  }, [state.cryptoSymbols, state.bistSymbols, state.nasdaqSymbols]);
+
+  // Render accordion sections
+  const renderAccordionSections = () => {
+    const sections = [
+      {
+        type: 'crypto',
+        assetClass: 'CRYPTO' as AssetClassType,
+        title: '🚀 Kripto',
+        icon: '🚀',
+        symbols: state.cryptoSymbols,
+      },
+      {
+        type: 'bist',
+        assetClass: 'STOCK' as AssetClassType,
+        title: '🏢 BIST Hisseleri',
+        icon: '🏢',
+        symbols: state.bistSymbols,
+      },
+      {
+        type: 'nasdaq',
+        assetClass: 'STOCK' as AssetClassType,
+        title: '🇺🇸 NASDAQ Hisseleri',
+        icon: '🇺🇸',
+        symbols: state.nasdaqSymbols,
+      },
+    ];
+
+    return sections.map((section) => {
+      const summary = assetClassSummary[section.assetClass];
+      const marketStatus = getMarketStatusForAssetClass(section.assetClass);
+
+      return (
+        <AccordionErrorBoundary
+          key={section.type}
+          sectionName={section.title}
         >
-          <Text style={styles.strategyButtonText}>📈 Strateji Test</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.lastUpdate}>
-          Son güncelleme: {new Date(data.timestamp).toLocaleTimeString('tr-TR')}
-        </Text>
-        {symbolErrors[symbol] && (
-          <Text style={styles.errorText}>{symbolErrors[symbol]}</Text>
-        )}
-        {index > 0 && (
-          <Text style={styles.reorderHint}>Uzun bas - en üste taşı</Text>
-        )}
-      </TouchableOpacity>
-    );
+          <AssetClassAccordion
+            assetClass={section.assetClass}
+            title={section.title}
+            icon={section.icon}
+            symbols={section.symbols}
+            marketData={marketDataBySymbol}
+            summary={summary}
+            marketStatus={marketStatus?.status}
+            nextChangeTime={marketStatus?.nextOpen || marketStatus?.nextClose}
+            isExpanded={state.expandedSections[section.assetClass]}
+            maxVisibleItems={6}
+            isLoading={state.isLoading}
+            onToggle={handleSectionToggle}
+            onSymbolPress={handleSymbolPress}
+            onStrategyTest={handleStrategyTest}
+            onAddToWatchlist={handleAddToWatchlist}
+          />
+        </AccordionErrorBoundary>
+      );
+    });
   };
+
+  // Performance monitoring - simplified to avoid infinite renders
+  useEffect(() => {
+    startRender();
+    return () => {
+      endRender();
+    };
+  }, []); // Empty dependency array - only run on mount/unmount
+
+  // Log performance metrics in development
+  useEffect(() => {
+    if (__DEV__ && metrics.renderCount > 0 && metrics.renderCount % 50 === 0) {
+      console.log('📊 Dashboard Performance Metrics:', {
+        renders: metrics.renderCount,
+        avgRenderTime: `${metrics.averageRenderTime.toFixed(2)}ms`,
+        updates: metrics.updateCount,
+        droppedUpdates: metrics.droppedUpdates,
+        quality: performanceUtils.getAdaptiveQuality(),
+        isActive,
+      });
+    }
+  }, [metrics, performanceUtils, isActive]);
 
   return (
-    <LinearGradient
-      colors={['#667eea', '#764ba2']}
-      style={styles.container}
-    >
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>🚀 myTrader</Text>
-          <View style={styles.subtitleContainer}>
-            <Text style={styles.subtitle}>Gerçek zamanlı fiyat analizi</Text>
-            <View style={[
-              styles.connectionDot,
-              { backgroundColor: isConnected ? '#10b981' : '#ef4444' }
-            ]} />
+    <DashboardErrorBoundary>
+      <View style={styles.container}>
+        <AccordionErrorBoundary sectionName="Genel Bakış">
+          <SmartOverviewHeader
+            portfolio={state.portfolio}
+            marketStatuses={state.marketStatuses || []}
+            userRanking={state.userRanking}
+            isLoading={state.isLoading}
+            onProfilePress={handleProfilePress}
+            onLoginPress={handleLoginPress}
+          />
+        </AccordionErrorBoundary>
+
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor="#667eea"
+              colors={['#667eea']}
+            />
+          }
+        >
+          <View style={styles.content}>
+            {/* Asset Class Accordions */}
+            {renderAccordionSections()}
+
+            {/* Strategist Competition Section */}
+            <AccordionErrorBoundary sectionName="Strategist Yarışması">
+              <CompactLeaderboard
+                leaderboard={state.leaderboard}
+                userRanking={state.userRanking}
+                stats={state.competitionStats}
+                isLoading={state.isLoading}
+                showUserRanking={!!user}
+                maxEntries={5}
+                onPress={handleLeaderboardPress}
+                onChallengePress={handleChallengePress}
+                onJoinCompetition={handleChallengePress}
+                enablePullToRefresh={true}
+                showPeriodTabs={true}
+                initialPeriod="weekly"
+              />
+            </AccordionErrorBoundary>
+
+            {/* Enhanced News Section */}
+            <AccordionErrorBoundary sectionName="Piyasa Haberleri">
+              <EnhancedNewsPreview
+                news={state.news}
+                isLoading={state.isLoading}
+                maxItems={6}
+                showImages={true}
+                compact={false}
+                showSearch={false}
+                showCategories={true}
+                showFilters={true}
+                onPress={handleNewsPress}
+                onNewsItemPress={handleNewsItemPress}
+                title="📰 Piyasa Haberleri"
+                variant="dashboard"
+                enableRealTime={true}
+              />
+            </AccordionErrorBoundary>
+
+            {/* Performance Debug Info (Development Only) */}
+            {__DEV__ && (
+              <View style={styles.debugInfo}>
+                <Text style={styles.debugText}>
+                  Renders: {metrics.renderCount} | Avg: {metrics.averageRenderTime.toFixed(1)}ms | Quality: {performanceUtils.getAdaptiveQuality()}
+                </Text>
+              </View>
+            )}
           </View>
-        </View>
-        
-        <View style={styles.userSection}>
-          {user ? (
-            <TouchableOpacity 
-              style={styles.profileButton}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
-            >
-              <Text style={styles.profileButtonText}>👤 {user.first_name}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity 
-              style={styles.loginButton}
-              onPress={() => navigation.navigate('AuthStack', { screen: 'Login', params: { returnTo: 'Dashboard' } })}
-            >
-              <Text style={styles.loginButtonText}>👤 Giriş</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        </ScrollView>
       </View>
 
-
-
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
-        }
+      {/* News Modal */}
+      <Modal
+        visible={showNewsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
       >
-        <View style={styles.cryptoGrid}>
-          {symbols.map((symbol, index) => renderCryptoCard(symbol, cryptoData[symbol], index))}
-        </View>
-      </ScrollView>
-    </LinearGradient>
+        <EnhancedNewsScreen
+          isModal={true}
+          onClose={() => setShowNewsModal(false)}
+        />
+      </Modal>
+    </DashboardErrorBoundary>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  subtitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginRight: 8,
-  },
-  userSection: {
-    alignItems: 'flex-end',
-  },
-  userInfo: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loginButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  loginButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  profileButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  profileButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    backgroundColor: '#f8fafc',
   },
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  cryptoGrid: {
-    paddingBottom: 20,
+  content: {
+    padding: 16,
+    paddingBottom: 32,
   },
-  cryptoCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+  debugInfo: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 16,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  cryptoName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  price: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2563eb',
-    marginTop: 4,
-  },
-  signalBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  signalText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  indicatorsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  indicator: {
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    width: '48%',
-    marginBottom: 8,
-    alignItems: 'center',
-  },
-  indicatorLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  indicatorValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  strategyButton: {
-    backgroundColor: '#667eea',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  strategyButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  lastUpdate: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  reorderHint: {
+  debugText: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: '#666',
+    fontFamily: 'monospace',
     textAlign: 'center',
-    marginTop: 4,
-    fontStyle: 'italic',
   },
 });
 

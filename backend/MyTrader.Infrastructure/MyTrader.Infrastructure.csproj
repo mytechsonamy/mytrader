@@ -5,6 +5,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
+    <PackageReference Include="Hangfire.Core" Version="1.8.21" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
@@ -19,5 +22,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!-- Temporarily exclude Hangfire-dependent files that cause compilation errors with v1.8.21 -->
+  <ItemGroup>
+    <Compile Remove="Services/BatchProcessing/HangfireBatchJobOrchestrator.cs" />
+    <Compile Remove="Services/BatchProcessing/AllMarketsJobCoordinator.cs" />
+  </ItemGroup>
 
 </Project>

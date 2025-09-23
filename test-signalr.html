@@ -1,89 +1,64 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MyTrader Real-Time Test</title>
-    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <title>SignalR Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
 </head>
 <body>
-    <h1>MyTrader Real-Time Data Test</h1>
+    <h1>SignalR Connection Test</h1>
     <div id="status">Connecting...</div>
-    <div id="prices"></div>
-    <div id="signals"></div>
+    <div id="messages"></div>
 
     <script>
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("http://localhost:5245/hubs/trading")
+            .withAutomaticReconnect()
             .build();
 
-        connection.start().then(function () {
-            document.getElementById("status").innerHTML = "✅ Connected to MyTrader API";
-            console.log("Connected to SignalR hub");
-        }).catch(function (err) {
-            document.getElementById("status").innerHTML = "❌ Failed to connect: " + err.toString();
-            console.error(err.toString());
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+
+        function addMessage(message) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            messagesDiv.appendChild(div);
+        }
+
+        connection.onconnected = () => {
+            statusDiv.textContent = 'Connected to SignalR Hub';
+            statusDiv.style.color = 'green';
+            addMessage('Connected to SignalR Hub');
+        };
+
+        connection.onclose = () => {
+            statusDiv.textContent = 'Disconnected from SignalR Hub';
+            statusDiv.style.color = 'red';
+            addMessage('Disconnected from SignalR Hub');
+        };
+
+        // Listen for connection status
+        connection.on("ConnectionStatus", function (data) {
+            addMessage('Connection Status: ' + JSON.stringify(data));
         });
 
         // Listen for price updates
-        connection.on("ReceivePriceUpdate", function (data) {
-            console.log("Price update:", data);
-            const pricesDiv = document.getElementById("prices");
-            const priceElement = document.createElement("div");
-            priceElement.innerHTML = `
-                <strong>${data.symbol}</strong>: $${data.price} 
-                (${data.change > 0 ? '+' : ''}${data.change}%) 
-                Vol: ${data.volume} 
-                <small>${new Date(data.timestamp).toLocaleTimeString()}</small>
-            `;
-            priceElement.style.padding = "5px";
-            priceElement.style.margin = "2px";
-            priceElement.style.border = "1px solid #ccc";
-            priceElement.style.backgroundColor = data.change >= 0 ? "#e8f5e8" : "#ffe8e8";
-            
-            pricesDiv.insertBefore(priceElement, pricesDiv.firstChild);
-            
-            // Keep only last 10 price updates
-            while (pricesDiv.children.length > 10) {
-                pricesDiv.removeChild(pricesDiv.lastChild);
-            }
+        connection.on("PriceUpdate", function (data) {
+            addMessage('Price Update: ' + JSON.stringify(data));
         });
 
-        // Listen for signal updates
-        connection.on("ReceiveSignalUpdate", function (data) {
-            console.log("Signal update:", data);
-            const signalsDiv = document.getElementById("signals");
-            const signalElement = document.createElement("div");
-            signalElement.innerHTML = `
-                <strong>${data.symbol}</strong> - Signal: <strong style="color: ${getSignalColor(data.signal)}">${data.signal}</strong> 
-                | Trend: ${data.trend} 
-                | RSI: ${data.indicators.rsi || 'N/A'} 
-                | MACD: ${data.indicators.macd || 'N/A'}
-                <small>${new Date(data.timestamp).toLocaleTimeString()}</small>
-            `;
-            signalElement.style.padding = "5px";
-            signalElement.style.margin = "2px";
-            signalElement.style.border = "1px solid #999";
-            signalElement.style.backgroundColor = "#f9f9f9";
-            
-            signalsDiv.insertBefore(signalElement, signalsDiv.firstChild);
-            
-            // Keep only last 5 signal updates
-            while (signalsDiv.children.length > 5) {
-                signalsDiv.removeChild(signalsDiv.lastChild);
-            }
-        });
+        // Start connection
+        connection.start().then(function () {
+            addMessage('SignalR connection started successfully');
 
-        function getSignalColor(signal) {
-            switch(signal) {
-                case 'BUY': return 'green';
-                case 'SELL': return 'red';
-                case 'HOLD': return 'orange';
-                default: return 'black';
-            }
-        }
+            // Test subscribing to crypto price updates
+            connection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSDT", "ETHUSDT"])
+                .then(() => addMessage('Subscribed to CRYPTO price updates'))
+                .catch(err => addMessage('Error subscribing: ' + err));
 
-        // Handle connection errors
-        connection.onclose(function () {
-            document.getElementById("status").innerHTML = "❌ Connection lost";
+        }).catch(function (err) {
+            statusDiv.textContent = 'Failed to connect: ' + err;
+            statusDiv.style.color = 'red';
+            addMessage('Connection failed: ' + err);
         });
     </script>
 </body>

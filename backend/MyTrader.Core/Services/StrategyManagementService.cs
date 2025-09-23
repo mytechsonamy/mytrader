@@ -67,11 +67,10 @@ public class StrategyManagementService : IStrategyManagementService
             // Update existing strategy if new one is better
             if (bestResult.SharpeRatio > existingStrategy.PerformanceScore)
             {
-                existingStrategy.Configuration = bestResult.StrategyConfig ?? JsonSerializer.Serialize(new StrategyParameters());
+                existingStrategy.Parameters = bestResult.StrategyConfig ?? JsonSerializer.Serialize(new StrategyParameters());
                 existingStrategy.PerformanceScore = bestResult.SharpeRatio;
                 existingStrategy.Description = $"Multi-indicator strategy optimized for {await GetSymbolName(symbolId)}";
                 existingStrategy.UpdatedAt = DateTime.UtcNow;
-                existingStrategy.BacktestResultsJson = bestResult.DetailedResults;
 
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("Updated existing default strategy for symbol {SymbolId} with Sharpe ratio {SharpeRatio}", 
@@ -93,11 +92,10 @@ public class StrategyManagementService : IStrategyManagementService
             Name = $"Optimized Multi-Indicator Strategy",
             Description = $"Multi-indicator strategy optimized for {await GetSymbolName(symbolId)}",
             SymbolId = symbolId,
-            Configuration = bestResult.StrategyConfig ?? JsonSerializer.Serialize(new StrategyParameters()),
+            Parameters = bestResult.StrategyConfig ?? JsonSerializer.Serialize(new StrategyParameters()),
             IsDefault = true,
             IsActive = true,
             PerformanceScore = bestResult.SharpeRatio,
-            BacktestResultsJson = bestResult.DetailedResults,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

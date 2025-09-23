@@ -31,7 +31,9 @@ public class AuthController : ControllerBase
     {
         try
         {
+            _logger.LogInformation("Registration attempt for email: {Email}", request.Email);
             var result = await _authService.RegisterAsync(request);
+            _logger.LogInformation("Registration result for email: {Email}, Success: {Success}", request.Email, result.Success);
             return Ok(result);
         }
         catch (Exception ex)

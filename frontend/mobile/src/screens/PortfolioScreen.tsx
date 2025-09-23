@@ -63,6 +63,7 @@ const PortfolioScreen = ({ navigation }: any) => {
   };
 
   const formatCurrency = (value: number) => {
+    if (value === null || value === undefined || isNaN(value)) return '$0.00';
     return new Intl.NumberFormat('tr-TR', {
       style: 'currency',
       currency: 'USD',
@@ -71,11 +72,18 @@ const PortfolioScreen = ({ navigation }: any) => {
   };
 
   const formatPercentage = (value: number) => {
+    if (value === null || value === undefined || isNaN(value)) return '0.00%';
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(2)}%`;
   };
 
+  const formatQuantity = (value: number, decimals: number = 4) => {
+    if (value === null || value === undefined || isNaN(value)) return '0.0000';
+    return value.toFixed(decimals);
+  };
+
   const getColorForValue = (value: number) => {
+    if (value === null || value === undefined || isNaN(value)) return '#666';
     return value >= 0 ? '#10b981' : '#ef4444';
   };
 
@@ -137,7 +145,7 @@ const PortfolioScreen = ({ navigation }: any) => {
         </View>
 
         {/* Portfolio List */}
-        {state.portfolios.length === 0 ? (
+        {(!state.portfolios || state.portfolios.length === 0) ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>📈 Henüz portföyünüz yok</Text>
             <Text style={styles.emptySubtext}>İlk portföyünüzü oluşturun ve yatırımlarınızı takip edin</Text>
@@ -147,7 +155,7 @@ const PortfolioScreen = ({ navigation }: any) => {
           </View>
         ) : (
           <View style={styles.portfoliosList}>
-            {state.portfolios.map((portfolio) => (
+            {(state.portfolios || []).map((portfolio) => (
               <TouchableOpacity
                 key={portfolio.id}
                 style={[
@@ -169,15 +177,15 @@ const PortfolioScreen = ({ navigation }: any) => {
                   
                   <View style={styles.metricRow}>
                     <Text style={styles.metricLabel}>Günlük K/Z:</Text>
-                    <Text style={[styles.metricValue, { color: getColorForValue(portfolio.dailyPnL) }]}>
-                      {formatCurrency(portfolio.dailyPnL)} ({formatPercentage(portfolio.dailyPnL / portfolio.totalValue * 100)})
+                    <Text style={[styles.metricValue, { color: getColorForValue(portfolio.dailyPnL || 0) }]}>
+                      {formatCurrency(portfolio.dailyPnL || 0)} ({formatPercentage((portfolio.dailyPnL || 0) / (portfolio.totalValue || 1) * 100)})
                     </Text>
                   </View>
                   
                   <View style={styles.metricRow}>
                     <Text style={styles.metricLabel}>Toplam K/Z:</Text>
-                    <Text style={[styles.metricValue, { color: getColorForValue(portfolio.totalPnL) }]}>
-                      {formatCurrency(portfolio.totalPnL)} ({formatPercentage(portfolio.totalPnLPercent)})
+                    <Text style={[styles.metricValue, { color: getColorForValue(portfolio.totalPnL || 0) }]}>
+                      {formatCurrency(portfolio.totalPnL || 0)} ({formatPercentage(portfolio.totalPnLPercent || 0)})
                     </Text>
                   </View>
                 </View>
@@ -254,23 +262,23 @@ const PortfolioScreen = ({ navigation }: any) => {
                     <View style={styles.positionMetrics}>
                       <View style={styles.positionRow}>
                         <Text style={styles.positionLabel}>Miktar:</Text>
-                        <Text style={styles.positionValue}>{position.quantity.toFixed(4)}</Text>
+                        <Text style={styles.positionValue}>{formatQuantity(position.quantity, 4)}</Text>
                       </View>
                       
                       <View style={styles.positionRow}>
                         <Text style={styles.positionLabel}>Ortalama Fiyat:</Text>
-                        <Text style={styles.positionValue}>{formatCurrency(position.averagePrice)}</Text>
+                        <Text style={styles.positionValue}>{formatCurrency(position.averagePrice || 0)}</Text>
                       </View>
                       
                       <View style={styles.positionRow}>
                         <Text style={styles.positionLabel}>Güncel Değer:</Text>
-                        <Text style={styles.positionValue}>{formatCurrency(position.marketValue)}</Text>
+                        <Text style={styles.positionValue}>{formatCurrency(position.marketValue || 0)}</Text>
                       </View>
                       
                       <View style={styles.positionRow}>
                         <Text style={styles.positionLabel}>K/Z:</Text>
-                        <Text style={[styles.positionValue, { color: getColorForValue(position.unrealizedPnL) }]}>
-                          {formatCurrency(position.unrealizedPnL)} ({formatPercentage(position.unrealizedPnLPercent)})
+                        <Text style={[styles.positionValue, { color: getColorForValue(position.unrealizedPnL || 0) }]}>
+                          {formatCurrency(position.unrealizedPnL || 0)} ({formatPercentage(position.unrealizedPnLPercent || 0)})
                         </Text>
                       </View>
                     </View>
@@ -299,10 +307,10 @@ const PortfolioScreen = ({ navigation }: any) => {
                     
                     <View style={styles.transactionDetails}>
                       <Text style={styles.transactionDetail}>
-                        {transaction.quantity.toFixed(4)} @ {formatCurrency(transaction.price)}
+                        {formatQuantity(transaction.quantity || 0, 4)} @ {formatCurrency(transaction.price || 0)}
                       </Text>
                       <Text style={styles.transactionAmount}>
-                        {formatCurrency(transaction.amount)}
+                        {formatCurrency(transaction.amount || 0)}
                       </Text>
                     </View>
                     
