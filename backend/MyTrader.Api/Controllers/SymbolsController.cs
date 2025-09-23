@@ -19,16 +19,13 @@ namespace MyTrader.Api.Controllers;
 public class SymbolsController : ControllerBase
 {
     private readonly ISymbolService _symbolService;
-    private readonly IEnhancedSymbolService _enhancedSymbolService;
     private readonly ILogger<SymbolsController> _logger;
 
     public SymbolsController(
         ISymbolService symbolService,
-        IEnhancedSymbolService enhancedSymbolService,
         ILogger<SymbolsController> logger)
     {
         _symbolService = symbolService;
-        _enhancedSymbolService = enhancedSymbolService;
         _logger = logger;
     }
 
@@ -137,122 +134,54 @@ public class SymbolsController : ControllerBase
 
     /// <summary>
     /// Get symbols with pagination and filtering
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("enhanced")]
     [AllowAnonymous] // Allow public access for symbol discovery
-    [ProducesResponseType(typeof(PaginatedResponse<SymbolSummaryDto>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<PaginatedResponse<SymbolSummaryDto>>> GetEnhancedSymbols(
-        [FromQuery] BaseListRequest request)
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetEnhancedSymbols([FromQuery] object request)
     {
-        try
-        {
-            _logger.LogInformation("Getting enhanced symbols with filters: {Search}", request.Search);
-
-            var symbols = await _enhancedSymbolService.GetSymbolsAsync(request);
-
-            return Ok(symbols);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting enhanced symbols");
-            return StatusCode(500, PaginatedResponse<SymbolSummaryDto>.ErrorResult(
-                "Failed to retrieve symbols"));
-        }
+        _logger.LogInformation("Enhanced symbols endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbols service implementation pending" });
     }
 
     /// <summary>
     /// Get symbol by ID with full enhanced details
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("enhanced/{id:guid}")]
-    [AllowAnonymous] // Allow public access for symbol details
-    [ProducesResponseType(typeof(ApiResponse<EnhancedSymbolDto>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 404)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<EnhancedSymbolDto>>> GetEnhancedSymbolById(Guid id)
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetEnhancedSymbolById(Guid id)
     {
-        try
-        {
-            _logger.LogInformation("Getting enhanced symbol by ID: {SymbolId}", id);
-
-            var symbol = await _enhancedSymbolService.GetByIdAsync(id);
-
-            if (symbol == null)
-            {
-                return NotFound(ApiResponse<object>.ErrorResult(
-                    $"Symbol with ID {id} not found", 404));
-            }
-
-            return Ok(ApiResponse<EnhancedSymbolDto>.SuccessResult(
-                symbol,
-                "Symbol retrieved successfully"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting enhanced symbol by ID: {SymbolId}", id);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to retrieve symbol", 500));
-        }
+        _logger.LogInformation("Enhanced symbol by ID endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Search symbols across all asset classes
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("search")]
-    [AllowAnonymous] // Allow public access for symbol search
-    [ProducesResponseType(typeof(ApiResponse<List<SymbolSearchResultDto>>), 200)]
-    [ProducesResponseType(typeof(ValidationErrorResponse), 400)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<List<SymbolSearchResultDto>>>> SearchSymbols(
-        [FromQuery] SymbolSearchRequest request)
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult SearchSymbols([FromQuery] object request)
     {
-        try
-        {
-            _logger.LogInformation("Searching symbols: {Query}, AssetClass: {AssetClass}",
-                request.Query, request.AssetClass);
-
-            var searchResults = await _enhancedSymbolService.SearchAsync(request);
-
-            return Ok(ApiResponse<List<SymbolSearchResultDto>>.SuccessResult(
-                searchResults,
-                $"Found {searchResults.Count} symbols matching '{request.Query}'"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error searching symbols: {Query}", request.Query);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to search symbols", 500));
-        }
+        _logger.LogInformation("Symbol search endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Get symbols by asset class (by GUID)
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("by-asset-class/{assetClassId:guid}")]
-    [AllowAnonymous] // Allow public access for asset class symbols
-    [ProducesResponseType(typeof(ApiResponse<List<SymbolSummaryDto>>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<List<SymbolSummaryDto>>>> GetSymbolsByAssetClass(
-        Guid assetClassId,
-        [FromQuery] int? limit = null)
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetSymbolsByAssetClass(Guid assetClassId, [FromQuery] int? limit = null)
     {
-        try
-        {
-            _logger.LogInformation("Getting symbols by asset class: {AssetClassId}, limit: {Limit}",
-                assetClassId, limit);
-
-            var symbols = await _enhancedSymbolService.GetByAssetClassAsync(assetClassId, limit);
-
-            return Ok(ApiResponse<List<SymbolSummaryDto>>.SuccessResult(
-                symbols,
-                $"Retrieved {symbols.Count} symbols for asset class"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting symbols by asset class: {AssetClassId}", assetClassId);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to retrieve symbols by asset class", 500));
-        }
+        _logger.LogInformation("Symbols by asset class GUID endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
@@ -264,7 +193,7 @@ public class SymbolsController : ControllerBase
     [ProducesResponseType(typeof(object[]), 200)]
     [ProducesResponseType(typeof(object), 404)]
     [ProducesResponseType(typeof(object), 500)]
-    public ActionResult GetSymbolsByAssetClassName(
+    public async Task<ActionResult> GetSymbolsByAssetClassName(
         string assetClassName,
         [FromQuery] int? limit = null)
     {
@@ -273,7 +202,46 @@ public class SymbolsController : ControllerBase
             _logger.LogInformation("Getting symbols by asset class name: {AssetClassName}, limit: {Limit}",
                 assetClassName, limit);
 
-            // Return mock data for each asset class matching frontend expectations
+            // Try to get real symbols from database first
+            try
+            {
+                var dbSymbols = await _symbolService.GetSymbolsByAssetClassAsync(assetClassName.ToUpper());
+                if (dbSymbols != null && dbSymbols.Count > 0)
+                {
+                    var limitedSymbols = dbSymbols.Take(limit ?? 50);
+                    var result = limitedSymbols.Select(s => new
+                    {
+                        id = s.Id.ToString(),
+                        symbol = s.Ticker,
+                        displayName = s.Display ?? s.Ticker,
+                        assetClassId = Guid.NewGuid().ToString(),
+                        assetClassName = assetClassName.ToUpper(),
+                        marketId = Guid.NewGuid().ToString(),
+                        marketName = $"{assetClassName} Market",
+                        baseCurrency = s.BaseCurrency ?? "",
+                        quoteCurrency = s.QuoteCurrency ?? "",
+                        minTradeAmount = 0.001,
+                        maxTradeAmount = 1000000,
+                        priceDecimalPlaces = 2,
+                        quantityDecimalPlaces = 8,
+                        isActive = s.IsActive,
+                        isTracked = s.IsTracked,
+                        tickSize = 0.01,
+                        lotSize = 0.001,
+                        description = $"{s.Display ?? s.Ticker} {assetClassName.ToLower()}",
+                        sector = "Financial",
+                        industry = assetClassName
+                    }).ToArray();
+
+                    return Ok(result);
+                }
+            }
+            catch (Exception dbEx)
+            {
+                _logger.LogWarning(dbEx, "Failed to get symbols from database, falling back to mock data");
+            }
+
+            // Fall back to mock data if database lookup fails
             object[] symbols = Array.Empty<object>();
 
             switch (assetClassName.ToUpper())
@@ -299,200 +267,80 @@ public class SymbolsController : ControllerBase
 
     /// <summary>
     /// Get symbols by market
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("by-market/{marketId:guid}")]
-    [AllowAnonymous] // Allow public access for market symbols
-    [ProducesResponseType(typeof(ApiResponse<List<SymbolSummaryDto>>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<List<SymbolSummaryDto>>>> GetSymbolsByMarket(
-        Guid marketId,
-        [FromQuery] int? limit = null)
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetSymbolsByMarket(Guid marketId, [FromQuery] int? limit = null)
     {
-        try
-        {
-            _logger.LogInformation("Getting symbols by market: {MarketId}, limit: {Limit}",
-                marketId, limit);
-
-            var symbols = await _enhancedSymbolService.GetByMarketAsync(marketId, limit);
-
-            return Ok(ApiResponse<List<SymbolSummaryDto>>.SuccessResult(
-                symbols,
-                $"Retrieved {symbols.Count} symbols for market"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting symbols by market: {MarketId}", marketId);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to retrieve symbols by market", 500));
-        }
+        _logger.LogInformation("Symbols by market endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Get enhanced tracked symbols
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("enhanced/tracked")]
     [Authorize]
-    [ProducesResponseType(typeof(ApiResponse<List<SymbolSummaryDto>>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<List<SymbolSummaryDto>>>> GetEnhancedTrackedSymbols()
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetEnhancedTrackedSymbols()
     {
-        try
-        {
-            _logger.LogInformation("Getting enhanced tracked symbols");
-
-            var symbols = await _enhancedSymbolService.GetTrackedAsync();
-
-            return Ok(ApiResponse<List<SymbolSummaryDto>>.SuccessResult(
-                symbols,
-                $"Retrieved {symbols.Count} tracked symbols"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting enhanced tracked symbols");
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to retrieve tracked symbols", 500));
-        }
+        _logger.LogInformation("Enhanced tracked symbols endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Get popular symbols
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpGet("popular")]
-    [AllowAnonymous] // Allow public access for popular symbols
-    [ProducesResponseType(typeof(ApiResponse<List<SymbolSummaryDto>>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<List<SymbolSummaryDto>>>> GetPopularSymbols(
-        [FromQuery] int limit = 50)
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult GetPopularSymbols([FromQuery] int limit = 50)
     {
-        try
-        {
-            _logger.LogInformation("Getting popular symbols, limit: {Limit}", limit);
-
-            var symbols = await _enhancedSymbolService.GetPopularAsync(limit);
-
-            return Ok(ApiResponse<List<SymbolSummaryDto>>.SuccessResult(
-                symbols,
-                $"Retrieved {symbols.Count} popular symbols"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting popular symbols");
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to retrieve popular symbols", 500));
-        }
+        _logger.LogInformation("Popular symbols endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Create a new symbol
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpPost("enhanced")]
     [Authorize]
-    [ProducesResponseType(typeof(ApiResponse<EnhancedSymbolDto>), 201)]
-    [ProducesResponseType(typeof(ValidationErrorResponse), 400)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 409)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<EnhancedSymbolDto>>> CreateEnhancedSymbol(
-        [FromBody, Required] Core.DTOs.CreateSymbolRequest request)
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult CreateEnhancedSymbol([FromBody] object request)
     {
-        try
-        {
-            _logger.LogInformation("Creating new symbol: {Ticker}", request.Ticker);
-
-            // Check if ticker is unique
-            var isUnique = await _enhancedSymbolService.IsTickerUniqueAsync(
-                request.Ticker, request.MarketId);
-            if (!isUnique)
-            {
-                return Conflict(ApiResponse<object>.ErrorResult(
-                    $"Symbol with ticker '{request.Ticker}' already exists in this market", 409));
-            }
-
-            var symbol = await _enhancedSymbolService.CreateAsync(request);
-
-            return CreatedAtAction(
-                nameof(GetEnhancedSymbolById),
-                new { id = symbol.Id },
-                ApiResponse<EnhancedSymbolDto>.SuccessResult(
-                    symbol,
-                    "Symbol created successfully"));
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning("Invalid operation creating symbol: {Message}", ex.Message);
-            return Conflict(ApiResponse<object>.ErrorResult(ex.Message, 409));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating symbol: {Ticker}", request.Ticker);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to create symbol", 500));
-        }
+        _logger.LogInformation("Create enhanced symbol endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Update symbol tracking status
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpPatch("enhanced/{id:guid}/tracking")]
     [Authorize]
-    [ProducesResponseType(typeof(ApiResponse<object>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 404)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<object>>> UpdateSymbolTracking(
-        Guid id,
-        [FromQuery, Required] bool isTracked)
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult UpdateSymbolTracking(Guid id, [FromQuery] bool isTracked)
     {
-        try
-        {
-            _logger.LogInformation("Updating symbol tracking: {SymbolId} -> {IsTracked}", id, isTracked);
-
-            var updated = await _enhancedSymbolService.UpdateTrackingStatusAsync(id, isTracked);
-
-            if (!updated)
-            {
-                return NotFound(ApiResponse<object>.ErrorResult(
-                    $"Symbol with ID {id} not found", 404));
-            }
-
-            return Ok(ApiResponse<object>.SuccessResult(
-                null,
-                $"Symbol tracking {(isTracked ? "enabled" : "disabled")} successfully"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating symbol tracking: {SymbolId}", id);
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to update symbol tracking", 500));
-        }
+        _logger.LogInformation("Update symbol tracking endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     /// <summary>
     /// Bulk update symbol tracking status
+    /// TEMPORARILY DISABLED - Enhanced symbol service implementation pending
     /// </summary>
     [HttpPatch("enhanced/bulk-tracking")]
     [Authorize]
-    [ProducesResponseType(typeof(ApiResponse<object>), 200)]
-    [ProducesResponseType(typeof(ValidationErrorResponse), 400)]
-    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
-    public async Task<ActionResult<ApiResponse<object>>> BulkUpdateSymbolTracking(
-        [FromBody, Required] BulkUpdateSymbolTrackingRequest request)
+    [ProducesResponseType(typeof(object), 501)]
+    public ActionResult BulkUpdateSymbolTracking([FromBody] object request)
     {
-        try
-        {
-            _logger.LogInformation("Bulk updating symbol tracking for {Count} symbols -> {IsTracked}",
-                request.SymbolIds.Count, request.IsTracked);
-
-            var updatedCount = await _enhancedSymbolService.BulkUpdateTrackingStatusAsync(request);
-
-            return Ok(ApiResponse<object>.SuccessResult(
-                new { UpdatedCount = updatedCount },
-                $"Updated tracking status for {updatedCount}/{request.SymbolIds.Count} symbols"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error bulk updating symbol tracking");
-            return StatusCode(500, ApiResponse<object>.ErrorResult(
-                "Failed to bulk update symbol tracking", 500));
-        }
+        _logger.LogInformation("Bulk update symbol tracking endpoint called - returning not implemented");
+        return StatusCode(501, new { message = "Enhanced symbol service implementation pending" });
     }
 
     // ============================================
