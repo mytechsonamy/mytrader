@@ -754,12 +754,13 @@ class ApiService {
       const result = await this.handleResponse(response);
 
       // If the API returns an empty array or wrapped response, return fallback data
-      if (!result || (Array.isArray(result) && result.length === 0) || (result.data && Array.isArray(result.data) && result.data.length === 0)) {
+      if (!result || (Array.isArray(result) && result.length === 0) || (result && typeof result === 'object' && 'data' in result && Array.isArray(result.data) && result.data.length === 0)) {
         return this.getFallbackMarketStatuses();
       }
 
       // Handle both direct array and wrapped response
-      return Array.isArray(result) ? result : (result.data || []);
+      const data = Array.isArray(result) ? result : (result && typeof result === 'object' && 'data' in result ? result.data : []);
+      return Array.isArray(data) ? data : [];
     } catch (error: any) {
       console.warn('Failed to fetch market statuses:', error);
 
@@ -774,48 +775,48 @@ class ApiService {
 
     return [
       {
-        id: 'crypto-market',
+        marketId: 'crypto-market',
         marketName: 'Crypto Market',
         status: 'OPEN', // Crypto markets are always open
-        nextOpen: null,
-        nextClose: null,
-        timezone: 'UTC',
-        tradingHours: '24/7',
-        isActive: true,
-        lastUpdated: now
+        nextOpen: undefined,
+        nextClose: undefined,
+        timeZone: 'UTC',
+        currentTime: now.toISOString(),
+        tradingDay: now.toISOString().split('T')[0],
+        isHoliday: false
       },
       {
-        id: 'bist-market',
+        marketId: 'bist-market',
         marketName: 'BIST',
         status: (currentHour >= 9 && currentHour < 18) ? 'OPEN' : 'CLOSED', // BIST trading hours approx
-        nextOpen: (currentHour >= 9 && currentHour < 18) ? null : new Date(now.getFullYear(), now.getMonth(), now.getDate() + (currentHour >= 18 ? 1 : 0), 9, 0),
-        nextClose: (currentHour >= 9 && currentHour < 18) ? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0) : null,
-        timezone: 'Europe/Istanbul',
-        tradingHours: '09:00-18:00',
-        isActive: true,
-        lastUpdated: now
+        nextOpen: (currentHour >= 9 && currentHour < 18) ? undefined : new Date(now.getFullYear(), now.getMonth(), now.getDate() + (currentHour >= 18 ? 1 : 0), 9, 0).toISOString(),
+        nextClose: (currentHour >= 9 && currentHour < 18) ? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0).toISOString() : undefined,
+        timeZone: 'Europe/Istanbul',
+        currentTime: now.toISOString(),
+        tradingDay: now.toISOString().split('T')[0],
+        isHoliday: false
       },
       {
-        id: 'nasdaq-market',
+        marketId: 'nasdaq-market',
         marketName: 'NASDAQ',
         status: 'CLOSED', // US markets are typically closed for Turkey time
-        nextOpen: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 16, 30), // Approx next open in Turkey time
-        nextClose: null,
-        timezone: 'America/New_York',
-        tradingHours: '09:30-16:00 EST',
-        isActive: true,
-        lastUpdated: now
+        nextOpen: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 16, 30).toISOString(), // Approx next open in Turkey time
+        nextClose: undefined,
+        timeZone: 'America/New_York',
+        currentTime: now.toISOString(),
+        tradingDay: now.toISOString().split('T')[0],
+        isHoliday: false
       },
       {
-        id: 'nyse-market',
+        marketId: 'nyse-market',
         marketName: 'NYSE',
         status: 'CLOSED',
-        nextOpen: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 16, 30),
-        nextClose: null,
-        timezone: 'America/New_York',
-        tradingHours: '09:30-16:00 EST',
-        isActive: true,
-        lastUpdated: now
+        nextOpen: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 16, 30).toISOString(),
+        nextClose: undefined,
+        timeZone: 'America/New_York',
+        currentTime: now.toISOString(),
+        tradingDay: now.toISOString().split('T')[0],
+        isHoliday: false
       }
     ];
   }
@@ -843,18 +844,95 @@ class ApiService {
   }
 
   async getSymbolsByAssetClass(assetClassId: string, config?: RequestConfig): Promise<EnhancedSymbolDto[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/v1/symbols/by-asset-class/${assetClassId}`, {
-        headers: await this.getHeaders(),
-        signal: config?.abortSignal,
-      });
-      return await this.handleResponse(response);
-    } catch (error: any) {
-      console.warn(`Failed to fetch ${assetClassId} symbols:`, error);
+    const maxRetries = 3;
+    const retryDelays = [1000, 2000, 4000]; // Exponential backoff
 
-      // Return fallback mock data for the specific asset class
-      return this.getFallbackSymbolsData(assetClassId);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/symbols/by-asset-class/${assetClassId}`, {
+          headers: await this.getHeaders(),
+          signal: config?.abortSignal,
+        });
+
+        // Handle specific HTTP error codes
+        if (response.status === 409) {
+          console.warn(`HTTP 409 conflict for ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries})`);
+          if (attempt < maxRetries - 1) {
+            await this.delay(retryDelays[attempt]);
+            continue;
+          }
+          // On final attempt, return fallback data for 409 errors
+          console.warn(`Returning fallback data for ${assetClassId} after ${maxRetries} attempts`);
+          return this.getFallbackSymbolsData(assetClassId);
+        }
+
+        if (response.status === 429) {
+          // Rate limited - wait longer
+          console.warn(`Rate limited for ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries})`);
+          if (attempt < maxRetries - 1) {
+            await this.delay(retryDelays[attempt] * 2); // Double delay for rate limiting
+            continue;
+          }
+        }
+
+        return await this.handleResponse(response);
+      } catch (error: any) {
+        console.warn(`Failed to fetch ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries}):`, error);
+
+        // On network errors, retry with exponential backoff
+        if (attempt < maxRetries - 1 && this.isRetryableError(error)) {
+          await this.delay(retryDelays[attempt]);
+          continue;
+        }
+
+        // On final attempt or non-retryable error, return fallback data
+        console.warn(`Returning fallback data for ${assetClassId} due to error:`, error.message);
+        return this.getFallbackSymbolsData(assetClassId);
+      }
     }
+
+    // Fallback if somehow we get here
+    return this.getFallbackSymbolsData(assetClassId);
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private isRetryableError(error: any): boolean {
+    // Retry on network errors, timeouts, and server errors (5xx)
+    return (
+      error.name === 'TypeError' || // Network error
+      error.name === 'AbortError' || // Timeout
+      (error.status && error.status >= 500) // Server error
+    );
+  }
+
+  private getFilteredFallbackData(query: string, assetClass?: string): EnhancedSymbolDto[] {
+    const allFallbackData = [
+      ...this.getFallbackSymbolsData('CRYPTO'),
+      ...this.getFallbackSymbolsData('STOCK')
+    ];
+
+    let filteredData = allFallbackData;
+
+    // Filter by asset class if specified
+    if (assetClass) {
+      filteredData = allFallbackData.filter(symbol =>
+        symbol.assetClassName.toUpperCase() === assetClass.toUpperCase()
+      );
+    }
+
+    // Filter by search query
+    if (query && query.length > 0) {
+      const lowerQuery = query.toLowerCase();
+      filteredData = filteredData.filter(symbol =>
+        symbol.symbol.toLowerCase().includes(lowerQuery) ||
+        symbol.displayName.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    return filteredData.slice(0, 20); // Limit results
   }
 
   private getFallbackSymbolsData(assetClassId: string): EnhancedSymbolDto[] {
@@ -880,7 +958,8 @@ class ApiService {
           lotSize: 0.001,
           description: 'Bitcoin cryptocurrency',
           sector: 'Digital Assets',
-          industry: 'Cryptocurrency'
+          industry: 'Cryptocurrency',
+          createdAt: new Date().toISOString()
         },
         {
           id: '2',
@@ -902,7 +981,8 @@ class ApiService {
           lotSize: 0.01,
           description: 'Ethereum cryptocurrency',
           sector: 'Digital Assets',
-          industry: 'Cryptocurrency'
+          industry: 'Cryptocurrency',
+          createdAt: new Date().toISOString()
         },
         {
           id: '3',
@@ -924,7 +1004,8 @@ class ApiService {
           lotSize: 1,
           description: 'Cardano cryptocurrency',
           sector: 'Digital Assets',
-          industry: 'Cryptocurrency'
+          industry: 'Cryptocurrency',
+          createdAt: new Date().toISOString()
         }
       ];
     } else if (assetClassId.toUpperCase() === 'STOCK') {
@@ -949,7 +1030,8 @@ class ApiService {
           lotSize: 1,
           description: 'Tüpraş stock traded on BIST',
           sector: 'Energy',
-          industry: 'Oil & Gas'
+          industry: 'Oil & Gas',
+          createdAt: new Date().toISOString()
         },
         {
           id: '5',
@@ -971,7 +1053,8 @@ class ApiService {
           lotSize: 1,
           description: 'Apple Inc. stock traded on NASDAQ',
           sector: 'Technology',
-          industry: 'Consumer Electronics'
+          industry: 'Consumer Electronics',
+          createdAt: new Date().toISOString()
         },
         {
           id: '6',
@@ -993,7 +1076,8 @@ class ApiService {
           lotSize: 1,
           description: 'Microsoft Corporation stock traded on NASDAQ',
           sector: 'Technology',
-          industry: 'Software'
+          industry: 'Software',
+          createdAt: new Date().toISOString()
         }
       ];
     }
@@ -1007,17 +1091,29 @@ class ApiService {
     limit: number = 20,
     config?: RequestConfig
   ): Promise<EnhancedSymbolDto[]> {
-    const params = new URLSearchParams({
-      q: query,
-      limit: limit.toString(),
-    });
-    if (assetClass) params.append('assetClass', assetClass);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        limit: limit.toString(),
+      });
+      if (assetClass) params.append('assetClass', assetClass);
 
-    const response = await fetch(`${API_BASE_URL}/v1/symbols/search?${params}`, {
-      headers: await this.getHeaders(),
-      signal: config?.abortSignal,
-    });
-    return await this.handleResponse(response);
+      const response = await fetch(`${API_BASE_URL}/v1/symbols/search?${params}`, {
+        headers: await this.getHeaders(),
+        signal: config?.abortSignal,
+      });
+
+      if (response.status === 409) {
+        console.warn(`HTTP 409 conflict during symbol search for query: ${query}`);
+        // Return filtered fallback data based on query
+        return this.getFilteredFallbackData(query, assetClass);
+      }
+
+      return await this.handleResponse(response);
+    } catch (error: any) {
+      console.warn(`Symbol search failed for query '${query}':`, error);
+      return this.getFilteredFallbackData(query, assetClass);
+    }
   }
 
   async getSymbolDetails(symbolId: string, config?: RequestConfig): Promise<EnhancedSymbolDto> {
@@ -1172,11 +1268,13 @@ class ApiService {
         author: 'Piyasa Analisti',
         source: 'myTrader Haber',
         category: 'Market',
-        assetClass: assetClass || 'GENERAL',
-        publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+        publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
         imageUrl: 'https://via.placeholder.com/300x200/667eea/ffffff?text=Market+News',
         url: 'https://example.com/news/1',
-        tags: ['piyasa', 'analiz', 'günlük']
+        tags: ['piyasa', 'analiz', 'günlük'],
+        relatedSymbols: [],
+        importance: 'MEDIUM',
+        language: 'tr'
       },
       {
         id: '2',
@@ -1186,11 +1284,13 @@ class ApiService {
         author: 'Kripto Analisti',
         source: 'CryptoNews',
         category: 'Cryptocurrency',
-        assetClass: assetClass || 'CRYPTO',
-        publishedAt: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+        publishedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1 hour ago
         imageUrl: 'https://via.placeholder.com/300x200/f59e0b/ffffff?text=Bitcoin',
         url: 'https://example.com/crypto-news/1',
-        tags: ['bitcoin', 'btc', 'fiyat']
+        tags: ['bitcoin', 'btc', 'fiyat'],
+        relatedSymbols: ['BTC'],
+        importance: 'HIGH',
+        language: 'tr'
       },
       {
         id: '3',
@@ -1200,11 +1300,13 @@ class ApiService {
         author: 'Sektör Analisti',
         source: 'myTrader Haber',
         category: 'Technology',
-        assetClass: assetClass || 'STOCK',
-        publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 hours ago
+        publishedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), // 6 hours ago
         imageUrl: 'https://via.placeholder.com/300x200/8b5cf6/ffffff?text=Tech+Stocks',
         url: 'https://example.com/news/3',
-        tags: ['teknoloji', 'hisse', 'yükseliş']
+        tags: ['teknoloji', 'hisse', 'yükseliş'],
+        relatedSymbols: ['AAPL', 'MSFT'],
+        importance: 'MEDIUM',
+        language: 'tr'
       },
       {
         id: '4',
@@ -1214,11 +1316,13 @@ class ApiService {
         author: 'BIST Analisti',
         source: 'Borsa Haber',
         category: 'Stock Market',
-        assetClass: assetClass || 'STOCK',
-        publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
+        publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago
         imageUrl: 'https://via.placeholder.com/300x200/ef4444/ffffff?text=BIST',
         url: 'https://example.com/bist-news/1',
-        tags: ['bist', 'borsa', 'endeks']
+        tags: ['bist', 'borsa', 'endeks'],
+        relatedSymbols: ['XU100'],
+        importance: 'HIGH',
+        language: 'tr'
       },
       {
         id: '5',
@@ -1228,19 +1332,27 @@ class ApiService {
         author: 'Ekonomi Editörü',
         source: 'myTrader Haber',
         category: 'Economics',
-        assetClass: assetClass || 'GENERAL',
-        publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
+        publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), // 8 hours ago
         imageUrl: 'https://via.placeholder.com/300x200/10b981/ffffff?text=Central+Bank',
         url: 'https://example.com/news/2',
-        tags: ['merkez-bankası', 'faiz', 'ekonomi']
+        tags: ['merkez-bankası', 'faiz', 'ekonomi'],
+        relatedSymbols: [],
+        importance: 'HIGH',
+        language: 'tr'
       }
     ];
 
-    // Filter by asset class if specified
+    // Filter by asset class if specified (using category as proxy)
     let filteredNews = mockNews;
     if (assetClass) {
+      const categoryMap: Record<string, string[]> = {
+        'CRYPTO': ['Cryptocurrency'],
+        'STOCK': ['Technology', 'Stock Market'],
+        'GENERAL': ['Market', 'Economics']
+      };
+      const categories = categoryMap[assetClass.toUpperCase()] || [];
       filteredNews = mockNews.filter(news =>
-        news.assetClass.toLowerCase() === assetClass.toLowerCase()
+        categories.includes(news.category)
       );
     }
 

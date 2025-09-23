@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -28,9 +28,9 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "API_BASE_URL": "http://localhost:8080/api",
-      "AUTH_BASE_URL": "http://localhost:8080/api",
-      "WS_BASE_URL": "http://localhost:8080/hubs/trading"
+      "API_BASE_URL": "http://localhost:5002/api",
+      "AUTH_BASE_URL": "http://localhost:5002/api",
+      "WS_BASE_URL": "http://localhost:5002/hubs/market-data"
     }
   }
 }

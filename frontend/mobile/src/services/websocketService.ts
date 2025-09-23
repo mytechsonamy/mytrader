@@ -111,7 +111,7 @@ class EnhancedWebSocketService {
 
     this.connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, connectionOptions)
-      .withAutomaticReconnect(this.options.autoReconnect ? (this.options.reconnectIntervals || [0, 2000, 5000, 10000, 30000]) : undefined)
+      .withAutomaticReconnect(this.options.autoReconnect ? (this.options.reconnectIntervals || [0, 2000, 5000, 10000, 30000]) : [])
       .configureLogging(this.options.enableLogging ? this.options.logLevel! : signalR.LogLevel.None)
       .build();
 
@@ -156,25 +156,55 @@ class EnhancedWebSocketService {
   private setupMessageHandlers(): void {
     if (!this.connection) return;
 
-    // Price updates
-    this.connection.on('ReceivePriceUpdate', (data: UnifiedMarketDataDto) => {
-      this.emitEvent('price_update', data);
-      this.emitEvent('market_data', data); // Legacy compatibility
+    // Price updates with error handling
+    this.connection.on('ReceivePriceUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'price_update');
+        if (parsedData) {
+          this.emitEvent('price_update', parsedData);
+          this.emitEvent('market_data', parsedData); // Legacy compatibility
+        }
+      } catch (error) {
+        console.warn('Failed to process price update:', error);
+      }
     });
 
-    this.connection.on('ReceiveBatchPriceUpdate', (data: UnifiedMarketDataDto[]) => {
-      this.emitEvent('batch_price_update', data);
-      data.forEach(item => this.emitEvent('price_update', item));
+    this.connection.on('ReceiveBatchPriceUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'batch_price_update');
+        if (parsedData && Array.isArray(parsedData)) {
+          this.emitEvent('batch_price_update', parsedData);
+          parsedData.forEach((item: any) => {
+            if (item) this.emitEvent('price_update', item);
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to process batch price update:', error);
+      }
     });
 
-    // Market status updates
-    this.connection.on('ReceiveMarketStatusUpdate', (data: MarketStatusDto) => {
-      this.emitEvent('market_status_update', data);
+    // Market status updates with error handling
+    this.connection.on('ReceiveMarketStatusUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'market_status_update');
+        if (parsedData) {
+          this.emitEvent('market_status_update', parsedData);
+        }
+      } catch (error) {
+        console.warn('Failed to process market status update:', error);
+      }
     });
 
-    // News updates
-    this.connection.on('ReceiveNewsUpdate', (data: NewsItem) => {
-      this.emitEvent('news_update', data);
+    // News updates with error handling
+    this.connection.on('ReceiveNewsUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'news_update');
+        if (parsedData) {
+          this.emitEvent('news_update', parsedData);
+        }
+      } catch (error) {
+        console.warn('Failed to process news update:', error);
+      }
     });
 
     // Subscription confirmations
@@ -194,13 +224,27 @@ class EnhancedWebSocketService {
       this.emitEvent('heartbeat', data);
     });
 
-    // Legacy compatibility handlers
+    // Legacy compatibility handlers with error handling
     this.connection.on('ReceiveSignalUpdate', (data: any) => {
-      this.emitEvent('signal', data);
+      try {
+        const parsedData = this.safeParseMessageData(data, 'signal');
+        if (parsedData) {
+          this.emitEvent('signal', parsedData);
+        }
+      } catch (error) {
+        console.warn('Failed to process signal update:', error);
+      }
     });
 
     this.connection.on('ReceiveMarketData', (data: any) => {
-      this.emitEvent('market', data);
+      try {
+        const parsedData = this.safeParseMessageData(data, 'market');
+        if (parsedData) {
+          this.emitEvent('market', parsedData);
+        }
+      } catch (error) {
+        console.warn('Failed to process market data:', error);
+      }
     });
   }
 
@@ -397,6 +441,42 @@ class EnhancedWebSocketService {
     const index = this.connectionCallbacks.indexOf(callback);
     if (index > -1) {
       this.connectionCallbacks.splice(index, 1);
+    }
+  }
+
+  private safeParseMessageData(data: any, messageType: string): any {
+    try {
+      // If data is already an object, return it
+      if (typeof data === 'object' && data !== null) {
+        return data;
+      }
+
+      // If data is a string, try to parse it as JSON
+      if (typeof data === 'string') {
+        // Handle empty or malformed strings
+        if (!data.trim()) {
+          console.warn(`Empty message received for ${messageType}`);
+          return null;
+        }
+
+        // Check for common malformed JSON patterns
+        if (data.includes('\"') || data.includes('\\'))) {
+          // Try to fix escaped quotes
+          const cleanedData = data.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+          return JSON.parse(cleanedData);
+        }
+
+        return JSON.parse(data);
+      }
+
+      // For other types, return as-is
+      return data;
+    } catch (error) {
+      console.error(`Failed to parse WebSocket message for ${messageType}:`, {
+        error: error.message,
+        rawData: typeof data === 'string' ? data.substring(0, 200) : data
+      });
+      return null;
     }
   }
 

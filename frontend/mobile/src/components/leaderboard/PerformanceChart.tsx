@@ -6,6 +6,7 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
+import Svg, { Path, Circle, Defs, Pattern, Rect, Line } from 'react-native-svg';
 import { UserRanking, LeaderboardEntry } from '../../types';
 
 interface PerformanceDataPoint {
@@ -162,17 +163,18 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
         </View>
 
         <View style={styles.chartArea}>
-          <svg width={CHART_WIDTH} height={CHART_HEIGHT} style={styles.svgChart}>
+          <Svg width={CHART_WIDTH} height={CHART_HEIGHT} style={styles.svgChart}>
             {/* Grid lines */}
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
+            <Defs>
+              <Pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <Line x1="0" y1="0" x2="0" y2="40" stroke="#f3f4f6" strokeWidth="1"/>
+                <Line x1="0" y1="0" x2="40" y2="0" stroke="#f3f4f6" strokeWidth="1"/>
+              </Pattern>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#grid)" />
 
             {/* Performance line */}
-            <path
+            <Path
               d={performancePath}
               fill="none"
               stroke="#667eea"
@@ -183,7 +185,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
 
             {/* Rank line (if showing comparison) */}
             {showComparison && (
-              <path
+              <Path
                 d={rankPath}
                 fill="none"
                 stroke="#f59e0b"
@@ -200,7 +202,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
               const y = CHART_HEIGHT - ((point.value - chartStats.minValue) / chartStats.valueRange) * CHART_HEIGHT;
 
               return (
-                <circle
+                <Circle
                   key={index}
                   cx={x}
                   cy={y}
@@ -211,7 +213,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
                 />
               );
             })}
-          </svg>
+          </Svg>
 
           {/* Chart labels */}
           <View style={styles.chartLabels}>
@@ -330,12 +332,14 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
             <View style={styles.analyticRow}>
               <Text style={styles.analyticLabel}>Sıra Değişimi:</Text>
               <Text style={styles.analyticValue}>
-                {historyData.length > 1
-                  ? (historyData[0].rank && historyData[historyData.length - 1].rank)
-                    ? `${historyData[0].rank - historyData[historyData.length - 1].rank > 0 ? '+' : ''}${historyData[0].rank - historyData[historyData.length - 1].rank}`
-                    : '-'
-                  : '-'
-                }
+                {(() => {
+                  if (historyData.length <= 1) return '-';
+                  const first = historyData[0];
+                  const last = historyData[historyData.length - 1];
+                  if (!first || !last || first.rank === undefined || last.rank === undefined) return '-';
+                  const diff = first.rank - last.rank;
+                  return `${diff > 0 ? '+' : ''}${diff}`;
+                })()}
               </Text>
             </View>
           </View>

@@ -272,39 +272,61 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
         // Set up SignalR event handlers for receiving messages from backend
         hubConnection.on('ReceivePriceUpdate', (data: any) => {
           try {
-            console.log('Received SignalR price update:', data);
-            
+            // Only log in development and throttle the logging
+            if (__DEV__ && Math.random() < 0.1) { // Log only 10% of updates in dev
+              console.log('Received SignalR price update:', data);
+            }
+
             // Handle the actual message format from .NET backend
             if (data.symbol && data.price) {
               const symbol = data.symbol.replace('USDT', ''); // Clean symbol (BTC, ETH, etc.)
-              console.log(`Updating price for ${symbol}: $${data.price}`);
 
-              // Update legacy prices
-              setPrices(prev => ({
-                ...prev,
-                [symbol]: {
-                  price: data.price,
-                  change: data.change || 0,
-                  timestamp: data.timestamp || new Date().toISOString(),
+              // Only log significant price changes (>1%) to reduce noise
+              const previousPrice = prices[symbol]?.price;
+              const priceChangePercent = previousPrice ? Math.abs((data.price - previousPrice) / previousPrice * 100) : 0;
+
+              if (__DEV__ && priceChangePercent > 1) {
+                console.log(`Significant price change for ${symbol}: $${data.price} (${priceChangePercent.toFixed(2)}%)`);
+              }
+
+              // Update legacy prices with memoized state update
+              setPrices(prev => {
+                const currentPrice = prev[symbol];
+                if (currentPrice && Math.abs(currentPrice.price - data.price) < 0.01) {
+                  return prev; // Skip update if price difference is negligible
                 }
-              }));
+                return {
+                  ...prev,
+                  [symbol]: {
+                    price: data.price,
+                    change: data.change || 0,
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  }
+                };
+              });
 
-              // Update enhanced prices
+              // Update enhanced prices with memoized state update
               const symbolId = data.symbol.toLowerCase();
-              setEnhancedPrices(prev => ({
-                ...prev,
-                [symbolId]: {
-                  symbolId,
-                  symbol: data.symbol,
-                  price: data.price,
-                  change: data.change || 0,
-                  changePercent: data.changePercent || 0,
-                  timestamp: data.timestamp || new Date().toISOString(),
-                  marketStatus: 'OPEN',
-                  dataSource: 'REAL_TIME',
-                  lastUpdated: new Date().toISOString(),
+              setEnhancedPrices(prev => {
+                const currentPrice = prev[symbolId];
+                if (currentPrice && Math.abs(currentPrice.price - data.price) < 0.01) {
+                  return prev; // Skip update if price difference is negligible
                 }
-              }));
+                return {
+                  ...prev,
+                  [symbolId]: {
+                    symbolId,
+                    symbol: data.symbol,
+                    price: data.price,
+                    change: data.change || 0,
+                    changePercent: data.changePercent || 0,
+                    timestamp: data.timestamp || new Date().toISOString(),
+                    marketStatus: 'OPEN',
+                    dataSource: 'REAL_TIME',
+                    lastUpdated: new Date().toISOString(),
+                  }
+                };
+              });
             }
           } catch (error) {
             console.warn('Error processing SignalR price update:', error);
@@ -313,7 +335,10 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
 
         hubConnection.on('ReceiveSignalUpdate', (data: any) => {
           try {
-            console.log('Received SignalR signal update:', data);
+            // Only log in development and rarely to reduce noise
+            if (__DEV__ && Math.random() < 0.05) { // Log only 5% of signal updates
+              console.log('Received SignalR signal update:', data);
+            }
             // Handle signal updates here if needed
           } catch (error) {
             console.warn('Error processing SignalR signal update:', error);
@@ -322,42 +347,62 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
 
         hubConnection.on('ReceiveMarketData', (data: any) => {
           try {
-            console.log('Received SignalR market data:', data);
-            // Handle batch market data updates
+            // Only log batch updates occasionally to reduce noise
+            if (__DEV__ && Math.random() < 0.02) { // Log only 2% of batch updates
+              console.log('Received SignalR market data batch:', Object.keys(data.symbols || {}).length, 'symbols');
+            }
+
+            // Handle batch market data updates with optimization
             if (data.symbols) {
               const updates: LegacyPriceData = {};
               const enhancedUpdates: EnhancedPriceData = {};
+              let hasSignificantChanges = false;
 
               Object.keys(data.symbols).forEach(symbol => {
                 const symbolData = data.symbols[symbol];
                 if (symbolData.price) {
                   const cleanSymbol = symbol.replace('USDT', '');
 
-                  // Legacy format
-                  updates[cleanSymbol] = {
-                    price: symbolData.price,
-                    change: symbolData.change || 0,
-                    timestamp: symbolData.timestamp || new Date().toISOString(),
-                  };
+                  // Check if this is a significant price change
+                  const previousPrice = prices[cleanSymbol]?.price;
+                  const priceChange = previousPrice ? Math.abs((symbolData.price - previousPrice) / previousPrice * 100) : 0;
 
-                  // Enhanced format
-                  const symbolId = symbol.toLowerCase();
-                  enhancedUpdates[symbolId] = {
-                    symbolId,
-                    symbol,
-                    price: symbolData.price,
-                    change: symbolData.change || 0,
-                    changePercent: symbolData.changePercent || 0,
-                    timestamp: symbolData.timestamp || new Date().toISOString(),
-                    marketStatus: 'OPEN',
-                    dataSource: 'REAL_TIME',
-                    lastUpdated: new Date().toISOString(),
-                  };
+                  if (!previousPrice || priceChange > 0.01) { // Only update if price changed by more than 0.01%
+                    hasSignificantChanges = true;
+
+                    // Legacy format
+                    updates[cleanSymbol] = {
+                      price: symbolData.price,
+                      change: symbolData.change || 0,
+                      timestamp: symbolData.timestamp || new Date().toISOString(),
+                    };
+
+                    // Enhanced format
+                    const symbolId = symbol.toLowerCase();
+                    enhancedUpdates[symbolId] = {
+                      symbolId,
+                      symbol,
+                      price: symbolData.price,
+                      change: symbolData.change || 0,
+                      changePercent: symbolData.changePercent || 0,
+                      timestamp: symbolData.timestamp || new Date().toISOString(),
+                      marketStatus: 'OPEN',
+                      dataSource: 'REAL_TIME',
+                      lastUpdated: new Date().toISOString(),
+                    };
+                  }
                 }
               });
 
-              setPrices(prev => ({ ...prev, ...updates }));
-              setEnhancedPrices(prev => ({ ...prev, ...enhancedUpdates }));
+              // Only update state if there are significant changes
+              if (hasSignificantChanges) {
+                if (Object.keys(updates).length > 0) {
+                  setPrices(prev => ({ ...prev, ...updates }));
+                }
+                if (Object.keys(enhancedUpdates).length > 0) {
+                  setEnhancedPrices(prev => ({ ...prev, ...enhancedUpdates }));
+                }
+              }
             }
           } catch (error) {
             console.warn('Error processing SignalR market data:', error);
@@ -389,24 +434,26 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
     };
   }, [SIGNALR_HUB_URL]);
 
-  const getPrice = (symbol: string): { price: number; change: number } | null => {
+  const getPrice = useCallback((symbol: string): { price: number; change: number } | null => {
     // Remove USDT suffix if present to match our price data keys
     const cleanSymbol = symbol.replace('USDT', '');
     const priceData = prices[cleanSymbol];
-    
-    console.log(`Looking for price data for symbol: "${symbol}" -> cleaned: "${cleanSymbol}"`);
-    console.log('Available price data:', Object.keys(prices));
-    console.log(`Price data for ${cleanSymbol}:`, priceData);
-    
+
+    // Only log in development and occasionally to reduce noise
+    if (__DEV__ && !priceData && Math.random() < 0.1) {
+      console.log(`Price not found for symbol: "${symbol}" -> cleaned: "${cleanSymbol}"`);
+      console.log('Available symbols:', Object.keys(prices).slice(0, 5), '...');
+    }
+
     if (priceData) {
       return {
         price: priceData.price,
         change: priceData.change,
       };
     }
-    
+
     return null;
-  };
+  }, [prices]);
 
   // Enhanced methods implementation
   const getEnhancedPrice = useCallback((symbolId: string): UnifiedMarketDataDto | null => {
@@ -432,12 +479,16 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
 
   const subscribeToSymbols = useCallback(async (symbolIds: string[], assetClass?: AssetClassType): Promise<void> => {
     // Implementation for subscribing to symbols
-    console.log('Subscribing to symbols:', symbolIds, assetClass);
+    if (__DEV__) {
+      console.log('Subscribing to symbols:', symbolIds.length, 'symbols', assetClass ? `in ${assetClass}` : '');
+    }
     // This would connect to enhanced WebSocket service
   }, []);
 
   const unsubscribeFromSymbols = useCallback(async (symbolIds: string[]): Promise<void> => {
-    console.log('Unsubscribing from symbols:', symbolIds);
+    if (__DEV__) {
+      console.log('Unsubscribing from', symbolIds.length, 'symbols');
+    }
     // Implementation for unsubscribing
   }, []);
 
@@ -458,7 +509,9 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   }, [trackedSymbols]);
 
   const refreshPrices = useCallback(async (): Promise<void> => {
-    console.log('Refreshing prices...');
+    if (__DEV__) {
+      console.log('Refreshing prices...');
+    }
     // Implementation for refreshing prices
   }, []);
 
