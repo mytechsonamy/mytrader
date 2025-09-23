@@ -156,8 +156,8 @@ const LeaderboardScreen: React.FC = () => {
     }
 
     // Minimum trades filter
-    if (filters.minTrades) {
-      filtered = filtered.filter(entry => entry.totalTrades >= filters.minTrades);
+    if (filters.minTrades !== undefined) {
+      filtered = filtered.filter(entry => entry.totalTrades >= filters.minTrades!);
     }
 
     // Sort

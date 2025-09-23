@@ -37,7 +37,16 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
   const { getAssetClassSummary, connectionStatus, enhancedPrices } = usePrices();
 
   // Calculate portfolio metrics
-  const portfolioMetrics = useMemo(() => {
+  const portfolioMetrics = useMemo((): {
+    totalValue: number;
+    dailyPnL: number;
+    dailyPnLPercent: number;
+    topPerformer: {
+      symbol: string;
+      symbolName: string;
+      returnPercent: number;
+    } | null;
+  } => {
     if (!portfolio) {
       return {
         totalValue: 0,
@@ -48,7 +57,11 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
     }
 
     // Find top performing asset from positions
-    let topPerformer = null;
+    let topPerformer: {
+      symbol: string;
+      symbolName: string;
+      returnPercent: number;
+    } | null = null;
     let bestReturn = -Infinity;
 
     portfolio.positions?.forEach((position) => {

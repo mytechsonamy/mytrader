@@ -150,8 +150,8 @@ const EnhancedLeaderboardScreen: React.FC = () => {
     }
 
     // Minimum trades filter
-    if (filters.minTrades) {
-      filtered = filtered.filter(entry => entry.totalTrades >= filters.minTrades);
+    if (filters.minTrades !== undefined) {
+      filtered = filtered.filter(entry => entry.totalTrades >= filters.minTrades!);
     }
 
     // Sort
@@ -520,6 +520,40 @@ const EnhancedLeaderboardScreen: React.FC = () => {
         <View style={styles.achievementsContainer}>
           <PerformanceTiers
             currentScore={userRanking?.score || 0}
+            tiers={[
+              {
+                id: 'bronze',
+                name: 'Bronze',
+                color: '#CD7F32',
+                icon: '🥉',
+                minScore: 0,
+                maxScore: 100,
+                benefits: ['Basic analytics'],
+                requirements: ['Complete registration'],
+                description: 'Entry level trader'
+              },
+              {
+                id: 'silver',
+                name: 'Silver',
+                color: '#C0C0C0',
+                icon: '🥈',
+                minScore: 100,
+                maxScore: 500,
+                benefits: ['Advanced analytics', 'Custom alerts'],
+                requirements: ['Score 100+ points'],
+                description: 'Intermediate trader'
+              },
+              {
+                id: 'gold',
+                name: 'Gold',
+                color: '#FFD700',
+                icon: '🥇',
+                minScore: 500,
+                benefits: ['Premium features', 'Priority support'],
+                requirements: ['Score 500+ points'],
+                description: 'Expert trader'
+              }
+            ]}
             showProgress={true}
             compact={false}
           />

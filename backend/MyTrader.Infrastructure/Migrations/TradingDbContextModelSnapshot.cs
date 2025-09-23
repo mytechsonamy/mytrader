@@ -150,7 +150,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BacktestConfiguration");
+                    b.ToTable("BacktestConfiguration", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.BacktestQueue", b =>
@@ -1153,7 +1153,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("notification_history");
+                    b.ToTable("notification_history", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.PasswordReset", b =>
@@ -1351,7 +1351,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("price_alerts");
+                    b.ToTable("price_alerts", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.Signal", b =>
@@ -1577,7 +1577,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("strategy_performance");
+                    b.ToTable("strategy_performance", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.Symbol", b =>
@@ -1752,7 +1752,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("AssetClass", "IsActive", "IsPopular");
 
-                    b.ToTable("symbols");
+                    b.ToTable("symbols", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.TempRegistration", b =>
@@ -2272,7 +2272,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("user_achievements");
+                    b.ToTable("user_achievements", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.UserDevice", b =>
@@ -2326,7 +2326,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserDevice");
+                    b.ToTable("UserDevice", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.UserNotificationPreferences", b =>

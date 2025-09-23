@@ -11,7 +11,7 @@
 
     <script>
         const connection = new signalR.HubConnectionBuilder()
-            .withUrl("http://localhost:5245/hubs/trading")
+            .withUrl("http://localhost:5002/hubs/market-data")
             .withAutomaticReconnect()
             .build();
 

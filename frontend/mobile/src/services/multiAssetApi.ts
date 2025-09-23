@@ -268,6 +268,39 @@ class MultiAssetApiService {
     return result;
   }
 
+  // Get Enhanced Symbols with pagination
+  async getEnhancedSymbols(
+    page: number = 1,
+    pageSize: number = 20,
+    assetClassId?: string,
+    marketId?: string,
+    config?: RequestConfig
+  ): Promise<PagedResponse<EnhancedSymbolDto>> {
+    const searchParams = new URLSearchParams({
+      page: page.toString(),
+      pageSize: pageSize.toString(),
+    });
+
+    if (assetClassId) {
+      searchParams.append('assetClassId', assetClassId);
+    }
+    if (marketId) {
+      searchParams.append('marketId', marketId);
+    }
+
+    const cacheKey = `enhanced-symbols-${searchParams.toString()}`;
+
+    const operation = async () => fetch(`${API_BASE_URL}/v1/symbols?${searchParams}`, {
+      headers: await this.getHeaders(),
+      signal: config?.abortSignal,
+    });
+
+    return this.dedupedRequest(cacheKey, async () => {
+      const response = await this.withRetry<Response>(operation, 'getEnhancedSymbols', config);
+      return response.json();
+    });
+  }
+
   // Advanced Symbol Search and Filtering
   async searchSymbols(
     query: string,

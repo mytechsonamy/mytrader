@@ -45,7 +45,21 @@
       "Bash(dos2unix:*)",
       "Bash(git add:*)",
       "Bash(git reset:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm install)",
+      "Bash(npm run build:*)",
+      "Bash(for i in {1..5})",
+      "Bash(done)",
+      "Bash(brew list:*)",
+      "Bash(brew:*)",
+      "Bash(export:*)",
+      "Bash(awk:*)",
+      "Bash(gtimeout:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(./validate-env-config.sh:*)",
+      "Read(//private/tmp/**)",
+      "Bash(for i in {1..3})"
     ],
     "deny": [],
     "ask": []

@@ -142,7 +142,7 @@ public class TradingDbContext : DbContext, ITradingDbContext
             entity.ToTable("user_sessions");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.SessionToken).IsUnique();
-            entity.Property(e => e.SessionToken).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.SessionToken).IsRequired();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
             
             entity.HasOne(e => e.User)

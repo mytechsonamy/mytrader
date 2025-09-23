@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>myTrader SignalR Integration Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .hub-section { border: 1px solid #ccc; margin: 10px; padding: 15px; }
+        .logs { background: #f0f0f0; padding: 10px; height: 300px; overflow-y: scroll; }
+        .controls { margin: 10px 0; }
+        button { margin: 5px; padding: 5px 10px; }
+        .connected { color: green; }
+        .disconnected { color: red; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>myTrader SignalR Integration Test</h1>
+
+    <!-- Market Data Hub Test -->
+    <div class="hub-section">
+        <h2>MarketDataHub (Anonymous) - /hubs/market-data</h2>
+        <div class="controls">
+            <button onclick="connectMarketData()">Connect</button>
+            <button onclick="disconnectMarketData()">Disconnect</button>
+            <button onclick="subscribeToCrypto()">Subscribe to BTC/ETH</button>
+            <button onclick="subscribeToAssetClass()">Subscribe to All CRYPTO</button>
+            <button onclick="getMarketStatus()">Get Market Status</button>
+        </div>
+        <div>Status: <span id="marketDataStatus" class="disconnected">Disconnected</span></div>
+        <div class="logs" id="marketDataLogs"></div>
+    </div>
+
+    <!-- Trading Hub Test -->
+    <div class="hub-section">
+        <h2>TradingHub (Authenticated) - /hubs/trading</h2>
+        <div class="controls">
+            <input type="text" id="jwtToken" placeholder="JWT Token (from login)" style="width: 300px;">
+            <button onclick="connectTrading()">Connect</button>
+            <button onclick="disconnectTrading()">Disconnect</button>
+            <button onclick="joinGroup()">Join Group</button>
+        </div>
+        <div>Status: <span id="tradingStatus" class="disconnected">Disconnected</span></div>
+        <div class="logs" id="tradingLogs"></div>
+    </div>
+
+    <script>
+        let marketDataConnection = null;
+        let tradingConnection = null;
+
+        // Market Data Hub Functions
+        async function connectMarketData() {
+            try {
+                marketDataConnection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/market-data")
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Setup event handlers
+                marketDataConnection.on("ConnectionStatus", (data) => {
+                    logMarketData("info", "Connection Status: " + JSON.stringify(data, null, 2));
+                });
+
+                marketDataConnection.on("SubscriptionConfirmed", (data) => {
+                    logMarketData("info", "Subscription Confirmed: " + JSON.stringify(data, null, 2));
+                });
+
+                marketDataConnection.on("AssetClassSubscriptionConfirmed", (data) => {
+                    logMarketData("info", "Asset Class Subscription: " + JSON.stringify(data, null, 2));
+                });
+
+                marketDataConnection.on("CurrentMarketStatus", (data) => {
+                    logMarketData("info", "Market Status: " + JSON.stringify(data, null, 2));
+                });
+
+                marketDataConnection.on("PriceUpdate", (data) => {
+                    logMarketData("info", "Price Update: " + JSON.stringify(data, null, 2));
+                });
+
+                marketDataConnection.on("SubscriptionError", (data) => {
+                    logMarketData("error", "Subscription Error: " + JSON.stringify(data, null, 2));
+                });
+
+                await marketDataConnection.start();
+                document.getElementById("marketDataStatus").textContent = "Connected";
+                document.getElementById("marketDataStatus").className = "connected";
+                logMarketData("info", "Connected to MarketDataHub");
+            } catch (err) {
+                logMarketData("error", "Connection failed: " + err);
+                document.getElementById("marketDataStatus").textContent = "Connection Failed";
+                document.getElementById("marketDataStatus").className = "error";
+            }
+        }
+
+        async function disconnectMarketData() {
+            if (marketDataConnection) {
+                await marketDataConnection.stop();
+                document.getElementById("marketDataStatus").textContent = "Disconnected";
+                document.getElementById("marketDataStatus").className = "disconnected";
+                logMarketData("info", "Disconnected from MarketDataHub");
+            }
+        }
+
+        async function subscribeToCrypto() {
+            if (marketDataConnection && marketDataConnection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await marketDataConnection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSDT", "ETHUSDT"]);
+                    logMarketData("info", "Subscribed to BTCUSDT and ETHUSDT");
+                } catch (err) {
+                    logMarketData("error", "Subscription failed: " + err);
+                }
+            } else {
+                logMarketData("error", "Not connected to MarketDataHub");
+            }
+        }
+
+        async function subscribeToAssetClass() {
+            if (marketDataConnection && marketDataConnection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await marketDataConnection.invoke("SubscribeToAssetClass", "CRYPTO");
+                    logMarketData("info", "Subscribed to all CRYPTO symbols");
+                } catch (err) {
+                    logMarketData("error", "Asset class subscription failed: " + err);
+                }
+            } else {
+                logMarketData("error", "Not connected to MarketDataHub");
+            }
+        }
+
+        async function getMarketStatus() {
+            if (marketDataConnection && marketDataConnection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await marketDataConnection.invoke("GetMarketStatus");
+                    logMarketData("info", "Requested market status");
+                } catch (err) {
+                    logMarketData("error", "Market status request failed: " + err);
+                }
+            } else {
+                logMarketData("error", "Not connected to MarketDataHub");
+            }
+        }
+
+        // Trading Hub Functions
+        async function connectTrading() {
+            const token = document.getElementById("jwtToken").value;
+
+            try {
+                tradingConnection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/trading", {
+                        accessTokenFactory: () => token
+                    })
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Setup event handlers
+                tradingConnection.on("ReceivePriceUpdate", (data) => {
+                    logTrading("info", "Price Update: " + JSON.stringify(data, null, 2));
+                });
+
+                tradingConnection.on("ReceiveSignalUpdate", (data) => {
+                    logTrading("info", "Signal Update: " + JSON.stringify(data, null, 2));
+                });
+
+                tradingConnection.on("ReceiveMarketData", (data) => {
+                    logTrading("info", "Market Data: " + JSON.stringify(data, null, 2));
+                });
+
+                await tradingConnection.start();
+                document.getElementById("tradingStatus").textContent = "Connected";
+                document.getElementById("tradingStatus").className = "connected";
+                logTrading("info", "Connected to TradingHub");
+            } catch (err) {
+                logTrading("error", "Connection failed: " + err);
+                document.getElementById("tradingStatus").textContent = "Connection Failed";
+                document.getElementById("tradingStatus").className = "error";
+            }
+        }
+
+        async function disconnectTrading() {
+            if (tradingConnection) {
+                await tradingConnection.stop();
+                document.getElementById("tradingStatus").textContent = "Disconnected";
+                document.getElementById("tradingStatus").className = "disconnected";
+                logTrading("info", "Disconnected from TradingHub");
+            }
+        }
+
+        async function joinGroup() {
+            if (tradingConnection && tradingConnection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await tradingConnection.invoke("JoinGroup", "test-group");
+                    logTrading("info", "Joined test-group");
+                } catch (err) {
+                    logTrading("error", "Join group failed: " + err);
+                }
+            } else {
+                logTrading("error", "Not connected to TradingHub");
+            }
+        }
+
+        // Logging functions
+        function logMarketData(type, message) {
+            const logs = document.getElementById("marketDataLogs");
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function logTrading(type, message) {
+            const logs = document.getElementById("tradingLogs");
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        // Auto-connect to MarketData on page load
+        window.onload = function() {
+            logMarketData("info", "Page loaded. Click Connect to test MarketDataHub.");
+            logTrading("info", "Enter JWT token and click Connect to test TradingHub.");
+        };
+    </script>
+</body>
+</html>

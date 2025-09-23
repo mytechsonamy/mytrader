@@ -518,7 +518,9 @@ export const MultiAssetProvider: React.FC<MultiAssetProviderProps> = ({
 
       // Set up WebSocket event listeners
       websocketService.onConnectionStatus((status) => {
-        dispatch({ type: 'SET_CONNECTION_STATUS', payload: status });
+        // Map 'reconnecting' to 'connecting' since reducer doesn't accept 'reconnecting'
+        const mappedStatus = status === 'reconnecting' ? 'connecting' : status;
+        dispatch({ type: 'SET_CONNECTION_STATUS', payload: mappedStatus });
       });
 
       websocketService.on('price_update', (data: UnifiedMarketDataDto) => {
