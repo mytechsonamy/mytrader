@@ -13,6 +13,8 @@ using MyTrader.API.Hubs;
 using MyTrader.Api.Middleware;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
+using Polly;
+using Polly.Extensions.Http;
 // Removed Hangfire dependencies - replaced with native .NET background services
 
 var builder = WebApplication.CreateBuilder(args);
@@ -116,9 +118,16 @@ builder.Services.AddCors(options =>
             // Allow all localhost origins in development for React Native and web clients
             corsBuilder.SetIsOriginAllowed(origin =>
                 {
-                    if (string.IsNullOrEmpty(origin)) return true; // Allow null origin for mobile apps
-                    var uri = new Uri(origin);
-                    return uri.Host == "localhost" || uri.Host == "127.0.0.1" || uri.Host.EndsWith(".local");
+                    if (string.IsNullOrEmpty(origin) || origin == "null") return true; // Allow null origin for mobile apps
+                    try
+                    {
+                        var uri = new Uri(origin);
+                        return uri.Host == "localhost" || uri.Host == "127.0.0.1" || uri.Host.EndsWith(".local");
+                    }
+                    catch
+                    {
+                        return false; // Invalid URI format
+                    }
                 })
                 .AllowAnyMethod()
                 .AllowAnyHeader()
@@ -272,8 +281,10 @@ builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketService, MyTrader.Inf
 // Register singleton for data provider orchestrator to maintain provider state across requests
 builder.Services.AddSingleton<MyTrader.Core.Interfaces.IDataProviderOrchestrator, MyTrader.Core.Services.DataProviderOrchestrator>();
 
-// Note: Additional service implementations (IEnhancedSymbolService, IMultiAssetDataService, IMarketStatusService)
-// need to be implemented and registered when ready
+// Register missing services with mock implementations to fix HTTP 409 errors
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IMultiAssetDataService, MyTrader.Api.Services.MockMultiAssetDataService>();
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IEnhancedSymbolService, MyTrader.Api.Services.MockEnhancedSymbolService>();
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketStatusService, MyTrader.Api.Services.MockMarketStatusService>();
 
 // Register portfolio service
 //builder.Services.AddScoped<IPortfolioService, MyTrader.Services.Portfolio.NewPortfolioService>();
@@ -343,6 +354,68 @@ builder.Services.AddLogging();
 
 // Add Agent Pack Services (after dependencies are registered)
 builder.Services.AddMyTraderAgentPack();
+
+// Add Yahoo Finance Intraday Sync Services for 5-minute data collection
+// Configure intraday service settings
+builder.Services.Configure<MyTrader.Core.Services.YahooFinanceIntradayConfiguration>(options =>
+{
+    options.BatchSize = 5;
+    options.BatchDelayMs = 500;
+    options.InterMarketDelayMs = 1000;
+    options.MaxRetryAttempts = 2;
+    options.RetryDelayMs = 1000;
+    options.OverwriteExistingData = false;
+    options.LookbackMinutes = 15;
+    options.MaxSymbolsPerMarket = 100; // Reduced for development
+    options.MinSuccessRatePercent = 70.0m;
+    options.EnableBistSync = true;
+    options.EnableUSMarketsSync = true;
+    options.EnableCryptoSync = true;
+});
+
+// Configure scheduled service settings
+builder.Services.Configure<MyTrader.Infrastructure.Services.YahooFinanceIntradayScheduleConfiguration>(options =>
+{
+    options.MaxExecutionDuration = TimeSpan.FromMinutes(4);
+    options.AlertAfterConsecutiveFailures = 3;
+    options.LogDetailedResults = true; // Enable for debugging
+    options.EnableHealthChecks = true;
+    options.EnableDuringPremarket = false;
+    options.EnableDuringAfterHours = false;
+    options.EnablePerformanceLogging = true;
+    options.PerformanceLogThreshold = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddScoped<MyTrader.Core.Services.YahooFinanceApiService>();
+builder.Services.AddScoped<MyTrader.Core.Services.YahooFinanceIntradayDataService>();
+builder.Services.AddHostedService<MyTrader.Infrastructure.Services.YahooFinanceIntradayScheduledService>();
+
+// Configure Alpaca API settings
+builder.Services.Configure<MyTrader.Core.DTOs.AlpacaConfiguration>(
+    builder.Configuration.GetSection("Alpaca"));
+
+// Add Alpaca market data services (simplified version for development)
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IAlpacaMarketDataService, MyTrader.Infrastructure.Services.AlpacaMarketDataServiceSimplified>();
+
+// Add HTTP client for Alpaca (simplified)
+builder.Services.AddHttpClient<MyTrader.Infrastructure.Services.AlpacaMarketDataServiceSimplified>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("User-Agent", "MyTrader/1.0");
+});
+
+// Add Alpaca background data refresh service (simplified version)
+// Temporarily disabled to avoid conflicts with the simplified service
+// builder.Services.AddHostedService<MyTrader.Infrastructure.Services.AlpacaDataRefreshService>();
+
+// Add BIST market data services
+builder.Services.AddBistServices(builder.Configuration);
+
+// Add ETL Services
+builder.Services.AddScoped<MyTrader.Core.Services.ETL.IDataIntegrityETLService, MyTrader.Infrastructure.Services.ETL.DataIntegrityETLService>();
+builder.Services.AddScoped<MyTrader.Core.Services.ETL.ISymbolSynchronizationService, MyTrader.Infrastructure.Services.ETL.SymbolSynchronizationService>();
+builder.Services.AddScoped<MyTrader.Core.Services.ETL.IAssetEnrichmentService, MyTrader.Infrastructure.Services.ETL.AssetEnrichmentService>();
+builder.Services.AddScoped<MyTrader.Core.Services.ETL.IMarketDataBootstrapService, MyTrader.Infrastructure.Services.ETL.MarketDataBootstrapService>();
 
 var app = builder.Build();
 

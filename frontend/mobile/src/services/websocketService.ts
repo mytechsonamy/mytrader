@@ -71,17 +71,19 @@ class EnhancedWebSocketService {
       await this.createConnection(hubUrl);
       await this.connect();
     } catch (error) {
-      console.error('Failed to initialize WebSocket service:', error);
-      throw error;
+      console.warn('Failed to initialize WebSocket service:', error);
+      // Don't throw error to prevent blocking app initialization
+      // Connection will be retried automatically by SignalR
+      this.notifyConnectionStatus('error', `Connection failed: ${error.message}`);
     }
   }
 
   private buildHubUrl(customUrl?: string): string {
     if (customUrl) return customUrl;
 
-    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:8080/api';
+    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:5002/api';
     const configuredHubUrl = Constants.expoConfig?.extra?.WS_BASE_URL || CFG_WS_BASE_URL;
-    const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/trading');
+    const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/market-data');
 
     // SignalR accepts http(s) or ws(s). Use http(s) for consistent negotiation
     return rawHubUrl.startsWith('wss://')
@@ -251,7 +253,8 @@ class EnhancedWebSocketService {
   // Connection management
   async connect(): Promise<void> {
     if (!this.connection) {
-      throw new Error('Connection not initialized. Call initialize() first.');
+      console.warn('Connection not initialized. Call initialize() first.');
+      return;
     }
 
     try {
@@ -269,9 +272,10 @@ class EnhancedWebSocketService {
       // Establish any pending subscriptions
       await this.reestablishSubscriptions();
     } catch (error) {
-      console.error('Failed to start SignalR connection:', error);
+      console.warn('Failed to start SignalR connection:', error);
+      this.connectionState.isConnected = false;
       this.notifyConnectionStatus('error', (error as Error).message);
-      throw error;
+      // Don't throw error - let automatic reconnection handle it
     }
   }
 

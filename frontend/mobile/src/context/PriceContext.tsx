@@ -110,10 +110,10 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   const [subscriptions, setSubscriptions] = useState<SymbolSubscription[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 
-  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:8080/api';
-  // Prefer explicit WS_BASE_URL from config; fall back to API->hubs/trading
+  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:5002/api';
+  // Prefer explicit WS_BASE_URL from config; fall back to API->hubs/market-data
   const configuredHubUrl = (Constants.expoConfig?.extra?.WS_BASE_URL as string | undefined) || CFG_WS_BASE_URL;
-  const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/trading');
+  const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/market-data');
   // SignalR accepts http(s) or ws(s). Use http(s) so negotiation works consistently.
   const SIGNALR_HUB_URL = rawHubUrl.startsWith('wss://')
     ? rawHubUrl.replace('wss://', 'https://')
@@ -248,26 +248,36 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
           .build();
 
         // Set up event handlers
-        hubConnection.onclose(() => {
-          console.log('SignalR connection closed');
+        hubConnection.onclose((error) => {
+          console.log('SignalR connection closed:', error?.message || 'No error');
           setIsConnected(false);
+          setConnectionStatus('disconnected');
         });
 
         hubConnection.onreconnecting(() => {
           console.log('SignalR reconnecting...');
           setIsConnected(false);
+          setConnectionStatus('connecting');
         });
 
         hubConnection.onreconnected(() => {
           console.log('SignalR reconnected');
           setIsConnected(true);
+          setConnectionStatus('connected');
+
+          // Reset retry counter on successful reconnection
+          (window as any).__signalRRetryCount = 0;
         });
 
         // Start connection
         await hubConnection.start();
         console.log('Connected to SignalR hub');
         setIsConnected(true);
+        setConnectionStatus('connected');
         setConnection(hubConnection);
+
+        // Reset retry counter on successful connection
+        (window as any).__signalRRetryCount = 0;
 
         // Set up SignalR event handlers for receiving messages from backend
         hubConnection.on('ReceivePriceUpdate', (data: any) => {
@@ -409,15 +419,22 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
           }
         });
       } catch (error) {
-        console.error('Failed to create SignalR connection:', error);
+        console.warn('Failed to create SignalR connection:', error);
         setIsConnected(false);
-        
-        // Retry connection after 5 seconds
-        if (!reconnectTimer) {
+        setConnectionStatus('error');
+
+        // Implement exponential backoff for retries to prevent spam
+        const retryDelay = Math.min(5000 * Math.pow(2, (window as any).__signalRRetryCount || 0), 60000);
+        (window as any).__signalRRetryCount = ((window as any).__signalRRetryCount || 0) + 1;
+
+        if (!reconnectTimer && (window as any).__signalRRetryCount < 10) {
+          console.log(`Will retry SignalR connection in ${retryDelay/1000}s (attempt ${(window as any).__signalRRetryCount})`);
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             connect();
-          }, 5000);
+          }, retryDelay);
+        } else if ((window as any).__signalRRetryCount >= 10) {
+          console.warn('Maximum SignalR retry attempts reached. Connection will not be retried automatically.');
         }
       }
     };
