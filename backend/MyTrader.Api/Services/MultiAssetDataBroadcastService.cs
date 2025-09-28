@@ -16,7 +16,7 @@ namespace MyTrader.Api.Services;
 public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 {
     private readonly IBinanceWebSocketService _binanceService;
-    private readonly IHubContext<MarketDataHub> _hubContext;
+    private readonly IHubContext<DashboardHub> _hubContext;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MultiAssetDataBroadcastService> _logger;
     private readonly ConcurrentDictionary<string, DateTime> _lastBroadcastTimes;
@@ -35,7 +35,7 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
     public MultiAssetDataBroadcastService(
         IBinanceWebSocketService binanceService,
-        IHubContext<MarketDataHub> hubContext,
+        IHubContext<DashboardHub> hubContext,
         IServiceScopeFactory scopeFactory,
         ILogger<MultiAssetDataBroadcastService> logger)
     {
@@ -144,34 +144,66 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
             var broadcastTasks = new List<Task>();
 
-            // Send to symbol-specific group
+            // Send to symbol-specific group with new standard event names
             var symbolGroup = $"{priceUpdate.AssetClass}_{priceUpdate.Symbol}";
-            broadcastTasks.Add(_hubContext.Clients.Group(symbolGroup).SendAsync("PriceUpdate", priceUpdate));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(symbolGroup).SendAsync("PriceUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(symbolGroup).SendAsync("MarketDataUpdate", priceUpdate)));
 
-            // Send to asset class group for dashboard updates
+            // Send to asset class group for dashboard updates with new standard event names
             var assetClassGroup = $"AssetClass_{priceUpdate.AssetClass}";
-            broadcastTasks.Add(_hubContext.Clients.Group(assetClassGroup).SendAsync("PriceUpdate", priceUpdate));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(assetClassGroup).SendAsync("PriceUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(assetClassGroup).SendAsync("MarketDataUpdate", priceUpdate)));
 
-            // Legacy format for backward compatibility (crypto only)
+            // Legacy format for backward compatibility with ReceivePriceUpdate and ReceiveMarketData events
+            var legacyUpdate = new
+            {
+                symbol = priceUpdate.Symbol,
+                price = priceUpdate.Price,
+                change = priceUpdate.Change24h,
+                volume = priceUpdate.Volume,
+                timestamp = priceUpdate.Timestamp,
+                assetClass = priceUpdate.AssetClass.ToString()
+            };
+
+            // Legacy events for backward compatibility with better error handling
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(symbolGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(assetClassGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(symbolGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _hubContext.Clients.Group(assetClassGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+
+            // Additional legacy crypto-specific groups for backward compatibility
             if (priceUpdate.AssetClass == AssetClassCode.CRYPTO)
             {
-                var legacyUpdate = new
-                {
-                    symbol = priceUpdate.Symbol,
-                    price = priceUpdate.Price,
-                    change = priceUpdate.Change24h,
-                    volume = priceUpdate.Volume,
-                    timestamp = priceUpdate.Timestamp
-                };
-
-                broadcastTasks.Add(_hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}")
-                    .SendAsync("PriceUpdate", legacyUpdate));
-
-                broadcastTasks.Add(_hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}")
-                    .SendAsync("MarketDataUpdate", priceUpdate));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("PriceUpdate", legacyUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceivePriceUpdate", legacyUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("MarketDataUpdate", priceUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceiveMarketData", priceUpdate)));
             }
 
-            await Task.WhenAll(broadcastTasks);
+            // Execute all broadcasts concurrently with timeout
+            var allBroadcasts = Task.WhenAll(broadcastTasks);
+            if (await Task.WhenAny(allBroadcasts, Task.Delay(TimeSpan.FromSeconds(10))) == allBroadcasts)
+            {
+                await allBroadcasts; // This will throw if any broadcast failed
+            }
+            else
+            {
+                _logger.LogWarning("Broadcast timeout for symbol: {Symbol}", priceUpdate.Symbol);
+                Interlocked.Increment(ref _failedBroadcasts);
+                return;
+            }
 
             // Update last broadcast time
             _lastBroadcastTimes.AddOrUpdate(priceUpdate.Symbol, DateTime.UtcNow, (_, _) => DateTime.UtcNow);
@@ -190,6 +222,30 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
         finally
         {
             _broadcastSemaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Safely executes a SignalR broadcast with error handling
+    /// </summary>
+    private async Task SafeBroadcastAsync(Func<Task> broadcastFunc)
+    {
+        try
+        {
+            await broadcastFunc();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            _logger.LogDebug(ex, "SignalR connection disposed during broadcast, skipping");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("disposed"))
+        {
+            _logger.LogDebug(ex, "SignalR hub disposed during broadcast, skipping");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Individual broadcast failed, continuing with others");
+            throw; // Re-throw to be counted as failed broadcast
         }
     }
 

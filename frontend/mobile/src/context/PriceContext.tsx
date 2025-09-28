@@ -111,9 +111,9 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 
   const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:5002/api';
-  // Prefer explicit WS_BASE_URL from config; fall back to API->hubs/market-data
+  // CRITICAL FIX: Use correct hub URL that matches backend (hubs/market-data)
   const configuredHubUrl = (Constants.expoConfig?.extra?.WS_BASE_URL as string | undefined) || CFG_WS_BASE_URL;
-  const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/market-data');
+  const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/dashboard');
   // SignalR accepts http(s) or ws(s). Use http(s) so negotiation works consistently.
   const SIGNALR_HUB_URL = rawHubUrl.startsWith('wss://')
     ? rawHubUrl.replace('wss://', 'https://')
@@ -130,7 +130,7 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
         
         // 1) Fetch tracked symbols
         console.log('Fetching tracked symbols from:', API_BASE_URL);
-        const symbolsResponse = await fetch(`${API_BASE_URL}/symbols/tracked`, { headers });
+        const symbolsResponse = await fetch(`${API_BASE_URL}/v1/symbols/tracked`, { headers });
         if (symbolsResponse.ok) {
           const symbolsData = await symbolsResponse.json();
           console.log('Received symbols data:', symbolsData);
@@ -247,6 +247,67 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
           .configureLogging(signalR.LogLevel.Information)
           .build();
 
+        // Debug: Log ALL incoming events - BEFORE connection starts
+        const originalOn = hubConnection.on.bind(hubConnection);
+        hubConnection.on = (methodName: string, callback: (...args: any[]) => void) => {
+          return originalOn(methodName, (...args: any[]) => {
+            console.log(`[SignalR] Event received: ${methodName}`, args);
+            return callback(...args);
+          });
+        };
+
+        // Set up ALL event handlers BEFORE starting connection
+        hubConnection.on('PriceUpdate', (data: any) => {
+          console.log('Received price update:', data);
+          if (data && data.Symbol && data.Price) {
+            const symbol = data.Symbol.replace('USDT', ''); // Convert BTCUSDT to BTC
+            setPrices(prev => ({
+              ...prev,
+              [symbol]: {
+                price: data.Price,
+                change: data.PriceChange || 0,
+                timestamp: data.Timestamp || new Date().toISOString()
+              }
+            }));
+          }
+        });
+
+        hubConnection.on('MarketDataUpdate', (data: any) => {
+          console.log('Received market data update:', data);
+          if (data && data.Symbol && data.Price) {
+            const symbol = data.Symbol.replace('USDT', '');
+            setPrices(prev => ({
+              ...prev,
+              [symbol]: {
+                price: data.Price,
+                change: data.PriceChange || 0,
+                timestamp: data.Timestamp || new Date().toISOString()
+              }
+            }));
+          }
+        });
+
+        // Handle dashboard snapshot
+        hubConnection.on('DashboardSnapshot', (data: any) => {
+          console.log('Received dashboard snapshot:', data);
+        });
+
+        // Legacy events for backward compatibility
+        hubConnection.on('ReceivePriceUpdate', (data: any) => {
+          console.log('Received legacy price update:', data);
+          if (data && data.symbol && data.price) {
+            const symbol = data.symbol.replace('USDT', '');
+            setPrices(prev => ({
+              ...prev,
+              [symbol]: {
+                price: data.price,
+                change: data.priceChange || 0,
+                timestamp: data.timestamp || new Date().toISOString()
+              }
+            }));
+          }
+        });
+
         // Set up event handlers
         hubConnection.onclose((error) => {
           console.log('SignalR connection closed:', error?.message || 'No error');
@@ -279,7 +340,47 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
         // Reset retry counter on successful connection
         (window as any).__signalRRetryCount = 0;
 
+
+        // Set up price update event handlers
+        hubConnection.on('PriceUpdate', (data: any) => {
+          console.log('Received price update:', data);
+          if (data && data.Symbol && data.Price) {
+            const symbol = data.Symbol.replace('USDT', ''); // Convert BTCUSDT to BTC
+            setPrices(prev => ({
+              ...prev,
+              [symbol]: {
+                price: data.Price,
+                change: data.PriceChange || 0,
+                timestamp: data.Timestamp || new Date().toISOString()
+              }
+            }));
+          }
+        });
+
+        hubConnection.on('MarketDataUpdate', (data: any) => {
+          console.log('Received market data update:', data);
+          if (data && data.Symbol && data.Price) {
+            const symbol = data.Symbol.replace('USDT', '');
+            setPrices(prev => ({
+              ...prev,
+              [symbol]: {
+                price: data.Price,
+                change: data.PriceChange || 0,
+                timestamp: data.Timestamp || new Date().toISOString()
+              }
+            }));
+          }
+        });
+
+        // Handle dashboard snapshot
+        hubConnection.on('DashboardSnapshot', (data: any) => {
+          console.log('Received dashboard snapshot:', data);
+        });
+
+        // No manual subscription needed - users are automatically added to AssetClass groups on connection
+
         // Set up SignalR event handlers for receiving messages from backend
+        // Handle both ReceivePriceUpdate and PriceUpdate events for backend compatibility
         hubConnection.on('ReceivePriceUpdate', (data: any) => {
           try {
             // Only log in development and throttle the logging
@@ -340,6 +441,62 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
             }
           } catch (error) {
             console.warn('Error processing SignalR price update:', error);
+          }
+        });
+
+        // CRITICAL FIX: Also listen for PriceUpdate (without Receive prefix) for backend compatibility
+        hubConnection.on('PriceUpdate', (data: any) => {
+          try {
+            // Only log in development and throttle the logging
+            if (__DEV__ && Math.random() < 0.1) { // Log only 10% of updates in dev
+              console.log('Received SignalR PriceUpdate:', data);
+            }
+
+            // Handle the actual message format from .NET backend
+            if (data.symbol && data.price) {
+              const symbol = data.symbol.replace('USD', ''); // Clean symbol (BTC, ETH, etc.)
+
+              // Update legacy prices with memoized state update
+              setPrices(prev => {
+                const currentPrice = prev[symbol];
+                if (currentPrice && Math.abs(currentPrice.price - data.price) < 0.01) {
+                  return prev; // Skip update if price difference is negligible
+                }
+                return {
+                  ...prev,
+                  [symbol]: {
+                    price: data.price,
+                    change: data.change || 0,
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  }
+                };
+              });
+
+              // Update enhanced prices with memoized state update
+              const symbolId = data.symbol.toLowerCase();
+              setEnhancedPrices(prev => {
+                const currentPrice = prev[symbolId];
+                if (currentPrice && Math.abs(currentPrice.price - data.price) < 0.01) {
+                  return prev; // Skip update if price difference is negligible
+                }
+                return {
+                  ...prev,
+                  [symbolId]: {
+                    symbolId,
+                    symbol: data.symbol,
+                    price: data.price,
+                    change: data.change || 0,
+                    changePercent: data.changePercent || 0,
+                    timestamp: data.timestamp || new Date().toISOString(),
+                    marketStatus: 'OPEN',
+                    dataSource: 'REAL_TIME',
+                    lastUpdated: new Date().toISOString(),
+                  }
+                };
+              });
+            }
+          } catch (error) {
+            console.warn('Error processing SignalR PriceUpdate:', error);
           }
         });
 

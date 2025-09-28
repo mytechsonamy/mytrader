@@ -194,7 +194,7 @@ const StrategiesScreen: React.FC = () => {
 
     try {
       const result = await apiService.getUserStrategies();
-      if (result.success && result.data) {
+      if (result.success && Array.isArray(result.data)) {
         // Convert API response to Strategy interface format
         const apiStrategies = result.data.map((strategy: any) => ({
           id: strategy.id,
@@ -212,8 +212,8 @@ const StrategiesScreen: React.FC = () => {
         setStrategies(apiStrategies);
       } else {
         // Handle API errors gracefully - don't show errors to users
-        // 404 errors are expected when user has no strategies yet
-        if (result.message?.includes('404')) {
+        // 404 errors or empty results are expected when user has no strategies yet
+        if (result.message?.includes('404') || !result.message) {
           // User has no strategies yet, this is normal
           setStrategies([]);
         } else {

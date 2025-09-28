@@ -168,7 +168,7 @@ public class NewsController : ControllerBase
                 Category = "Market",
                 AssetClass = assetClass ?? "GENERAL",
                 PublishedAt = DateTime.UtcNow.AddHours(-2),
-                ImageUrl = "https://via.placeholder.com/300x200/667eea/ffffff?text=Market+News",
+                ImageUrl = null,
                 Url = "https://example.com/news/1",
                 Tags = new[] { "piyasa", "analiz", "günlük" }
             },
@@ -183,7 +183,7 @@ public class NewsController : ControllerBase
                 Category = "Economics",
                 AssetClass = assetClass ?? "GENERAL",
                 PublishedAt = DateTime.UtcNow.AddHours(-4),
-                ImageUrl = "https://via.placeholder.com/300x200/10b981/ffffff?text=Central+Bank",
+                ImageUrl = null,
                 Url = "https://example.com/news/2",
                 Tags = new[] { "merkez-bankası", "faiz", "ekonomi" }
             },
@@ -198,7 +198,7 @@ public class NewsController : ControllerBase
                 Category = "Technology",
                 AssetClass = assetClass ?? "STOCK",
                 PublishedAt = DateTime.UtcNow.AddHours(-6),
-                ImageUrl = "https://via.placeholder.com/300x200/8b5cf6/ffffff?text=Tech+Stocks",
+                ImageUrl = null,
                 Url = "https://example.com/news/3",
                 Tags = new[] { "teknoloji", "hisse", "yükseliş" }
             }
@@ -228,7 +228,7 @@ public class NewsController : ControllerBase
                 Category = "Cryptocurrency",
                 AssetClass = "CRYPTO",
                 PublishedAt = DateTime.UtcNow.AddHours(-1),
-                ImageUrl = "https://via.placeholder.com/300x200/f59e0b/ffffff?text=Bitcoin",
+                ImageUrl = null,
                 Url = "https://example.com/crypto-news/1",
                 Tags = new[] { "bitcoin", "btc", "fiyat" }
             },
@@ -243,7 +243,7 @@ public class NewsController : ControllerBase
                 Category = "Cryptocurrency",
                 AssetClass = "CRYPTO",
                 PublishedAt = DateTime.UtcNow.AddHours(-3),
-                ImageUrl = "https://via.placeholder.com/300x200/6366f1/ffffff?text=Ethereum",
+                ImageUrl = null,
                 Url = "https://example.com/crypto-news/2",
                 Tags = new[] { "ethereum", "eth", "upgrade" }
             }
@@ -271,7 +271,7 @@ public class NewsController : ControllerBase
                     Category = "Stock Market",
                     AssetClass = "STOCK",
                     PublishedAt = DateTime.UtcNow.AddHours(-2),
-                    ImageUrl = "https://via.placeholder.com/300x200/ef4444/ffffff?text=BIST",
+                    ImageUrl = null,
                     Url = "https://example.com/bist-news/1",
                     Tags = new[] { "bist", "borsa", "endeks" }
                 }
@@ -292,7 +292,7 @@ public class NewsController : ControllerBase
                     Category = "Stock Market",
                     AssetClass = "STOCK",
                     PublishedAt = DateTime.UtcNow.AddHours(-1),
-                    ImageUrl = "https://via.placeholder.com/300x200/3b82f6/ffffff?text=NASDAQ",
+                    ImageUrl = null,
                     Url = "https://example.com/nasdaq-news/1",
                     Tags = new[] { "nasdaq", "tech", "stocks" }
                 }
@@ -334,7 +334,7 @@ public class NewsController : ControllerBase
             Category = "General",
             AssetClass = "GENERAL",
             PublishedAt = DateTime.UtcNow.AddHours(-5),
-            ImageUrl = "https://via.placeholder.com/600x400/6b7280/ffffff?text=News+Detail",
+            ImageUrl = null,
             Url = $"https://example.com/news/{newsId}",
             Tags = new[] { "haber", "detay", "analiz" }
         };
