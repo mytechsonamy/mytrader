@@ -14,7 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mytrader.mobile"
+      "bundleIdentifier": "com.mytrader.mobile",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsArbitraryLoadsForMedia": true,
+          "NSAllowsArbitraryLoadsInWebContent": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,15 +29,19 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "API_BASE_URL": "http://localhost:5002/api",
-      "AUTH_BASE_URL": "http://localhost:5002/api",
-      "WS_BASE_URL": "http://localhost:5002/hubs/market-data"
+      "API_BASE_URL": "http://192.168.68.103:5002/api",
+      "AUTH_BASE_URL": "http://192.168.68.103:5002/api",
+      "WS_BASE_URL": "http://192.168.68.103:5002/hubs/dashboard"
     }
   }
 }

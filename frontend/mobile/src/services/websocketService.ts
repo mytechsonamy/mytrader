@@ -74,16 +74,46 @@ class EnhancedWebSocketService {
       console.warn('Failed to initialize WebSocket service:', error);
       // Don't throw error to prevent blocking app initialization
       // Connection will be retried automatically by SignalR
-      this.notifyConnectionStatus('error', `Connection failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Provide more specific error handling for mobile
+      if (errorMessage.includes('ERR_NAME_NOT_RESOLVED') || errorMessage.includes('ENOTFOUND')) {
+        this.notifyConnectionStatus('error', 'Ağ bağlantısı bulunamadı. İnternet bağlantınızı kontrol edin.');
+      } else if (errorMessage.includes('ERR_CONNECTION_REFUSED')) {
+        this.notifyConnectionStatus('error', 'Sunucuya bağlanılamıyor. Lütfen daha sonra tekrar deneyin.');
+      } else {
+        this.notifyConnectionStatus('error', `Bağlantı hatası: ${errorMessage}`);
+      }
+
+      // Schedule a retry for mobile users
+      this.scheduleRetry();
     }
+  }
+
+  private scheduleRetry(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    // Progressive retry delays for mobile
+    const retryDelay = Math.min(5000 * Math.pow(2, this.connectionState.reconnectAttempts), 30000);
+
+    this.reconnectTimer = setTimeout(async () => {
+      console.log(`Attempting to reconnect (attempt ${this.connectionState.reconnectAttempts + 1})`);
+      try {
+        await this.initialize();
+      } catch (error) {
+        console.warn('Retry failed:', error);
+      }
+    }, retryDelay);
   }
 
   private buildHubUrl(customUrl?: string): string {
     if (customUrl) return customUrl;
 
-    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:5002/api';
+    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://192.168.68.103:5002/api';
     const configuredHubUrl = Constants.expoConfig?.extra?.WS_BASE_URL || CFG_WS_BASE_URL;
-    const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/market-data');
+    const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/dashboard');
 
     // SignalR accepts http(s) or ws(s). Use http(s) for consistent negotiation
     return rawHubUrl.startsWith('wss://')
@@ -104,6 +134,12 @@ class EnhancedWebSocketService {
       skipNegotiation: false,
       transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.ServerSentEvents,
       withCredentials: false,
+      headers: {
+        'X-Client-Type': 'mobile',
+        'User-Agent': 'mytrader-mobile/websocket',
+        'X-Mobile-Platform': 'react-native',
+        'Accept': 'application/json',
+      },
     };
 
     // Add authentication if available
@@ -158,7 +194,7 @@ class EnhancedWebSocketService {
   private setupMessageHandlers(): void {
     if (!this.connection) return;
 
-    // Price updates with error handling
+    // Price updates with error handling - dual listeners for backend compatibility
     this.connection.on('ReceivePriceUpdate', (data: any) => {
       try {
         const parsedData = this.safeParseMessageData(data, 'price_update');
@@ -167,7 +203,33 @@ class EnhancedWebSocketService {
           this.emitEvent('market_data', parsedData); // Legacy compatibility
         }
       } catch (error) {
-        console.warn('Failed to process price update:', error);
+        console.warn('Failed to process ReceivePriceUpdate:', error);
+      }
+    });
+
+    // New backend event - PriceUpdate (without Receive prefix)
+    this.connection.on('PriceUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'price_update');
+        if (parsedData) {
+          this.emitEvent('price_update', parsedData);
+          this.emitEvent('market_data', parsedData); // Legacy compatibility
+        }
+      } catch (error) {
+        console.warn('Failed to process PriceUpdate:', error);
+      }
+    });
+
+    // Additional market data event listener
+    this.connection.on('MarketDataUpdate', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'market_data_update');
+        if (parsedData) {
+          this.emitEvent('market_data_update', parsedData);
+          this.emitEvent('market_data', parsedData); // Legacy compatibility
+        }
+      } catch (error) {
+        console.warn('Failed to process MarketDataUpdate:', error);
       }
     });
 
@@ -243,9 +305,23 @@ class EnhancedWebSocketService {
         const parsedData = this.safeParseMessageData(data, 'market');
         if (parsedData) {
           this.emitEvent('market', parsedData);
+          this.emitEvent('market_data', parsedData); // Additional compatibility
         }
       } catch (error) {
-        console.warn('Failed to process market data:', error);
+        console.warn('Failed to process ReceiveMarketData:', error);
+      }
+    });
+
+    // Simplified MarketData event (without Receive prefix)
+    this.connection.on('MarketData', (data: any) => {
+      try {
+        const parsedData = this.safeParseMessageData(data, 'market');
+        if (parsedData) {
+          this.emitEvent('market', parsedData);
+          this.emitEvent('market_data', parsedData); // Additional compatibility
+        }
+      } catch (error) {
+        console.warn('Failed to process MarketData:', error);
       }
     });
   }
@@ -266,6 +342,12 @@ class EnhancedWebSocketService {
       this.connectionState.lastConnected = new Date().toISOString();
       this.connectionState.reconnectAttempts = 0;
 
+      // Clear any retry timers on successful connection
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+
       this.startHeartbeat();
       this.notifyConnectionStatus('connected');
 
@@ -274,8 +356,27 @@ class EnhancedWebSocketService {
     } catch (error) {
       console.warn('Failed to start SignalR connection:', error);
       this.connectionState.isConnected = false;
-      this.notifyConnectionStatus('error', (error as Error).message);
-      // Don't throw error - let automatic reconnection handle it
+      this.connectionState.reconnectAttempts++;
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Mobile-specific error messages
+      let userFriendlyMessage = 'Bağlantı kurulurken hata oluştu.';
+
+      if (errorMessage.includes('Failed to negotiate') || errorMessage.includes('WebSocket')) {
+        userFriendlyMessage = 'WebSocket bağlantısı kurulamadı. Ağ ayarlarınızı kontrol edin.';
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+        userFriendlyMessage = 'Bağlantı zaman aşımı. İnternet hızınızı kontrol edin.';
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        userFriendlyMessage = 'Sunucu erişilemez durumda.';
+      }
+
+      this.notifyConnectionStatus('error', userFriendlyMessage);
+
+      // Schedule retry if under max attempts
+      if (this.connectionState.reconnectAttempts < (this.options.maxReconnectAttempts || 10)) {
+        this.scheduleRetry();
+      }
     }
   }
 
@@ -342,6 +443,27 @@ class EnhancedWebSocketService {
       symbols,
       filters: assetClass ? { assetClass } : undefined,
     });
+  }
+
+  // ENHANCED: Subscribe to live crypto data specifically (matches backend symbols)
+  async subscribeToCryptoUpdates(): Promise<string> {
+    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD'];
+    console.log('Subscribing to crypto price updates for symbols:', cryptoSymbols);
+
+    if (this.connection && this.connectionState.isConnected) {
+      try {
+        // Use the specific method that matches the backend SignalR hub
+        await this.connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', cryptoSymbols);
+        console.log('Successfully invoked SubscribeToPriceUpdates for CRYPTO');
+        return 'crypto-subscription';
+      } catch (error) {
+        console.error('Failed to subscribe to crypto updates:', error);
+        throw error;
+      }
+    } else {
+      console.warn('Cannot subscribe to crypto updates - connection not established');
+      throw new Error('WebSocket connection not established');
+    }
   }
 
   async subscribeToMarketStatus(markets?: string[]): Promise<string> {
@@ -464,7 +586,7 @@ class EnhancedWebSocketService {
         }
 
         // Check for common malformed JSON patterns
-        if (data.includes('\"') || data.includes('\\'))) {
+        if (data.includes('\"') || data.includes('\\')) {
           // Try to fix escaped quotes
           const cleanedData = data.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
           return JSON.parse(cleanedData);
@@ -477,7 +599,7 @@ class EnhancedWebSocketService {
       return data;
     } catch (error) {
       console.error(`Failed to parse WebSocket message for ${messageType}:`, {
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         rawData: typeof data === 'string' ? data.substring(0, 200) : data
       });
       return null;

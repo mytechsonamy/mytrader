@@ -110,7 +110,7 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   const [subscriptions, setSubscriptions] = useState<SymbolSubscription[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 
-  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://localhost:5002/api';
+  const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://192.168.68.103:5002/api';
   // CRITICAL FIX: Use correct hub URL that matches backend (hubs/market-data)
   const configuredHubUrl = (Constants.expoConfig?.extra?.WS_BASE_URL as string | undefined) || CFG_WS_BASE_URL;
   const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/dashboard');
