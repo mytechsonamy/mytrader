@@ -31,9 +31,9 @@ const Footer: React.FC<FooterProps> = ({ className = '' }) => {
 
           <div className="company-description">
             <p>
-              Techsonamy is a technology company specializing in professional financial applications
-              and trading platforms. myTrader is built and maintained by Techsonamy's experienced
-              team of financial technology specialists.
+              Advanced trading platform engineered for modern traders and financial professionals.
+              myTrader delivers institutional-grade market data, real-time analytics, and professional
+              trading tools with enterprise security and reliability.
             </p>
           </div>
         </div>
@@ -247,9 +247,9 @@ const Footer: React.FC<FooterProps> = ({ className = '' }) => {
               target="_blank"
               rel="noopener noreferrer"
               className="techsonamy-link"
-              aria-label="Visit Techsonamy website"
+              aria-label="Visit myTrader website"
             >
-              <strong>Techsonamy</strong>
+              <strong>myTrader</strong>
             </a>
           </div>
         </div>

@@ -1,24 +1,39 @@
-import React, { useState } from 'react';
-import { authService, RegisterRequest } from '../services/authService';
+import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { Button, Input } from './ui';
 import './Auth.css';
 
 interface RegisterProps {
-  onRegisterSuccess: () => void;
-  onSwitchToLogin: () => void;
+  onSwitchToLogin?: () => void;
+  onSuccess?: () => void;
+  isModal?: boolean;
 }
 
-const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onSwitchToLogin }) => {
-  const [formData, setFormData] = useState<RegisterRequest>({
+const Register: React.FC<RegisterProps> = ({ onSwitchToLogin, onSuccess, isModal = false }) => {
+  const { register, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+
+  useEffect(() => {
+    // Call onSuccess when authentication succeeds in modal mode
+    if (isAuthenticated && onSuccess) {
+      onSuccess();
+    }
+  }, [isAuthenticated, onSuccess]);
+
+  const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
-    phone: ''
+    username: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    // Clear error when component mounts
+    clearError();
+  }, [clearError]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -28,126 +43,162 @@ const Register: React.FC<RegisterProps> = ({ onRegisterSuccess, onSwitchToLogin 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation
-    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.phone) {
-      setError('All fields are required');
+
+    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.username) {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    if (formData.password !== formData.confirmPassword) {
+      // We should probably show this error in a better way
+      alert('Passwords do not match');
       return;
     }
-
-    setLoading(true);
-    setError(null);
 
     try {
-      await authService.register(formData);
-      onRegisterSuccess();
-    } catch (error: any) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
+      await register({
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        username: formData.username
+      });
+    } catch (error) {
+      // Error is handled by the store
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h2>Register for myTrader</h2>
-        
-        <form onSubmit={handleSubmit}>
+    <div className={`auth-container ${isModal ? 'auth-modal' : ''}`}>
+      <div className="auth-form">
+        <h2 className="auth-title">Create Account</h2>
+        <p className="auth-subtitle">Join myTrader and start trading smarter</p>
+
+        {error && (
+          <div className="auth-error">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form-fields">
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="firstName">First Name</label>
-              <input
-                type="text"
+              <Input
                 id="firstName"
                 name="firstName"
+                type="text"
                 value={formData.firstName}
-                onChange={handleInputChange}
-                required
+                onChange={handleChange}
                 placeholder="First name"
+                required
+                disabled={isLoading}
               />
             </div>
-            
+
             <div className="form-group">
               <label htmlFor="lastName">Last Name</label>
-              <input
-                type="text"
+              <Input
                 id="lastName"
                 name="lastName"
+                type="text"
                 value={formData.lastName}
-                onChange={handleInputChange}
-                required
+                onChange={handleChange}
                 placeholder="Last name"
+                required
+                disabled={isLoading}
               />
             </div>
           </div>
 
           <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
+            <label htmlFor="username">Username</label>
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              value={formData.username}
+              onChange={handleChange}
+              placeholder="Choose a username"
               required
-              placeholder="Enter your email"
+              disabled={isLoading}
             />
           </div>
 
           <div className="form-group">
-            <label htmlFor="phone">Phone</label>
-            <input
-              type="tel"
-              id="phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
+            <label htmlFor="email">Email</label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="Enter your email"
               required
-              placeholder="+905551234567"
+              disabled={isLoading}
             />
           </div>
 
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              type="password"
+            <Input
               id="password"
               name="password"
+              type="password"
               value={formData.password}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              placeholder="Create a password"
               required
-              placeholder="Enter your password (min 6 chars)"
+              disabled={isLoading}
             />
           </div>
 
-          {error && <div className="error-message">{error}</div>}
+          <div className="form-group">
+            <label htmlFor="confirmPassword">Confirm Password</label>
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              placeholder="Confirm your password"
+              required
+              disabled={isLoading}
+            />
+          </div>
 
-          <button 
-            type="submit" 
-            className="btn-primary"
-            disabled={loading}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={
+              isLoading ||
+              !formData.email ||
+              !formData.password ||
+              !formData.firstName ||
+              !formData.lastName ||
+              !formData.username ||
+              formData.password !== formData.confirmPassword
+            }
+            className="auth-submit"
           >
-            {loading ? 'Creating Account...' : 'Register'}
-          </button>
+            {isLoading ? 'Creating Account...' : 'Create Account'}
+          </Button>
         </form>
 
-        <div className="auth-footer">
-          <p>
-            Already have an account?{' '}
-            <button 
-              onClick={onSwitchToLogin}
-              className="link-button"
-            >
-              Login here
-            </button>
-          </p>
-        </div>
+        {onSwitchToLogin && (
+          <div className="auth-footer">
+            <p>
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={onSwitchToLogin}
+                className="auth-link"
+                disabled={isLoading}
+              >
+                Sign In
+              </button>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

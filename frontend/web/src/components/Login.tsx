@@ -1,21 +1,35 @@
-import React, { useState } from 'react';
-import { authService, LoginRequest } from '../services/authService';
+import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { Button, Input } from './ui';
 import './Auth.css';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
-  onSwitchToRegister: () => void;
+  onSwitchToRegister?: () => void;
+  onSuccess?: () => void;
+  isModal?: boolean;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToRegister }) => {
-  const [formData, setFormData] = useState<LoginRequest>({
+const Login: React.FC<LoginProps> = ({ onSwitchToRegister, onSuccess, isModal = false }) => {
+  const { login, isLoading, error, isAuthenticated, clearError } = useAuthStore();
+
+  useEffect(() => {
+    // Call onSuccess when authentication succeeds in modal mode
+    if (isAuthenticated && onSuccess) {
+      onSuccess();
+    }
+  }, [isAuthenticated, onSuccess]);
+
+  const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    // Clear error when component mounts
+    clearError();
+  }, [clearError]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -25,93 +39,84 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onSwitchToRegister }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!formData.email || !formData.password) {
-      setError('Email and password are required');
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      await authService.login(formData);
-      onLoginSuccess();
-    } catch (error: any) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
+      await login(formData);
+    } catch (error) {
+      // Error is handled by the store
     }
   };
 
-  // Quick test user login
-  const handleTestLogin = () => {
-    setFormData({
-      email: 'qatest@mytrader.com',
-      password: 'QATest123!'
-    });
-  };
-
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h2>Login to myTrader</h2>
-        
-        <form onSubmit={handleSubmit}>
+    <div className={`auth-container ${isModal ? 'auth-modal' : ''}`}>
+      <div className="auth-form">
+        <h2 className="auth-title">Welcome Back</h2>
+        <p className="auth-subtitle">Sign in to your myTrader account</p>
+
+        {error && (
+          <div className="auth-error">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form-fields">
           <div className="form-group">
             <label htmlFor="email">Email</label>
-            <input
-              type="email"
+            <Input
               id="email"
               name="email"
+              type="email"
               value={formData.email}
-              onChange={handleInputChange}
-              required
+              onChange={handleChange}
               placeholder="Enter your email"
+              required
+              disabled={isLoading}
             />
           </div>
 
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              type="password"
+            <Input
               id="password"
               name="password"
+              type="password"
               value={formData.password}
-              onChange={handleInputChange}
-              required
+              onChange={handleChange}
               placeholder="Enter your password"
+              required
+              disabled={isLoading}
             />
           </div>
 
-          {error && <div className="error-message">{error}</div>}
-
-          <button 
-            type="submit" 
-            className="btn-primary"
-            disabled={loading}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={isLoading || !formData.email || !formData.password}
+            className="auth-submit"
           >
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
+            {isLoading ? 'Signing In...' : 'Sign In'}
+          </Button>
         </form>
 
-        <div className="auth-footer">
-          <button 
-            onClick={handleTestLogin}
-            className="btn-secondary"
-          >
-            Use Test User
-          </button>
-          
-          <p>
-            Don't have an account?{' '}
-            <button 
-              onClick={onSwitchToRegister}
-              className="link-button"
-            >
-              Register here
-            </button>
-          </p>
-        </div>
+        {onSwitchToRegister && (
+          <div className="auth-footer">
+            <p>
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={onSwitchToRegister}
+                className="auth-link"
+                disabled={isLoading}
+              >
+                Sign Up
+              </button>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
