@@ -85,7 +85,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.formContainer}>
-            <Text style={styles.title}>🚀 Trader Dashboard</Text>
+            <Text style={styles.title}>myTrader</Text>
             <Text style={styles.subtitle}>Hesabınıza giriş yapın</Text>
 
             <View style={styles.inputContainer}>

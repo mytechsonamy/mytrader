@@ -33,11 +33,11 @@ public class BinanceKlinesClient
             {
                 any = true;
                 var openTime = DateTimeOffset.FromUnixTimeMilliseconds(item[0].GetInt64()).UtcDateTime;
-                var open = decimal.Parse(item[1].GetString() ?? "0");
-                var high = decimal.Parse(item[2].GetString() ?? "0");
-                var low = decimal.Parse(item[3].GetString() ?? "0");
-                var close = decimal.Parse(item[4].GetString() ?? "0");
-                var volume = decimal.Parse(item[5].GetString() ?? "0");
+                var open = decimal.Parse(item[1].GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                var high = decimal.Parse(item[2].GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                var low = decimal.Parse(item[3].GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                var close = decimal.Parse(item[4].GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                var volume = decimal.Parse(item[5].GetString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
                 var closeTime = DateTimeOffset.FromUnixTimeMilliseconds(item[6].GetInt64()).UtcDateTime;
 
                 yield return new Kline
