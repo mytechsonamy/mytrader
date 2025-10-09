@@ -70,8 +70,11 @@ const AssetCard: React.FC<AssetCardProps> = ({
     bbLower: (marketData?.price || 0) * 0.98,
   };
 
-  const formatPrice = (price: number, decimalPlaces: number = 2): string => {
-    if (price === 0) return '--';
+  const formatPrice = (price: number, useFixedDecimals: boolean = true): string => {
+    if (price === 0 || price === null || price === undefined) return '--';
+
+    // Always use 2 decimal places for display
+    const decimalPlaces = useFixedDecimals ? 2 : (symbol.priceDecimalPlaces || 2);
 
     // Determine currency based on asset class
     const currency = symbol.assetClassId === 'CRYPTO' ? 'USD' :
@@ -80,8 +83,8 @@ const AssetCard: React.FC<AssetCardProps> = ({
     return new Intl.NumberFormat('tr-TR', {
       style: 'currency',
       currency: currency,
-      minimumFractionDigits: Math.min(decimalPlaces, 8),
-      maximumFractionDigits: Math.min(decimalPlaces, 8),
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces,
     }).format(price);
   };
 
@@ -180,15 +183,24 @@ const AssetCard: React.FC<AssetCardProps> = ({
           </View>
 
           <View style={styles.compactRight}>
-            <Text style={styles.compactPrice}>
-              {formatPrice(marketData?.price || 0, symbol.priceDecimalPlaces)}
-            </Text>
-            <Text style={[
-              styles.compactChange,
-              { color: getChangeColor(marketData?.change || 0) }
-            ]}>
-              {marketData?.changePercent ? `${marketData.changePercent >= 0 ? '+' : ''}${marketData.changePercent.toFixed(2)}%` : '--'}
-            </Text>
+            {marketData ? (
+              <>
+                <Text style={styles.compactPrice}>
+                  {formatPrice(marketData.price, true)}
+                </Text>
+                <Text style={[
+                  styles.compactChange,
+                  { color: getChangeColor(marketData.changePercent || 0) }
+                ]}>
+                  {`${marketData.changePercent >= 0 ? '+' : ''}${marketData.changePercent.toFixed(2)}%`}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.compactPrice}>--</Text>
+                <Text style={styles.compactChange}>--</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -247,16 +259,23 @@ const AssetCard: React.FC<AssetCardProps> = ({
       </View>
 
       <View style={styles.priceSection}>
-        <Text style={styles.price}>
-          {formatPrice(marketData?.price || 0, symbol.priceDecimalPlaces)}
-        </Text>
-        {marketData && (
-          <Text style={[
-            styles.change,
-            { color: getChangeColor(marketData.change) }
-          ]}>
-            {formatChange(marketData.change, marketData.changePercent)}
-          </Text>
+        {marketData ? (
+          <>
+            <Text style={styles.price}>
+              {formatPrice(marketData.price, true)}
+            </Text>
+            <Text style={[
+              styles.change,
+              { color: getChangeColor(marketData.changePercent || 0) }
+            ]}>
+              {`${marketData.changePercent >= 0 ? '+' : ''}${marketData.changePercent.toFixed(2)}%`}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.price}>--</Text>
+            <Text style={styles.change}>Veri bekleniyor...</Text>
+          </>
         )}
       </View>
 
@@ -273,13 +292,13 @@ const AssetCard: React.FC<AssetCardProps> = ({
           <View style={styles.indicator}>
             <Text style={styles.indicatorLabel}>BB Üst</Text>
             <Text style={styles.indicatorValue}>
-              {formatPrice(mockIndicators.bbUpper, symbol.priceDecimalPlaces)}
+              {formatPrice(mockIndicators.bbUpper, true)}
             </Text>
           </View>
           <View style={styles.indicator}>
             <Text style={styles.indicatorLabel}>BB Alt</Text>
             <Text style={styles.indicatorValue}>
-              {formatPrice(mockIndicators.bbLower, symbol.priceDecimalPlaces)}
+              {formatPrice(mockIndicators.bbLower, true)}
             </Text>
           </View>
         </View>
@@ -305,9 +324,14 @@ const AssetCard: React.FC<AssetCardProps> = ({
         )}
       </View>
 
-      {marketData?.lastUpdated && (
+      {marketData?.timestamp && (
         <Text style={styles.lastUpdate}>
-          Son güncelleme: {new Date(marketData.lastUpdated).toLocaleTimeString('tr-TR')}
+          {symbol.assetClassName === 'STOCK' ? '🕐 ' : ''}
+          Son güncelleme: {new Date(marketData.timestamp).toLocaleTimeString('tr-TR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })}
         </Text>
       )}
     </TouchableOpacity>

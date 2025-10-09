@@ -25,6 +25,7 @@ import {
 import { apiService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePrices } from '../context/PriceContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   SmartOverviewHeader,
   AssetClassAccordion,
@@ -43,12 +44,13 @@ interface DashboardState {
   cryptoSymbols: EnhancedSymbolDto[];
   bistSymbols: EnhancedSymbolDto[];
   nasdaqSymbols: EnhancedSymbolDto[];
+  nyseSymbols: EnhancedSymbolDto[];
   marketStatuses: MarketStatusDto[];
   leaderboard: LeaderboardEntry[];
   userRanking: UserRanking | null;
   competitionStats: CompetitionStats | null;
   news: NewsItem[];
-  expandedSections: Record<AssetClassType, boolean>;
+  expandedSections: Record<string, boolean>; // Changed from AssetClassType to string for unique section keys
   isLoading: boolean;
   error: string | null;
 }
@@ -63,12 +65,14 @@ interface AssetClassConfig {
 const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<DashboardNavigationProp>();
   const { user } = useAuth();
+  const { colors } = useTheme();
   const {
     enhancedPrices,
     getSymbolsByAssetClass,
     getAssetClassSummary,
     refreshPrices,
     connectionStatus,
+    isLoading: priceDataLoading,
   } = usePrices();
 
   // Performance optimization
@@ -90,9 +94,9 @@ const DashboardScreen: React.FC = () => {
 
   // Asset class configurations
   const assetClassConfigs: AssetClassConfig[] = [
-    { type: 'CRYPTO', title: '🚀 Kripto', icon: '🚀', priority: 1 },
-    { type: 'STOCK', title: '🏢 BIST Hisseleri', icon: '🏢', priority: 2 },
-    { type: 'STOCK', title: '🇺🇸 NASDAQ Hisseleri', icon: '🇺🇸', priority: 3 },
+    { type: 'CRYPTO', title: 'Kripto', icon: '🚀', priority: 1 },
+    { type: 'STOCK', title: 'BIST Hisseleri', icon: '🏢', priority: 2 },
+    { type: 'STOCK', title: 'NASDAQ Hisseleri', icon: '🇺🇸', priority: 3 },
   ];
 
   const [state, setState] = useState<DashboardState>({
@@ -100,17 +104,17 @@ const DashboardScreen: React.FC = () => {
     cryptoSymbols: [],
     bistSymbols: [],
     nasdaqSymbols: [],
+    nyseSymbols: [],
     marketStatuses: [],
     leaderboard: [],
     userRanking: null,
     competitionStats: null,
     news: [],
     expandedSections: {
-      CRYPTO: true,
-      STOCK: false,
-      FOREX: false,
-      COMMODITY: false,
-      INDEX: false,
+      crypto: true,      // Each section has unique key now
+      bist: false,
+      nasdaq: false,
+      nyse: false,
     },
     isLoading: true,
     error: null,
@@ -129,15 +133,72 @@ const DashboardScreen: React.FC = () => {
     return getAssetClassSummary();
   }, [getAssetClassSummary]);
 
-  // Market data organized by symbol ID
+  // Market data organized by symbol ID with UUID mapping
   const marketDataBySymbol = useMemo(() => {
     const data: Record<string, UnifiedMarketDataDto> = {};
-    Object.entries(enhancedPrices).forEach(([symbolId, marketData]) => {
-      data[symbolId] = marketData;
-      data[marketData.symbol] = marketData; // Also index by symbol for compatibility
+
+    // Index all price data by ticker and symbolId
+    if (enhancedPrices && typeof enhancedPrices === 'object') {
+      Object.entries(enhancedPrices).forEach(([key, marketData]) => {
+        if (marketData && key) {
+          data[key] = marketData;
+          if (marketData.symbol) {
+            data[marketData.symbol] = marketData;
+          }
+          if (marketData.symbolId) {
+            data[marketData.symbolId] = marketData;
+          }
+        }
+      });
+    }
+
+    // Map symbol UUIDs to their price data by ticker
+    // This fixes the lookup issue where AssetClassAccordion looks up by UUID
+    const allSymbols = [
+      ...state.cryptoSymbols,
+      ...state.bistSymbols,
+      ...state.nasdaqSymbols,
+      ...state.nyseSymbols
+    ];
+
+    allSymbols.forEach(symbol => {
+      const priceData = data[symbol.symbol];
+      if (priceData && symbol.id) {
+        data[symbol.id] = priceData; // Map UUID → price data
+      }
     });
+
     return data;
+  }, [enhancedPrices, state.cryptoSymbols, state.bistSymbols, state.nasdaqSymbols, state.nyseSymbols]);
+
+  // DEBUG: Log when enhancedPrices changes
+  useEffect(() => {
+    const priceCount = Object.keys(enhancedPrices).length;
+    if (priceCount > 0) {
+      const samplePrices = Object.entries(enhancedPrices).slice(0, 2).map(([id, data]) =>
+        `${id}: $${data.price}`
+      );
+      console.log(`[Dashboard] Enhanced prices updated: ${priceCount} symbols`, samplePrices);
+    }
   }, [enhancedPrices]);
+
+  // DEBUG: Log stock lookup test
+  useEffect(() => {
+    if (Object.keys(marketDataBySymbol).length > 0) {
+      const sampleStock = state.bistSymbols[0] || state.nasdaqSymbols[0];
+      if (sampleStock) {
+        console.log('[Dashboard] Stock lookup test:', {
+          symbolId: sampleStock.id,
+          ticker: sampleStock.symbol,
+          foundById: !!marketDataBySymbol[sampleStock.id],
+          foundByTicker: !!marketDataBySymbol[sampleStock.symbol],
+          availableKeys: Object.keys(marketDataBySymbol).filter(k =>
+            marketDataBySymbol[k]?.assetClass === 'STOCK'
+          ).slice(0, 5)
+        });
+      }
+    }
+  }, [marketDataBySymbol, state.bistSymbols, state.nasdaqSymbols]);
 
   // Initialize dashboard data
   const initializeDashboard = useCallback(async () => {
@@ -155,34 +216,50 @@ const DashboardScreen: React.FC = () => {
         }
       }
 
-      // Fetch symbols by asset class
-      const [cryptoSymbols, marketStatuses] = await Promise.allSettled([
+      // Fetch symbols by asset class - backend now returns correct symbols dynamically
+      const [cryptoSymbolsResult, marketStatuses] = await Promise.allSettled([
         apiService.getSymbolsByAssetClass('CRYPTO'),
         apiService.getAllMarketStatuses(),
       ]);
 
-      // Fetch BIST symbols (Turkish stocks)
-      let bistSymbols: EnhancedSymbolDto[] = [];
-      try {
-        const allStocks = await apiService.getSymbolsByAssetClass('STOCK');
-        bistSymbols = allStocks.filter(symbol =>
-          symbol.marketId?.includes('BIST') ||
-          symbol.quoteCurrency === 'TRY'
-        );
-      } catch (error) {
-        console.warn('Failed to fetch BIST symbols:', error);
+      // Trust the API response - no filtering needed
+      // Backend manages which symbols to return via symbol preferences
+      const cryptoSymbols = cryptoSymbolsResult.status === 'fulfilled'
+        ? cryptoSymbolsResult.value
+        : [];
+
+      if (cryptoSymbols.length > 0) {
+        console.log(`[Dashboard] Loaded ${cryptoSymbols.length} crypto symbols:`, cryptoSymbols.map(s => s.symbol).join(', '));
       }
 
-      // Fetch NASDAQ symbols (US stocks)
+      // Fetch all stock symbols once and filter by marketName
+      let bistSymbols: EnhancedSymbolDto[] = [];
       let nasdaqSymbols: EnhancedSymbolDto[] = [];
+      let nyseSymbols: EnhancedSymbolDto[] = [];
+
       try {
         const allStocks = await apiService.getSymbolsByAssetClass('STOCK');
-        nasdaqSymbols = allStocks.filter(symbol =>
-          symbol.marketId?.includes('NASDAQ') ||
-          symbol.quoteCurrency === 'USD'
-        );
+        console.log(`[Dashboard] Loaded ${allStocks.length} total stock symbols`);
+
+        // Filter by market field (check both marketName and market for compatibility)
+        bistSymbols = (allStocks || []).filter(symbol => {
+          const marketValue = (symbol?.marketName || symbol?.market || '').toUpperCase();
+          return marketValue === 'BIST';
+        });
+
+        nasdaqSymbols = (allStocks || []).filter(symbol => {
+          const marketValue = (symbol?.marketName || symbol?.market || '').toUpperCase();
+          return marketValue === 'NASDAQ';
+        });
+
+        nyseSymbols = (allStocks || []).filter(symbol => {
+          const marketValue = (symbol?.marketName || symbol?.market || '').toUpperCase();
+          return marketValue === 'NYSE';
+        });
+
+        console.log(`[Dashboard] Filtered stocks - BIST: ${bistSymbols.length}, NASDAQ: ${nasdaqSymbols.length}, NYSE: ${nyseSymbols.length}`);
       } catch (error) {
-        console.warn('Failed to fetch NASDAQ symbols:', error);
+        console.warn('Failed to fetch stock symbols:', error);
       }
 
       // Fetch gamification data if user is logged in
@@ -223,9 +300,10 @@ const DashboardScreen: React.FC = () => {
       // Update state with all fetched data
       updateState({
         portfolio,
-        cryptoSymbols: cryptoSymbols.status === 'fulfilled' ? cryptoSymbols.value : [],
+        cryptoSymbols,
         bistSymbols,
         nasdaqSymbols,
+        nyseSymbols,
         marketStatuses: marketStatuses.status === 'fulfilled' ? marketStatuses.value : [],
         leaderboard,
         userRanking,
@@ -262,21 +340,23 @@ const DashboardScreen: React.FC = () => {
     }
   }, [refreshPrices, initializeDashboard]);
 
-  // Handle section toggle
-  const handleSectionToggle = useCallback((assetClass: AssetClassType, expanded: boolean) => {
+  // Handle section toggle - now uses section type (string) instead of AssetClassType
+  const handleSectionToggle = useCallback((sectionType: string, expanded: boolean) => {
     updateState({
       expandedSections: {
         ...state.expandedSections,
-        [assetClass]: expanded,
+        [sectionType]: expanded,
       },
     });
   }, [state.expandedSections, updateState]);
 
   // Navigation handlers
   const handleSymbolPress = useCallback((symbol: EnhancedSymbolDto) => {
-    // Navigate to symbol details or trading screen
-    console.log('Symbol pressed:', symbol.symbol);
-  }, []);
+    navigation.navigate('StrategyTest', {
+      symbol: symbol.symbol,
+      displayName: symbol.displayName,
+    });
+  }, [navigation]);
 
   const handleStrategyTest = useCallback((symbol: EnhancedSymbolDto) => {
     navigation.navigate('StrategyTest', {
@@ -345,13 +425,19 @@ const DashboardScreen: React.FC = () => {
       return undefined;
     }
     return state.marketStatuses.find(status => {
+      // Add null/undefined checks for marketName
+      if (!status || !status.marketName || typeof status.marketName !== 'string') {
+        return false;
+      }
+
+      const marketNameLower = status.marketName.toLowerCase();
       switch (assetClass) {
         case 'CRYPTO':
-          return status.marketName.toLowerCase().includes('crypto');
+          return marketNameLower.includes('crypto');
         case 'STOCK':
-          return status.marketName.toLowerCase().includes('stock') ||
-                 status.marketName.toLowerCase().includes('bist') ||
-                 status.marketName.toLowerCase().includes('nasdaq');
+          return marketNameLower.includes('stock') ||
+                 marketNameLower.includes('bist') ||
+                 marketNameLower.includes('nasdaq');
         default:
           return false;
       }
@@ -367,10 +453,12 @@ const DashboardScreen: React.FC = () => {
         return state.bistSymbols;
       case 'nasdaq':
         return state.nasdaqSymbols;
+      case 'nyse':
+        return state.nyseSymbols;
       default:
         return [];
     }
-  }, [state.cryptoSymbols, state.bistSymbols, state.nasdaqSymbols]);
+  }, [state.cryptoSymbols, state.bistSymbols, state.nasdaqSymbols, state.nyseSymbols]);
 
   // Render accordion sections
   const renderAccordionSections = () => {
@@ -378,27 +466,35 @@ const DashboardScreen: React.FC = () => {
       {
         type: 'crypto',
         assetClass: 'CRYPTO' as AssetClassType,
-        title: '🚀 Kripto',
+        title: 'Kripto',
         icon: '🚀',
         symbols: state.cryptoSymbols,
       },
       {
         type: 'bist',
         assetClass: 'STOCK' as AssetClassType,
-        title: '🏢 BIST Hisseleri',
+        title: 'BIST Hisseleri',
         icon: '🏢',
         symbols: state.bistSymbols,
       },
       {
         type: 'nasdaq',
         assetClass: 'STOCK' as AssetClassType,
-        title: '🇺🇸 NASDAQ Hisseleri',
+        title: 'NASDAQ Hisseleri',
         icon: '🇺🇸',
         symbols: state.nasdaqSymbols,
+      },
+      {
+        type: 'nyse',
+        assetClass: 'STOCK' as AssetClassType,
+        title: 'NYSE Hisseleri',
+        icon: '🗽',
+        symbols: state.nyseSymbols,
       },
     ];
 
     return sections.map((section) => {
+      console.log('marketDataBySymbol', marketDataBySymbol);
       const summary = assetClassSummary[section.assetClass];
       const marketStatus = getMarketStatusForAssetClass(section.assetClass);
 
@@ -416,10 +512,10 @@ const DashboardScreen: React.FC = () => {
             summary={summary}
             marketStatus={marketStatus?.status}
             nextChangeTime={marketStatus?.nextOpen || marketStatus?.nextClose}
-            isExpanded={state.expandedSections[section.assetClass]}
+            isExpanded={state.expandedSections[section.type]}
             maxVisibleItems={6}
-            isLoading={state.isLoading}
-            onToggle={handleSectionToggle}
+            isLoading={state.isLoading || priceDataLoading}
+            onToggle={(_, expanded) => handleSectionToggle(section.type, expanded)}
             onSymbolPress={handleSymbolPress}
             onStrategyTest={handleStrategyTest}
             onAddToWatchlist={handleAddToWatchlist}
@@ -453,7 +549,7 @@ const DashboardScreen: React.FC = () => {
 
   return (
     <DashboardErrorBoundary>
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <AccordionErrorBoundary sectionName="Genel Bakış">
           <SmartOverviewHeader
             portfolio={state.portfolio}
@@ -473,8 +569,8 @@ const DashboardScreen: React.FC = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor="#667eea"
-              colors={['#667eea']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         >
@@ -485,7 +581,7 @@ const DashboardScreen: React.FC = () => {
             {/* Strategist Competition Section */}
             <AccordionErrorBoundary sectionName="Strategist Yarışması">
               <CompactLeaderboard
-                leaderboard={state.leaderboard}
+                leaderboard={Array.isArray(state.leaderboard) ? state.leaderboard : []}
                 userRanking={state.userRanking}
                 stats={state.competitionStats}
                 isLoading={state.isLoading}
@@ -503,7 +599,7 @@ const DashboardScreen: React.FC = () => {
             {/* Enhanced News Section */}
             <AccordionErrorBoundary sectionName="Piyasa Haberleri">
               <EnhancedNewsPreview
-                news={state.news}
+                news={Array.isArray(state.news) ? state.news : []}
                 isLoading={state.isLoading}
                 maxItems={6}
                 showImages={true}
@@ -521,8 +617,8 @@ const DashboardScreen: React.FC = () => {
 
             {/* Performance Debug Info (Development Only) */}
             {__DEV__ && (
-              <View style={styles.debugInfo}>
-                <Text style={styles.debugText}>
+              <View style={[styles.debugInfo, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.debugText, { color: colors.textSecondary }]}>
                   Renders: {metrics.renderCount} | Avg: {metrics.averageRenderTime.toFixed(1)}ms | Quality: {performanceUtils.getAdaptiveQuality()}
                 </Text>
               </View>
@@ -549,7 +645,6 @@ const DashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   scrollView: {
     flex: 1,
@@ -557,16 +652,15 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 32,
+    flex: 1,
   },
   debugInfo: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
     padding: 8,
     borderRadius: 4,
     marginTop: 16,
   },
   debugText: {
     fontSize: 10,
-    color: '#666',
     fontFamily: 'monospace',
     textAlign: 'center',
   },
