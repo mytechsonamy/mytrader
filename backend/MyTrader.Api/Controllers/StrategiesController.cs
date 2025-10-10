@@ -93,7 +93,8 @@ public class StrategiesController : ControllerBase
         try
         {
             var userId = GetUserId();
-            _logger.LogInformation("Creating strategy for user: {UserId}", userId);
+            _logger.LogInformation("🎯 CreateStrategy: Creating strategy for user: {UserId}", userId);
+            _logger.LogInformation("📋 CreateStrategy: Request data - Name: {Name}, Symbol: {Symbol}", request.Name, request.Symbol);
             
             // Create new UserStrategy entity
             var userStrategy = new MyTrader.Core.Models.UserStrategy
@@ -225,7 +226,8 @@ public class StrategiesController : ControllerBase
         try
         {
             var userId = GetUserId();
-            
+            _logger.LogInformation("🔍 GetUserStrategies: Loading strategies for user: {UserId}", userId);
+
             var strategies = await _context.UserStrategies
                 .Where(s => s.UserId == userId)
                 .Select(s => new

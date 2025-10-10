@@ -11,7 +11,7 @@ const axios = require('axios');
 
 // Configuration
 const CONFIG = {
-    API_BASE_URL: 'http://localhost:5245/api',
+    API_BASE_URL: 'http://localhost:8080/api',
     STOCK_SCRAPPER_DATA_PATH: '/Users/mustafayildirim/Documents/Personal Documents/Projects/Stock_Scrapper/DATA',
     BATCH_SIZE: 5, // Files per batch
     DELAY_BETWEEN_BATCHES: 2000, // 2 seconds

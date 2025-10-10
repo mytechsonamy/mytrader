@@ -8,6 +8,7 @@ import {
   MarketOverviewDto, TopMoversDto, PagedResponse, ApiResponse, RequestConfig,
   LeaderboardEntry, UserRanking, CompetitionStats, NewsItem
 } from '../types';
+import { SymbolCache } from './symbolCache';
 
 // API base URL is configured via app.json extra; falls back to localhost
 
@@ -22,46 +23,85 @@ class ApiService {
 
   private buildCandidates(baseUrl: string, path: string): string[] {
     const base = baseUrl.replace(/\/$/, '');
-    const hasApiSuffix = base.endsWith('/api');
-    const trimmed = hasApiSuffix ? base.slice(0, -4) : base; // remove /api if present
-    const ensuredApiBase = hasApiSuffix ? base : `${trimmed}/api`; // add /api if missing
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const withV1 = cleanPath.startsWith('/v1/') ? cleanPath : `/v1${cleanPath}`;
+
+    // Check if base already has /v1 suffix (this is the bug we're fixing)
+    const hasV1Suffix = base.endsWith('/v1');
+    const hasApiSuffix = base.endsWith('/api') || hasV1Suffix;
+
+    // Get the root URL without any API suffix
+    const rootUrl = hasV1Suffix
+      ? base.slice(0, -3) // Remove /v1
+      : hasApiSuffix
+        ? base.slice(0, -4) // Remove /api
+        : base;
+
+    // Build standardized base URLs
+    const apiBase = `${rootUrl}/api`;
+    const v1Base = `${rootUrl}/api/v1`;
+
+    // Ensure path has proper /v1 prefix when needed
+    const withV1Path = cleanPath.startsWith('/v1/') ? cleanPath : `/v1${cleanPath}`;
+    const withoutV1Path = cleanPath.startsWith('/v1/') ? cleanPath.substring(3) : cleanPath;
 
     const candidates = [
-      // As-is
-      `${base}${cleanPath}`,
-      `${base}${withV1}`,
-      // Without /api (if present)
-      `${trimmed}${cleanPath}`,
-      `${trimmed}${withV1}`,
-      // With /api (if missing)
-      `${ensuredApiBase}${cleanPath}`,
-      `${ensuredApiBase}${withV1}`,
+      // Primary: /api/v1/path (most likely to work with current backend)
+      `${v1Base}${withoutV1Path}`,
+      // Fallback: /api/path (without version)
+      `${apiBase}${withoutV1Path}`,
+      // Legacy: direct path on root
+      `${rootUrl}${withV1Path}`,
+      `${rootUrl}${withoutV1Path}`,
+      // Original base + path (as-is)
+      `${base}${withoutV1Path}`,
     ];
+
     // De-duplicate while preserving order
     return Array.from(new Set(candidates));
   }
 
   private async postJsonWithFallback<T>(path: string, body: any, baseUrl: string = API_BASE_URL): Promise<Response> {
     const urls = this.buildCandidates(baseUrl, path);
+    console.log(`POST ${path} - URL candidates:`, urls);
+
     let lastResponse: Response | null = null;
     for (const url of urls) {
-      console.log(`POST try: ${url}`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (res.status === 404) {
-        console.warn(`404 on ${url}, trying next candidate (if any)`);
-        lastResponse = res;
+      console.log(`POST attempting: ${url}`);
+      try {
+        const headers = await this.getHeaders();
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body),
+        });
+
+        console.log(`POST ${url} -> ${res.status} ${res.statusText}`);
+
+        if (res.status === 404) {
+          console.warn(`404 on ${url}, trying next candidate (if any)`);
+          lastResponse = res;
+          continue;
+        }
+
+        console.log(`POST success on: ${url}`);
+        return res;
+      } catch (error) {
+        console.error(`POST failed on ${url}:`, error);
+        if (urls.indexOf(url) === urls.length - 1) {
+          // This was the last URL, throw the error
+          throw error;
+        }
+        // Try next URL
         continue;
       }
-      return res;
     }
+
     // If all 404, return last 404 so caller surfaces error properly
-    if (lastResponse) return lastResponse;
+    if (lastResponse) {
+      console.error(`All POST attempts failed with 404. Last response from: ${urls[urls.length - 1]}`);
+      return lastResponse;
+    }
+
     // Should not reach here normally
     throw new Error('No response from any candidate URL');
   }
@@ -73,6 +113,8 @@ class ApiService {
   private async getHeaders(): Promise<HeadersInit> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      'X-Client-Type': 'mobile',
+      'User-Agent': `mytrader-mobile/${Platform.OS}`,
     };
 
     if (this.sessionToken) {
@@ -89,7 +131,7 @@ class ApiService {
   private async handleResponse<T>(response: Response): Promise<T> {
     // Clone the response so we can read it multiple times if needed
     const responseClone = response.clone();
-    
+
     if (!response.ok) {
       let message: string = `HTTP Error: ${response.status}`;
       let code: string | undefined;
@@ -115,28 +157,63 @@ class ApiService {
       err.status = response.status;
       throw err;
     }
-    return await response.json();
+
+    // CRITICAL FIX: Handle ApiResponse<T> wrapper format from backend
+    const jsonData = await response.json();
+
+    // Check if this is an ApiResponse<T> wrapper (has data property)
+    if (jsonData && typeof jsonData === 'object' && 'data' in jsonData) {
+      // Backend returned ApiResponse<T> format - unwrap the data
+      console.log('Unwrapping ApiResponse<T> format, data:', jsonData.data);
+      return jsonData.data as T;
+    }
+
+    // Backend returned direct T object - return as-is for backward compatibility
+    console.log('Using direct response format, data:', jsonData);
+    return jsonData as T;
   }
 
   // Authentication APIs
   async login(email: string, password: string): Promise<UserSession> {
-    console.log('Login attempt:', email);
-    
+    console.log('Login attempt for:', email);
+    console.log('Using API_BASE_URL:', API_BASE_URL);
+
     try {
-      const response = await this.postJsonWithFallback<UserSession>('/auth/login', { email: email, password: password }, API_BASE_URL);
+      const loginPayload = { email: email, password: password };
+      console.log('Login payload:', JSON.stringify(loginPayload, null, 2));
+
+      const response = await this.postJsonWithFallback<UserSession>('/auth/login', loginPayload, API_BASE_URL);
+      console.log('Login response status:', response.status, response.statusText);
 
       const session = await this.handleResponse<UserSession>(response);
-      
+
       // Store session data
       this.sessionToken = session.accessToken;
       await AsyncStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, session.accessToken);
       await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(session.user));
-      
-      console.log('Login successful');
+
+      console.log('Login successful for user:', session.user?.email || session.user?.first_name);
       return session;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error instanceof Error ? error : new Error('Giriş sırasında bir hata oluştu.');
+    } catch (error: any) {
+      console.error('Login error details:', {
+        message: error?.message || 'Unknown error',
+        status: error?.status || 'No status',
+        code: error?.code || 'No code',
+        stack: error?.stack?.substring(0, 200) || 'No stack'
+      });
+
+      // Provide more specific error messages
+      if (error?.status === 404) {
+        throw new Error('Sunucu endpoint\'ine erişilemiyor. Lütfen uygulama yapılandırmasını kontrol edin.');
+      } else if (error?.status === 401) {
+        throw new Error('E-posta veya şifre hatalı. Lütfen bilgilerinizi kontrol edin.');
+      } else if (error?.status === 500) {
+        throw new Error('Sunucu hatası. Lütfen daha sonra tekrar deneyin.');
+      } else if (error?.message?.includes('Network')) {
+        throw new Error('Ağ bağlantısı sorunu. İnternet bağlantınızı kontrol edin.');
+      }
+
+      throw error instanceof Error ? error : new Error('Giriş sırasında beklenmeyen bir hata oluştu.');
     }
   }
 
@@ -271,8 +348,19 @@ class ApiService {
     }
   }
 
+  private async getCurrentUserId(): Promise<string | null> {
+    try {
+      const user = await this.getCurrentUser();
+      return user?.id || null;
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+      return null;
+    }
+  }
+
   // Strategy APIs
   async createStrategy(strategy: StrategyConfig, symbol: string): Promise<{ success: boolean; message: string; strategy_id?: string }> {
+    console.log('🔍 createStrategy: Starting strategy creation');
     const requestBody = {
       name: strategy.name,
       description: strategy.description || '',
@@ -281,13 +369,32 @@ class ApiService {
       parameters: strategy.parameters
     };
 
-    const response = await fetch(`${API_BASE_URL}/v1/strategies/create`, {
-      method: 'POST',
-      headers: await this.getHeaders(),
-      body: JSON.stringify(requestBody),
-    });
+    console.log('📋 createStrategy: Request body:', requestBody);
+    const url = `${API_BASE_URL}/v1/strategies/create`;
+    console.log('🌐 createStrategy: Making request to:', url);
 
-    return await this.handleResponse(response);
+    try {
+      const headers = await this.getHeaders();
+      console.log('📋 createStrategy: Headers:', headers);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('📡 createStrategy: Response status:', response.status, response.statusText);
+
+      const result = await this.handleResponse(response);
+      console.log('✅ createStrategy: API response:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ createStrategy: API error:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Strateji kaydedilemedi'
+      };
+    }
   }
 
   async testStrategy(strategyId: string, symbol: string): Promise<BacktestResult> {
@@ -301,20 +408,42 @@ class ApiService {
   }
 
   async getUserStrategies(): Promise<{ success: boolean; data?: any[]; message?: string }> {
-    console.log('getUserStrategies: sessionToken exists?', !!this.sessionToken);
+    console.log('🔍 getUserStrategies: Starting API call');
+    console.log('🔑 getUserStrategies: sessionToken exists?', !!this.sessionToken);
     const headers = await this.getHeaders();
-    console.log('getUserStrategies: headers', headers);
-    
-    const response = await fetch(`${API_BASE_URL}/v1/strategies/my-strategies`, {
-      headers,
-    });
+    console.log('📋 getUserStrategies: headers', headers);
+
+    const url = `${API_BASE_URL}/v1/strategies/my-strategies`;
+    console.log('🌐 getUserStrategies: Making request to:', url);
 
     try {
-      const result = await this.handleResponse<{ success: boolean; data: any[] }>(response);
-      console.log('getUserStrategies: API response', result);
-      return { success: result.success, data: result.data };
+      const response = await fetch(url, {
+        headers,
+      });
+
+      console.log('📡 getUserStrategies: Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Backend returns direct array, not wrapped in success object
+      const data = await response.json();
+      console.log('✅ getUserStrategies: Raw API response', data);
+
+      // Check if response is array (from backend) or wrapped object
+      if (Array.isArray(data)) {
+        console.log('📊 getUserStrategies: Backend returned array with', data.length, 'strategies');
+        return { success: true, data: data };
+      } else if (data && typeof data === 'object' && 'success' in data) {
+        console.log('📊 getUserStrategies: Backend returned wrapped response');
+        return data;
+      } else {
+        console.log('❌ getUserStrategies: Unexpected response format');
+        return { success: false, message: 'Unexpected response format' };
+      }
     } catch (e: any) {
-      console.error('getUserStrategies: API error', e);
+      console.error('❌ getUserStrategies: API error', e);
       return { success: false, message: e?.message || 'Failed to load strategies' };
     }
   }
@@ -843,41 +972,181 @@ class ApiService {
     return await this.handleResponse(response);
   }
 
+  // ====== SYMBOL PREFERENCE APIs ======
+
+  /**
+   * Get default symbols for an asset class (no authentication required)
+   * @param assetClass The asset class (e.g., 'CRYPTO', 'STOCK')
+   * @returns Default symbols for the asset class
+   */
+  async getDefaultSymbols(assetClass: string): Promise<EnhancedSymbolDto[]> {
+    try {
+      console.log(`[API] Fetching default symbols for ${assetClass}`);
+      const response = await fetch(
+        `${API_BASE_URL}/symbol-preferences/defaults?assetClass=${encodeURIComponent(assetClass)}`,
+        {
+          headers: await this.getHeaders(),
+        }
+      );
+
+      // Handle wrapper response format with symbols property
+      const data = await this.handleResponse<any>(response);
+      const symbols = data.symbols || data; // Extract symbols array from wrapper
+      console.log(`[API] Received ${symbols.length} default symbols for ${assetClass}`);
+      return symbols;
+    } catch (error) {
+      console.error(`[API] Failed to fetch default symbols for ${assetClass}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user-specific symbol preferences for an asset class
+   * @param userId The user ID
+   * @param assetClass The asset class (e.g., 'CRYPTO', 'STOCK')
+   * @returns User's preferred symbols for the asset class
+   */
+  async getUserSymbolPreferences(userId: string, assetClass: string): Promise<EnhancedSymbolDto[]> {
+    try {
+      console.log(`[API] Fetching user symbol preferences for ${userId}, ${assetClass}`);
+      const response = await fetch(
+        `${API_BASE_URL}/symbol-preferences/user/${userId}?assetClass=${encodeURIComponent(assetClass)}`,
+        {
+          headers: await this.getHeaders(),
+        }
+      );
+
+      // Handle wrapper response format with symbols property
+      const data = await this.handleResponse<any>(response);
+      const symbols = data.symbols || data; // Extract symbols array from wrapper
+      console.log(`[API] Received ${symbols.length} user symbols for ${assetClass}`);
+      return symbols;
+    } catch (error) {
+      console.error(`[API] Failed to fetch user symbol preferences:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user's symbol preferences
+   * @param userId The user ID
+   * @param symbolIds Array of symbol IDs to set as user preferences
+   */
+  async updateUserSymbolPreferences(userId: string, symbolIds: string[]): Promise<void> {
+    try {
+      console.log(`[API] Updating user symbol preferences for ${userId}:`, symbolIds.length, 'symbols');
+      const response = await fetch(
+        `${API_BASE_URL}/symbol-preferences/user/${userId}`,
+        {
+          method: 'PUT',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({ symbolIds }),
+        }
+      );
+
+      await this.handleResponse(response);
+      console.log(`[API] Successfully updated user symbol preferences`);
+    } catch (error) {
+      console.error(`[API] Failed to update user symbol preferences:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get symbols by asset class with intelligent caching and user preference support
+   * @param assetClassId The asset class (e.g., 'CRYPTO', 'STOCK')
+   * @param config Optional request configuration
+   * @returns Array of symbols for the asset class
+   */
   async getSymbolsByAssetClass(assetClassId: string, config?: RequestConfig): Promise<EnhancedSymbolDto[]> {
+    try {
+      // Step 1: Try to get from cache first
+      const userId = await this.getCurrentUserId();
+      const cachedSymbols = await SymbolCache.get(assetClassId, userId || undefined);
+
+      if (cachedSymbols && cachedSymbols.length > 0) {
+        console.log(`[API] Using cached symbols for ${assetClassId}: ${cachedSymbols.length} symbols`);
+        return cachedSymbols;
+      }
+
+      // Step 2: Fetch from API with retry logic
+      const symbols = await this.fetchSymbolsWithRetry(assetClassId, userId, config);
+
+      // Step 3: Cache the result
+      if (symbols && symbols.length > 0) {
+        await SymbolCache.set(assetClassId, symbols, userId || undefined);
+      }
+
+      return symbols;
+    } catch (error) {
+      console.error(`[API] Failed to get symbols for ${assetClassId}:`, error);
+
+      // Step 4: Try to use stale cache as last resort
+      const userId = await this.getCurrentUserId();
+      const staleCache = await SymbolCache.get(assetClassId, userId || undefined);
+      if (staleCache && staleCache.length > 0) {
+        console.warn(`[API] Using stale cache for ${assetClassId} due to error`);
+        return staleCache;
+      }
+
+      // Step 5: Use minimal fallback only for emergencies
+      console.warn(`[API] Using minimal fallback for ${assetClassId}`);
+      return this.getMinimalFallback(assetClassId);
+    }
+  }
+
+  /**
+   * Fetch symbols from API with retry logic and user preference support
+   */
+  private async fetchSymbolsWithRetry(
+    assetClassId: string,
+    userId: string | null,
+    config?: RequestConfig
+  ): Promise<EnhancedSymbolDto[]> {
     const maxRetries = 3;
     const retryDelays = [1000, 2000, 4000]; // Exponential backoff
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const response = await fetch(`${API_BASE_URL}/v1/symbols/by-asset-class/${assetClassId}`, {
-          headers: await this.getHeaders(),
-          signal: config?.abortSignal,
-        });
+        // Use user-specific preferences if logged in, otherwise use defaults
+        let symbols: EnhancedSymbolDto[];
+
+        if (userId) {
+          try {
+            symbols = await this.getUserSymbolPreferences(userId, assetClassId);
+          } catch (error) {
+            console.warn(`[API] Failed to fetch user preferences, falling back to defaults:`, error);
+            symbols = await this.getDefaultSymbols(assetClassId);
+          }
+        } else {
+          symbols = await this.getDefaultSymbols(assetClassId);
+        }
+
+        // Validate response
+        if (!symbols || !Array.isArray(symbols)) {
+          throw new Error('Invalid response format from symbol API');
+        }
+
+        return symbols;
+      } catch (error: any) {
+        console.warn(`[API] Fetch attempt ${attempt + 1}/${maxRetries} failed for ${assetClassId}:`, error.message);
 
         // Handle specific HTTP error codes
-        if (response.status === 409) {
-          console.warn(`HTTP 409 conflict for ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries})`);
+        if (error.status === 409) {
+          console.warn(`HTTP 409 conflict for ${assetClassId} symbols`);
           if (attempt < maxRetries - 1) {
             await this.delay(retryDelays[attempt]);
             continue;
           }
-          // On final attempt, return fallback data for 409 errors
-          console.warn(`Returning fallback data for ${assetClassId} after ${maxRetries} attempts`);
-          return this.getFallbackSymbolsData(assetClassId);
         }
 
-        if (response.status === 429) {
-          // Rate limited - wait longer
-          console.warn(`Rate limited for ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries})`);
+        if (error.status === 429) {
+          console.warn(`Rate limited for ${assetClassId} symbols`);
           if (attempt < maxRetries - 1) {
             await this.delay(retryDelays[attempt] * 2); // Double delay for rate limiting
             continue;
           }
         }
-
-        return await this.handleResponse(response);
-      } catch (error: any) {
-        console.warn(`Failed to fetch ${assetClassId} symbols (attempt ${attempt + 1}/${maxRetries}):`, error);
 
         // On network errors, retry with exponential backoff
         if (attempt < maxRetries - 1 && this.isRetryableError(error)) {
@@ -885,14 +1154,12 @@ class ApiService {
           continue;
         }
 
-        // On final attempt or non-retryable error, return fallback data
-        console.warn(`Returning fallback data for ${assetClassId} due to error:`, error.message);
-        return this.getFallbackSymbolsData(assetClassId);
+        // On final attempt, throw to trigger fallback logic
+        throw error;
       }
     }
 
-    // Fallback if somehow we get here
-    return this.getFallbackSymbolsData(assetClassId);
+    throw new Error(`Failed to fetch symbols after ${maxRetries} attempts`);
   }
 
   private delay(ms: number): Promise<void> {
@@ -919,7 +1186,7 @@ class ApiService {
     // Filter by asset class if specified
     if (assetClass) {
       filteredData = allFallbackData.filter(symbol =>
-        symbol.assetClassName.toUpperCase() === assetClass.toUpperCase()
+        symbol.assetClassName && symbol.assetClassName.toUpperCase() === assetClass.toUpperCase()
       );
     }
 
@@ -935,11 +1202,18 @@ class ApiService {
     return filteredData.slice(0, 20); // Limit results
   }
 
-  private getFallbackSymbolsData(assetClassId: string): EnhancedSymbolDto[] {
+  /**
+   * Minimal fallback symbols for emergency offline mode
+   * Only BTC and ETH to ensure basic functionality
+   */
+  private getMinimalFallback(assetClassId: string): EnhancedSymbolDto[] {
+    console.warn(`[API] Using MINIMAL emergency fallback for ${assetClassId} - network connectivity issue`);
+
     if (assetClassId.toUpperCase() === 'CRYPTO') {
+      // Only BTC and ETH for emergency fallback
       return [
         {
-          id: '1',
+          id: 'btc-fallback',
           symbol: 'BTC',
           displayName: 'Bitcoin',
           assetClassId: 'crypto-1',
@@ -962,7 +1236,7 @@ class ApiService {
           createdAt: new Date().toISOString()
         },
         {
-          id: '2',
+          id: 'eth-fallback',
           symbol: 'ETH',
           displayName: 'Ethereum',
           assetClassId: 'crypto-1',
@@ -983,105 +1257,11 @@ class ApiService {
           sector: 'Digital Assets',
           industry: 'Cryptocurrency',
           createdAt: new Date().toISOString()
-        },
-        {
-          id: '3',
-          symbol: 'ADA',
-          displayName: 'Cardano',
-          assetClassId: 'crypto-1',
-          assetClassName: 'CRYPTO',
-          marketId: 'crypto-market',
-          marketName: 'Crypto Market',
-          baseCurrency: 'ADA',
-          quoteCurrency: 'USDT',
-          isActive: true,
-          isTracked: true,
-          minTradeAmount: 1,
-          maxTradeAmount: 1000000,
-          priceDecimalPlaces: 4,
-          quantityDecimalPlaces: 0,
-          tickSize: 0.0001,
-          lotSize: 1,
-          description: 'Cardano cryptocurrency',
-          sector: 'Digital Assets',
-          industry: 'Cryptocurrency',
-          createdAt: new Date().toISOString()
-        }
-      ];
-    } else if (assetClassId.toUpperCase() === 'STOCK') {
-      return [
-        {
-          id: '4',
-          symbol: 'TUPRS',
-          displayName: 'Tüpraş',
-          assetClassId: 'stock-1',
-          assetClassName: 'STOCK',
-          marketId: 'bist-market',
-          marketName: 'BIST Market',
-          baseCurrency: 'TUPRS',
-          quoteCurrency: 'TRY',
-          isActive: true,
-          isTracked: true,
-          minTradeAmount: 1,
-          maxTradeAmount: 1000000,
-          priceDecimalPlaces: 2,
-          quantityDecimalPlaces: 0,
-          tickSize: 0.01,
-          lotSize: 1,
-          description: 'Tüpraş stock traded on BIST',
-          sector: 'Energy',
-          industry: 'Oil & Gas',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '5',
-          symbol: 'AAPL',
-          displayName: 'Apple Inc.',
-          assetClassId: 'stock-1',
-          assetClassName: 'STOCK',
-          marketId: 'nasdaq-market',
-          marketName: 'NASDAQ Market',
-          baseCurrency: 'AAPL',
-          quoteCurrency: 'USD',
-          isActive: true,
-          isTracked: true,
-          minTradeAmount: 1,
-          maxTradeAmount: 1000000,
-          priceDecimalPlaces: 2,
-          quantityDecimalPlaces: 0,
-          tickSize: 0.01,
-          lotSize: 1,
-          description: 'Apple Inc. stock traded on NASDAQ',
-          sector: 'Technology',
-          industry: 'Consumer Electronics',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '6',
-          symbol: 'MSFT',
-          displayName: 'Microsoft Corporation',
-          assetClassId: 'stock-1',
-          assetClassName: 'STOCK',
-          marketId: 'nasdaq-market',
-          marketName: 'NASDAQ Market',
-          baseCurrency: 'MSFT',
-          quoteCurrency: 'USD',
-          isActive: true,
-          isTracked: true,
-          minTradeAmount: 1,
-          maxTradeAmount: 1000000,
-          priceDecimalPlaces: 2,
-          quantityDecimalPlaces: 0,
-          tickSize: 0.01,
-          lotSize: 1,
-          description: 'Microsoft Corporation stock traded on NASDAQ',
-          sector: 'Technology',
-          industry: 'Software',
-          createdAt: new Date().toISOString()
         }
       ];
     }
 
+    // No fallback for other asset classes in minimal mode
     return [];
   }
 
@@ -1144,11 +1324,35 @@ class ApiService {
   }
 
   async getMarketOverview(config?: RequestConfig): Promise<MarketOverviewDto> {
-    const response = await fetch(`${API_BASE_URL}/v1/market-data/overview`, {
-      headers: await this.getHeaders(),
-      signal: config?.abortSignal,
-    });
-    return await this.handleResponse(response);
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/market-data/overview`, {
+        headers: await this.getHeaders(),
+        signal: config?.abortSignal,
+      });
+
+      // CRITICAL FIX: Use enhanced handleResponse for proper ApiResponse<T> unwrapping
+      const result = await this.handleResponse<MarketOverviewDto>(response);
+      console.log('getMarketOverview result after unwrapping:', result);
+
+      return result;
+    } catch (error: any) {
+      console.warn('Failed to fetch market overview:', error);
+
+      // Return fallback market overview data
+      return {
+        totalMarketValue: 0,
+        totalDailyChange: 0,
+        totalDailyChangePercent: 0,
+        activeMarkets: 3,
+        totalSymbols: 0,
+        cryptoMarketCap: 0,
+        stockMarketValue: 0,
+        topGainer: { symbol: '', change: 0 },
+        topLoser: { symbol: '', change: 0 },
+        mostActive: { symbol: '', volume: 0 },
+        timestamp: new Date().toISOString()
+      };
+    }
   }
 
   async getTopMovers(assetClass?: string, config?: RequestConfig): Promise<TopMoversDto> {
@@ -1158,6 +1362,70 @@ class ApiService {
       signal: config?.abortSignal,
     });
     return await this.handleResponse(response);
+  }
+
+  // New volume leaders endpoint integration
+  async getTopByVolume(perClass: number = 8, config?: RequestConfig): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/market-data/top-by-volume?perClass=${perClass}`, {
+        headers: await this.getHeaders(),
+        signal: config?.abortSignal,
+      });
+
+      // CRITICAL FIX: Properly handle ApiResponse<T> unwrapping for volume data
+      const result = await this.handleResponse(response);
+      console.log('getTopByVolume result after unwrapping:', result);
+
+      // Validate that we have the expected data structure
+      if (result && typeof result === 'object') {
+        // Check if it's already in the expected format (CRYPTO, STOCK keys)
+        const hasExpectedKeys = Object.keys(result).some(key => ['CRYPTO', 'STOCK'].includes(key));
+        if (hasExpectedKeys) {
+          return result;
+        }
+      }
+
+      // If result doesn't have expected format, return fallback
+      console.warn('getTopByVolume: Unexpected data format, using fallback');
+      return this.getFallbackVolumeLeadersData(perClass);
+    } catch (error: any) {
+      console.warn('Failed to fetch top volume leaders:', error);
+
+      // Return fallback mock volume data
+      return this.getFallbackVolumeLeadersData(perClass);
+    }
+  }
+
+  private getFallbackVolumeLeadersData(perClass: number): any {
+    const mockData = {
+      CRYPTO: [
+        { symbol: 'BTC', displayName: 'Bitcoin', volume: 25_000_000_000, price: 43_500, change: 2.5 },
+        { symbol: 'ETH', displayName: 'Ethereum', volume: 15_000_000_000, price: 2_650, change: 3.2 },
+        { symbol: 'BNB', displayName: 'Binance Coin', volume: 8_000_000_000, price: 320, change: -1.1 },
+        { symbol: 'ADA', displayName: 'Cardano', volume: 5_000_000_000, price: 0.45, change: 1.8 },
+        { symbol: 'SOL', displayName: 'Solana', volume: 4_500_000_000, price: 85, change: 4.3 },
+        { symbol: 'XRP', displayName: 'Ripple', volume: 3_800_000_000, price: 0.62, change: -0.5 },
+        { symbol: 'DOGE', displayName: 'Dogecoin', volume: 2_200_000_000, price: 0.08, change: 0.9 },
+        { symbol: 'AVAX', displayName: 'Avalanche', volume: 1_800_000_000, price: 28, change: 2.1 },
+      ],
+      STOCK: [
+        { symbol: 'TUPRS', displayName: 'Tüpraş', volume: 2_500_000, price: 58.5, change: 1.2 },
+        { symbol: 'AKBNK', displayName: 'Akbank', volume: 180_000_000, price: 12.8, change: -0.8 },
+        { symbol: 'THYAO', displayName: 'THY', volume: 85_000_000, price: 95.2, change: 2.3 },
+        { symbol: 'BIMAS', displayName: 'BİM', volume: 45_000_000, price: 185, change: 0.7 },
+        { symbol: 'TCELL', displayName: 'Turkcell', volume: 38_000_000, price: 14.5, change: 1.9 },
+        { symbol: 'SAHOL', displayName: 'Sabancı Holding', volume: 32_000_000, price: 25.8, change: -1.3 },
+        { symbol: 'EREGL', displayName: 'Erdemir', volume: 28_000_000, price: 42.3, change: 3.1 },
+        { symbol: 'KCHOL', displayName: 'Koç Holding', volume: 25_000_000, price: 78.5, change: 0.4 },
+      ]
+    };
+
+    const result: any = {};
+    for (const [assetClass, symbols] of Object.entries(mockData)) {
+      result[assetClass] = symbols.slice(0, perClass);
+    }
+
+    return result;
   }
 
   async getHistoricalData(

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Final Dashboard Accordion Validation Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0a0e27;
+            color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .test-section {
+            background: #1a1f3a;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #4c51bf;
+        }
+        .test-case {
+            background: #0f1629;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            border: 1px solid #2d3748;
+        }
+        .test-result {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .pass { background: #48bb78; color: white; }
+        .fail { background: #f56565; color: white; }
+        .pending { background: #ed8936; color: white; }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #2d3748;
+        }
+        .data-table th {
+            background: #2d3748;
+            font-weight: 600;
+        }
+        .code-block {
+            background: #0f1629;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        .btn {
+            background: #4c51bf;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #5a67d8;
+        }
+        .btn:disabled {
+            background: #4a5568;
+            cursor: not-allowed;
+        }
+        .accordion-preview {
+            background: #1a1f3a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: 2px solid #4c51bf;
+        }
+        .symbol-card {
+            background: #0f1629;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .price-positive { color: #48bb78; }
+        .price-negative { color: #f56565; }
+        pre {
+            background: #0a0e27;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 Final Dashboard Accordion Validation</h1>
+        <p>Comprehensive End-to-End Testing for BIST, NASDAQ, NYSE, and BINANCE Data Display</p>
+        <p style="font-size: 14px; opacity: 0.9;">Backend: http://localhost:8080 | Frontend: http://localhost:3000</p>
+    </div>
+
+    <div class="test-section">
+        <h2>🔄 Test Execution Control</h2>
+        <button class="btn" onclick="runAllTests()">▶️ Run All Tests</button>
+        <button class="btn" onclick="runBackendTests()">🔧 Backend API Tests Only</button>
+        <button class="btn" onclick="runFrontendTests()">🎨 Frontend Dashboard Tests Only</button>
+        <button class="btn" onclick="clearResults()">🗑️ Clear Results</button>
+    </div>
+
+    <div id="results-container"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        let testResults = [];
+
+        function addResult(section, testName, status, details, data = null) {
+            testResults.push({ section, testName, status, details, data, timestamp: new Date() });
+            renderResults();
+        }
+
+        function renderResults() {
+            const container = document.getElementById('results-container');
+            const sections = {};
+
+            testResults.forEach(result => {
+                if (!sections[result.section]) {
+                    sections[result.section] = [];
+                }
+                sections[result.section].push(result);
+            });
+
+            let html = '';
+            for (const [sectionName, results] of Object.entries(sections)) {
+                const passCount = results.filter(r => r.status === 'pass').length;
+                const failCount = results.filter(r => r.status === 'fail').length;
+                const totalCount = results.length;
+
+                html += `
+                    <div class="test-section">
+                        <h2>${sectionName} (${passCount}/${totalCount} passed)</h2>
+                        ${results.map(r => `
+                            <div class="test-case">
+                                <strong>${r.testName}</strong>
+                                <span class="test-result ${r.status}">${r.status.toUpperCase()}</span>
+                                <p>${r.details}</p>
+                                ${r.data ? `<pre>${JSON.stringify(r.data, null, 2)}</pre>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        function clearResults() {
+            testResults = [];
+            document.getElementById('results-container').innerHTML = '';
+        }
+
+        async function runAllTests() {
+            clearResults();
+            await runBackendTests();
+            await runFrontendTests();
+            generateSummary();
+        }
+
+        async function runBackendTests() {
+            addResult('Backend API Tests', 'Starting backend tests...', 'pending', 'Testing exchange filtering and field mapping');
+
+            // Test 1: BIST Symbols
+            try {
+                const bistResponse = await fetch(`${API_BASE}/api/symbols?exchange=BIST`);
+                const bistData = await bistResponse.json();
+                const bistCount = Object.keys(bistData.symbols || {}).length;
+
+                if (bistCount === 3) {
+                    const symbolKeys = Object.keys(bistData.symbols);
+                    if (symbolKeys.includes('THYAO') && symbolKeys.includes('GARAN') && symbolKeys.includes('SISE')) {
+                        addResult('Backend API Tests', 'BIST Symbol Count', 'pass', `✅ Returns exactly 3 symbols: ${symbolKeys.join(', ')}`);
+
+                        // Check fields
+                        const firstSymbol = bistData.symbols[symbolKeys[0]];
+                        if (firstSymbol.market === 'BIST' && firstSymbol.venue === 'BIST' && firstSymbol.marketName === 'BIST') {
+                            addResult('Backend API Tests', 'BIST Field Mapping', 'pass', '✅ All required fields present: market, venue, marketName', firstSymbol);
+                        } else {
+                            addResult('Backend API Tests', 'BIST Field Mapping', 'fail', '❌ Missing or incorrect field values', firstSymbol);
+                        }
+                    } else {
+                        addResult('Backend API Tests', 'BIST Symbol Count', 'fail', `❌ Count is 3 but symbols are incorrect: ${symbolKeys.join(', ')}`);
+                    }
+                } else {
+                    addResult('Backend API Tests', 'BIST Symbol Count', 'fail', `❌ Expected 3, got ${bistCount}`, bistData.symbols);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'BIST Symbol Count', 'fail', `❌ Error: ${error.message}`);
+            }
+
+            // Test 2: NASDAQ Symbols
+            try {
+                const nasdaqResponse = await fetch(`${API_BASE}/api/symbols?exchange=NASDAQ`);
+                const nasdaqData = await nasdaqResponse.json();
+                const nasdaqCount = Object.keys(nasdaqData.symbols || {}).length;
+
+                if (nasdaqCount === 5) {
+                    const symbolKeys = Object.keys(nasdaqData.symbols);
+                    addResult('Backend API Tests', 'NASDAQ Symbol Count', 'pass', `✅ Returns exactly 5 symbols: ${symbolKeys.join(', ')}`);
+                } else {
+                    addResult('Backend API Tests', 'NASDAQ Symbol Count', 'fail', `❌ Expected 5, got ${nasdaqCount}`);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'NASDAQ Symbol Count', 'fail', `❌ Error: ${error.message}`);
+            }
+
+            // Test 3: NYSE Symbols
+            try {
+                const nyseResponse = await fetch(`${API_BASE}/api/symbols?exchange=NYSE`);
+                const nyseData = await nyseResponse.json();
+                const nyseCount = Object.keys(nyseData.symbols || {}).length;
+
+                if (nyseCount === 2) {
+                    const symbolKeys = Object.keys(nyseData.symbols);
+                    addResult('Backend API Tests', 'NYSE Symbol Count', 'pass', `✅ Returns exactly 2 symbols: ${symbolKeys.join(', ')}`);
+                } else {
+                    addResult('Backend API Tests', 'NYSE Symbol Count', 'fail', `❌ Expected 2, got ${nyseCount}`);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'NYSE Symbol Count', 'fail', `❌ Error: ${error.message}`);
+            }
+
+            // Test 4: BINANCE Symbols
+            try {
+                const binanceResponse = await fetch(`${API_BASE}/api/symbols?exchange=BINANCE`);
+                const binanceData = await binanceResponse.json();
+                const binanceCount = Object.keys(binanceData.symbols || {}).length;
+
+                if (binanceCount === 9) {
+                    const symbolKeys = Object.keys(binanceData.symbols);
+                    addResult('Backend API Tests', 'BINANCE Symbol Count', 'pass', `✅ Returns exactly 9 symbols: ${symbolKeys.join(', ')}`);
+                } else {
+                    addResult('Backend API Tests', 'BINANCE Symbol Count', 'fail', `❌ Expected 9, got ${binanceCount}`);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'BINANCE Symbol Count', 'fail', `❌ Error: ${error.message}`);
+            }
+
+            // Test 5: All Symbols (No Filter)
+            try {
+                const allResponse = await fetch(`${API_BASE}/api/symbols`);
+                const allData = await allResponse.json();
+                const allCount = Object.keys(allData.symbols || {}).length;
+
+                if (allCount === 19) {
+                    addResult('Backend API Tests', 'All Symbols (No Filter)', 'pass', `✅ Returns all 19 symbols when no filter applied`);
+                } else {
+                    addResult('Backend API Tests', 'All Symbols (No Filter)', 'fail', `❌ Expected 19, got ${allCount}`);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'All Symbols (No Filter)', 'fail', `❌ Error: ${error.message}`);
+            }
+
+            // Test 6: Invalid Exchange
+            try {
+                const invalidResponse = await fetch(`${API_BASE}/api/symbols?exchange=INVALID`);
+                const invalidData = await invalidResponse.json();
+                const invalidCount = Object.keys(invalidData.symbols || {}).length;
+
+                if (invalidCount === 0) {
+                    addResult('Backend API Tests', 'Invalid Exchange Handling', 'pass', `✅ Returns empty result for invalid exchange`);
+                } else {
+                    addResult('Backend API Tests', 'Invalid Exchange Handling', 'fail', `❌ Should return 0 symbols, got ${invalidCount}`);
+                }
+            } catch (error) {
+                addResult('Backend API Tests', 'Invalid Exchange Handling', 'fail', `❌ Error: ${error.message}`);
+            }
+        }
+
+        async function runFrontendTests() {
+            addResult('Frontend Dashboard Tests', 'Frontend Testing', 'pending', 'Open http://localhost:3000 in your browser to manually verify dashboard');
+            addResult('Frontend Dashboard Tests', 'Manual Checklist', 'pending', `
+                Please manually verify:
+                1. ✅ BIST accordion visible and expandable
+                2. ✅ Shows 3 Turkish stocks: THYAO, GARAN, SISE
+                3. ✅ NASDAQ accordion shows 5 US tech stocks
+                4. ✅ NYSE accordion shows 2 stocks
+                5. ✅ BINANCE/Crypto accordion shows 9 cryptocurrencies
+                6. ✅ All prices are numeric (not N/A or null)
+                7. ✅ No console errors in browser DevTools
+                8. ✅ Accordions expand/collapse smoothly
+            `);
+        }
+
+        function generateSummary() {
+            const totalTests = testResults.length;
+            const passedTests = testResults.filter(r => r.status === 'pass').length;
+            const failedTests = testResults.filter(r => r.status === 'fail').length;
+            const pendingTests = testResults.filter(r => r.status === 'pending').length;
+
+            const summaryHTML = `
+                <div class="test-section" style="border-left-color: ${failedTests > 0 ? '#f56565' : '#48bb78'};">
+                    <h2>📊 Test Execution Summary</h2>
+                    <div class="data-table">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td><strong>Total Tests:</strong></td>
+                                <td>${totalTests}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Passed:</strong></td>
+                                <td style="color: #48bb78;">${passedTests}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Failed:</strong></td>
+                                <td style="color: #f56565;">${failedTests}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Pending:</strong></td>
+                                <td style="color: #ed8936;">${pendingTests}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Success Rate:</strong></td>
+                                <td><strong>${totalTests > 0 ? Math.round((passedTests / (totalTests - pendingTests)) * 100) : 0}%</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Final Verdict:</strong></td>
+                                <td><span class="test-result ${failedTests === 0 && passedTests > 0 ? 'pass' : 'fail'}">${failedTests === 0 && passedTests > 0 ? 'READY FOR PRODUCTION ✅' : 'NEEDS FIXES ❌'}</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('results-container').innerHTML += summaryHTML;
+        }
+
+        // Auto-run tests on page load
+        setTimeout(() => {
+            runAllTests();
+        }, 1000);
+    </script>
+</body>
+</html>

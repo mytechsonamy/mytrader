@@ -9,6 +9,7 @@ namespace MyTrader.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[Route("api/v1/auth")] // New API versioning route
 [Tags("Authentication")]
 public class AuthController : ControllerBase
 {
@@ -90,7 +91,10 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var result = await _authService.LoginAsync(request);
+            var userAgent = Request.Headers["User-Agent"].ToString();
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            var result = await _authService.LoginAsync(request, userAgent, ipAddress);
             return Ok(result);
         }
         catch (UnauthorizedAccessException ex)

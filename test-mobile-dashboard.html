@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTrader Mobile Dashboard Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: bold;
+        }
+        .success { background: #4caf50; color: white; }
+        .error { background: #f44336; color: white; }
+        .warning { background: #ff9800; color: white; }
+        .pending { background: #2196f3; color: white; }
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f9f9f9;
+            border-left: 3px solid #2196f3;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .crypto-data { border-left-color: #4caf50; }
+        .stock-data { border-left-color: #ff9800; }
+        .error-data { border-left-color: #f44336; }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover { background: #1976d2; }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 MyTrader Mobile Dashboard Test Suite</h1>
+
+    <div class="test-section">
+        <h2>Test Configuration</h2>
+        <p><strong>Backend API:</strong> http://localhost:5002</p>
+        <p><strong>Mobile Expo:</strong> http://localhost:8082</p>
+        <p><strong>Test Time:</strong> <span id="test-time"></span></p>
+    </div>
+
+    <div class="test-section">
+        <h2>Phase 1: Baseline Tests</h2>
+        <button onclick="testBackendHealth()">Test Backend Health</button>
+        <button onclick="testCryptoData()">Test Crypto Data</button>
+        <button onclick="testStockData()">Test Stock Data</button>
+        <button onclick="testWebSocket()">Test WebSocket</button>
+        <div id="baseline-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Logs</h2>
+        <div id="test-logs"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5002';
+        const WS_BASE = 'ws://localhost:5002';
+
+        document.getElementById('test-time').textContent = new Date().toLocaleString();
+
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('test-logs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}-data`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.insertBefore(entry, logsDiv.firstChild);
+        }
+
+        async function testBackendHealth() {
+            try {
+                log('Testing backend health...', 'pending');
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+
+                if (data.status === 'Healthy') {
+                    log('✅ Backend is healthy', 'crypto');
+                    log(`Database: ${data.checks.find(c => c.name === 'postgresql_database')?.status}`, 'crypto');
+                    log(`SignalR: ${data.checks.find(c => c.name === 'signalr_hubs')?.status}`, 'crypto');
+                } else {
+                    log('⚠️ Backend unhealthy: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                log('❌ Backend health check failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testCryptoData() {
+            try {
+                log('Testing crypto data endpoint...', 'pending');
+                const response = await fetch(`${API_BASE}/api/symbols/asset-class/CRYPTO`);
+                const symbols = await response.json();
+
+                if (Array.isArray(symbols) && symbols.length > 0) {
+                    log(`✅ Crypto symbols loaded: ${symbols.length} symbols`, 'crypto');
+                    log(`Sample crypto: ${symbols.slice(0, 3).map(s => s.symbol).join(', ')}`, 'crypto');
+
+                    // Test market data for first crypto
+                    const marketResponse = await fetch(`${API_BASE}/api/market-data/symbol/${symbols[0].symbol}`);
+                    if (marketResponse.ok) {
+                        const marketData = await marketResponse.json();
+                        log(`✅ Crypto price data: ${symbols[0].symbol} = $${marketData.price}`, 'crypto');
+                    }
+                } else {
+                    log('⚠️ No crypto symbols returned', 'error');
+                }
+            } catch (error) {
+                log('❌ Crypto data test failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testStockData() {
+            try {
+                log('Testing stock data endpoint...', 'pending');
+                const response = await fetch(`${API_BASE}/api/symbols/asset-class/STOCK`);
+                const symbols = await response.json();
+
+                if (Array.isArray(symbols) && symbols.length > 0) {
+                    log(`✅ Stock symbols loaded: ${symbols.length} symbols`, 'stock');
+
+                    // Group by market
+                    const bistStocks = symbols.filter(s => s.marketName === 'BIST');
+                    const nasdaqStocks = symbols.filter(s => s.marketName === 'NASDAQ');
+                    const nyseStocks = symbols.filter(s => s.marketName === 'NYSE');
+
+                    log(`BIST: ${bistStocks.length}, NASDAQ: ${nasdaqStocks.length}, NYSE: ${nyseStocks.length}`, 'stock');
+
+                    if (bistStocks.length > 0) {
+                        log(`Sample BIST: ${bistStocks.slice(0, 3).map(s => s.symbol).join(', ')}`, 'stock');
+                    }
+
+                    // Test market data for first stock
+                    if (symbols.length > 0) {
+                        const marketResponse = await fetch(`${API_BASE}/api/market-data/symbol/${symbols[0].symbol}`);
+                        if (marketResponse.ok) {
+                            const marketData = await marketResponse.json();
+                            log(`✅ Stock price data: ${symbols[0].symbol} = $${marketData.price}`, 'stock');
+                        } else {
+                            log(`⚠️ No price data for ${symbols[0].symbol}`, 'error');
+                        }
+                    }
+                } else {
+                    log('❌ No stock symbols returned', 'error');
+                }
+            } catch (error) {
+                log('❌ Stock data test failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testWebSocket() {
+            try {
+                log('Testing WebSocket connection...', 'pending');
+
+                // Test SignalR negotiation
+                const negotiateResponse = await fetch(`${API_BASE}/hubs/dashboard/negotiate?negotiateVersion=1`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (negotiateResponse.ok) {
+                    const negotiateData = await negotiateResponse.json();
+                    log('✅ SignalR negotiation successful', 'crypto');
+                    log(`Connection ID: ${negotiateData.connectionId}`, 'crypto');
+
+                    // Try WebSocket connection
+                    const ws = new WebSocket(`${WS_BASE}/hubs/dashboard?id=${negotiateData.connectionId}`);
+
+                    ws.onopen = () => {
+                        log('✅ WebSocket connected', 'crypto');
+
+                        // Send subscription message
+                        const subscribeMsg = {
+                            protocol: 'json',
+                            version: 1
+                        };
+                        ws.send(JSON.stringify(subscribeMsg) + '\x1e');
+                    };
+
+                    ws.onmessage = (event) => {
+                        log(`WebSocket message: ${event.data.substring(0, 100)}...`, 'crypto');
+                    };
+
+                    ws.onerror = (error) => {
+                        log('❌ WebSocket error: ' + error, 'error');
+                    };
+
+                    // Close after 5 seconds
+                    setTimeout(() => {
+                        ws.close();
+                        log('WebSocket test completed', 'crypto');
+                    }, 5000);
+                } else {
+                    log('❌ SignalR negotiation failed', 'error');
+                }
+            } catch (error) {
+                log('❌ WebSocket test failed: ' + error.message, 'error');
+            }
+        }
+
+        // Run initial tests
+        setTimeout(() => {
+            log('Starting automated baseline tests...', 'pending');
+            testBackendHealth();
+        }, 500);
+    </script>
+</body>
+</html>

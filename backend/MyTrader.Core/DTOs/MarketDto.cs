@@ -136,6 +136,13 @@ public class MarketStatusDto
     public TimeSpan? NextSessionStart { get; set; }
     public TimeSpan? NextSessionEnd { get; set; }
     public string? CurrentSessionType { get; set; }
+    
+    // Additional properties for market status monitoring
+    public bool IsOpen { get; set; }
+    public DateTime? NextOpen { get; set; }
+    public DateTime? NextClose { get; set; }
+    public string Timezone { get; set; } = "UTC";
+    public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>

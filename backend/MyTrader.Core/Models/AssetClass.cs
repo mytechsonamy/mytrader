@@ -123,6 +123,7 @@ public class AssetClass
 public enum AssetClassCode
 {
     CRYPTO,
+    STOCK,           // Generic stock class for frontend compatibility
     STOCK_BIST,
     STOCK_NASDAQ,
     STOCK_NYSE,

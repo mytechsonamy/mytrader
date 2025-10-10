@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journey 1: New User Registration & Dashboard - Manual Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .status-banner {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+            border: 2px solid #fbbf24;
+        }
+
+        .status-in-progress {
+            background: #dbeafe;
+            color: #1e3a8a;
+            border: 2px solid #3b82f6;
+        }
+
+        .status-passed {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+
+        .status-failed {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+        }
+
+        .test-section {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+
+        .test-section h2 {
+            color: #2d3748;
+            font-size: 24px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .test-steps {
+            background: white;
+            border-radius: 6px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+
+        .test-step {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 3px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .test-step:hover {
+            border-left-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .test-step h3 {
+            color: #2d3748;
+            font-size: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .test-step p {
+            color: #4a5568;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .test-form {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        input[type="email"],
+        input[type="password"],
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .validation-results {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .validation-results.show {
+            display: block;
+        }
+
+        .validation-success {
+            background: #d1fae5;
+            border: 2px solid #10b981;
+        }
+
+        .validation-error {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+        }
+
+        .checklist {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .checklist-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-radius: 6px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+
+        .checklist-item:hover {
+            background: #f8fafc;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checklist-item.checked {
+            background: #d1fae5;
+            border-color: #10b981;
+        }
+
+        .api-endpoint {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .expected-result {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .expected-result h4 {
+            color: #1e40af;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .expected-result ul {
+            margin-left: 20px;
+            color: #1e3a8a;
+        }
+
+        .expected-result li {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .screenshot-zone {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin: 15px 0;
+            background: #f7fafc;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .screenshot-zone:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .screenshot-zone input[type="file"] {
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        .note {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #78350f;
+        }
+
+        .success-icon::before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .error-icon::before {
+            content: "✗";
+            color: #ef4444;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .info-icon::before {
+            content: "ℹ";
+            color: #3b82f6;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Journey 1: New User Registration & Dashboard</h1>
+            <p class="subtitle">Manual Test Validation for Alpaca Streaming Integration</p>
+        </div>
+
+        <div id="statusBanner" class="status-banner status-pending">
+            ⏳ Test Status: PENDING - Ready to Start
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+        </div>
+
+        <!-- Test Objective -->
+        <div class="test-section">
+            <h2><span class="step-number">🎯</span>Test Objective</h2>
+            <div class="test-steps">
+                <p style="font-size: 16px; color: #2d3748; line-height: 1.8;">
+                    Verify that new users can successfully register and immediately see real-time stock prices
+                    on the dashboard with proper data source indicators. This tests the complete onboarding flow
+                    and confirms that Alpaca streaming integration works for first-time users.
+                </p>
+                <div class="note">
+                    <strong>Note:</strong> This journey tests the most critical path for new user acquisition.
+                    Any failure here represents a critical business impact.
+                </div>
+            </div>
+        </div>
+
+        <!-- Environment Setup -->
+        <div class="test-section">
+            <h2><span class="step-number">🔧</span>Environment Setup</h2>
+            <div class="test-steps">
+                <div class="checklist">
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env1" onchange="updateProgress()">
+                        <label for="env1">Backend running at http://localhost:8080</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env2" onchange="updateProgress()">
+                        <label for="env2">Web app accessible at http://localhost:3000</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env3" onchange="updateProgress()">
+                        <label for="env3">Alpaca feature flag enabled (check appsettings.json)</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env4" onchange="updateProgress()">
+                        <label for="env4">Valid Alpaca API keys configured</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env5" onchange="updateProgress()">
+                        <label for="env5">Database accessible and seeded</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="env6" onchange="updateProgress()">
+                        <label for="env6">Browser DevTools open for network inspection</label>
+                    </div>
+                </div>
+
+                <div class="api-endpoint">
+                    Health Check: GET http://localhost:8080/api/health
+                    Expected: {"status": "Healthy", "alpacaStreaming": true}
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Steps -->
+        <div class="test-section">
+            <h2><span class="step-number">📋</span>Test Steps</h2>
+            <div class="test-steps">
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 1: Navigate to Registration Page</h3>
+                    <p><strong>Action:</strong> Open web browser and navigate to http://localhost:3000</p>
+                    <p><strong>Expected:</strong> Landing page loads, "Register" link visible</p>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot1').click()">
+                        <p>📸 Click to upload screenshot of landing page</p>
+                        <input type="file" id="screenshot1" accept="image/*" onchange="handleScreenshot(this, 'preview1')">
+                    </div>
+                    <div id="preview1"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step1Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step1Notes" placeholder="Notes (e.g., loading time, UI observations)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 2: Click Register Link</h3>
+                    <p><strong>Action:</strong> Click the "Register" or "Sign Up" link/button</p>
+                    <p><strong>Expected:</strong> Registration form appears with fields: Email, Password, Confirm Password, First Name, Last Name</p>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot2').click()">
+                        <p>📸 Click to upload screenshot of registration form</p>
+                        <input type="file" id="screenshot2" accept="image/*" onchange="handleScreenshot(this, 'preview2')">
+                    </div>
+                    <div id="preview2"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step2Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step2Notes" placeholder="Notes..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 3: Fill Registration Form</h3>
+                    <p><strong>Action:</strong> Enter test credentials:</p>
+                    <div class="api-endpoint">
+Email: newtester_[timestamp]@mytrader.com
+Password: Test123!
+Confirm Password: Test123!
+First Name: New
+Last Name: Tester
+                    </div>
+                    <p><strong>Expected:</strong> Form accepts input, validation works (e.g., password match, email format)</p>
+                    <div class="test-form">
+                        <label>Actual Email Used:</label>
+                        <input type="email" id="testEmail" placeholder="Record the email address used for testing">
+                        <label>Step Result:</label>
+                        <select id="step3Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step3Notes" placeholder="Notes (e.g., validation errors, UX issues)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 4: Submit Registration</h3>
+                    <p><strong>Action:</strong> Click "Register" or "Sign Up" button</p>
+                    <p><strong>Expected:</strong> Request sent to POST /api/v1/auth/register, success response received</p>
+                    <div class="expected-result">
+                        <h4>Expected API Response:</h4>
+                        <ul>
+                            <li>HTTP 200/201 status</li>
+                            <li>Response contains: accessToken, refreshToken, user object</li>
+                            <li>User object has: id, email, firstName, lastName, isActive: true</li>
+                        </ul>
+                    </div>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot4').click()">
+                        <p>📸 Click to upload screenshot of Network tab showing API call</p>
+                        <input type="file" id="screenshot4" accept="image/*" onchange="handleScreenshot(this, 'preview4')">
+                    </div>
+                    <div id="preview4"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step4Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step4Notes" placeholder="Notes (e.g., response time, error messages)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 5: Verify Auto-Login</h3>
+                    <p><strong>Action:</strong> Observe page behavior after registration</p>
+                    <p><strong>Expected:</strong> User automatically logged in, redirected to Dashboard</p>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step5Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step5Notes" placeholder="Notes (e.g., redirect time, intermediate screens)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 6: Observe Dashboard Loading</h3>
+                    <p><strong>Action:</strong> Wait for dashboard to fully load</p>
+                    <p><strong>Expected:</strong> Dashboard displays with accordion sections: Crypto, Stocks, etc.</p>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot6').click()">
+                        <p>📸 Click to upload screenshot of initial dashboard load</p>
+                        <input type="file" id="screenshot6" accept="image/*" onchange="handleScreenshot(this, 'preview6')">
+                    </div>
+                    <div id="preview6"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step6Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step6Notes" placeholder="Notes (e.g., loading indicators, skeleton screens)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 7: Check Stock Prices Display</h3>
+                    <p><strong>Action:</strong> Expand the "Stocks" accordion section</p>
+                    <p><strong>Expected:</strong> Stock symbols display with current prices (AAPL, MSFT, GOOGL, etc.)</p>
+                    <div class="expected-result">
+                        <h4>Verify Each Stock Item Shows:</h4>
+                        <ul>
+                            <li>Symbol name (e.g., AAPL)</li>
+                            <li>Current price (numeric value)</li>
+                            <li>Price change (+ or -)</li>
+                            <li>Percentage change</li>
+                            <li>Data source badge ("Live" or "Delayed")</li>
+                        </ul>
+                    </div>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot7').click()">
+                        <p>📸 Click to upload screenshot of stocks section expanded</p>
+                        <input type="file" id="screenshot7" accept="image/*" onchange="handleScreenshot(this, 'preview7')">
+                    </div>
+                    <div id="preview7"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step7Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step7Notes" placeholder="Notes (e.g., which symbols displayed, price format)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 8: Verify Data Source Badges</h3>
+                    <p><strong>Action:</strong> Check for data source indicators on stock items</p>
+                    <p><strong>Expected:</strong> If Alpaca streaming active, badges show "Live" (green). If Yahoo fallback, show "Delayed" (yellow/orange)</p>
+                    <div class="test-form">
+                        <label>Data Source Observed:</label>
+                        <select id="dataSource" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="live">🟢 Live (Alpaca)</option>
+                            <option value="delayed">🟡 Delayed (Yahoo)</option>
+                            <option value="none">⚪ No badge visible</option>
+                        </select>
+                        <label>Step Result:</label>
+                        <select id="step8Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step8Notes" placeholder="Notes (e.g., badge visibility, tooltip content)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 9: Observe Real-Time Price Updates</h3>
+                    <p><strong>Action:</strong> Keep dashboard open for 60 seconds, watch for price changes</p>
+                    <p><strong>Expected:</strong> Prices update automatically, visual indicators show changes (color flash, animation)</p>
+                    <div class="note">
+                        <strong>Important:</strong> Use browser DevTools Console to watch for WebSocket messages.
+                        Look for connection to wss://localhost:8080/hubs/market-data
+                    </div>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot9').click()">
+                        <p>📸 Click to upload screenshot showing price change (highlight different values)</p>
+                        <input type="file" id="screenshot9" accept="image/*" onchange="handleScreenshot(this, 'preview9')">
+                    </div>
+                    <div id="preview9"></div>
+                    <div class="test-form">
+                        <label>Number of Price Updates Observed (in 60s):</label>
+                        <input type="number" id="priceUpdates" min="0" placeholder="e.g., 5">
+                        <label>WebSocket Connection Status:</label>
+                        <select id="wsStatus" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="connected">✓ Connected</option>
+                            <option value="disconnected">✗ Disconnected</option>
+                            <option value="error">⚠ Error</option>
+                        </select>
+                        <label>Step Result:</label>
+                        <select id="step9Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step9Notes" placeholder="Notes (e.g., update frequency, animation quality)..."></textarea>
+                    </div>
+                </div>
+
+                <div class="test-step">
+                    <h3><span class="success-icon"></span>Step 10: Check Crypto Section (Regression Test)</h3>
+                    <p><strong>Action:</strong> Expand the "Crypto" accordion section</p>
+                    <p><strong>Expected:</strong> Crypto prices (BTC, ETH) display and update from Binance (unaffected by Alpaca)</p>
+                    <div class="screenshot-zone" onclick="document.getElementById('screenshot10').click()">
+                        <p>📸 Click to upload screenshot of crypto section</p>
+                        <input type="file" id="screenshot10" accept="image/*" onchange="handleScreenshot(this, 'preview10')">
+                    </div>
+                    <div id="preview10"></div>
+                    <div class="test-form">
+                        <label>Step Result:</label>
+                        <select id="step10Result" onchange="updateProgress()">
+                            <option value="">Select...</option>
+                            <option value="pass">✓ Pass</option>
+                            <option value="fail">✗ Fail</option>
+                        </select>
+                        <textarea id="step10Notes" placeholder="Notes (e.g., crypto symbols visible, update frequency)..."></textarea>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Cross-Platform Testing -->
+        <div class="test-section">
+            <h2><span class="step-number">🖥️</span>Cross-Platform Validation</h2>
+            <div class="test-steps">
+                <p style="margin-bottom: 15px; color: #4a5568;">Repeat steps 1-10 on each platform:</p>
+                <div class="checklist">
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform1" onchange="updateProgress()">
+                        <label for="platform1">Chrome (Desktop) - Windows/Mac</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform2" onchange="updateProgress()">
+                        <label for="platform2">Firefox (Desktop)</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform3" onchange="updateProgress()">
+                        <label for="platform3">Safari (Desktop) - Mac only</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform4" onchange="updateProgress()">
+                        <label for="platform4">Mobile Browser (iOS Safari)</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform5" onchange="updateProgress()">
+                        <label for="platform5">Mobile Browser (Android Chrome)</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform6" onchange="updateProgress()">
+                        <label for="platform6">Mobile App (iOS) - if applicable</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="platform7" onchange="updateProgress()">
+                        <label for="platform7">Mobile App (Android) - if applicable</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bug Report Section -->
+        <div class="test-section">
+            <h2><span class="step-number">🐛</span>Bug Report (If Any)</h2>
+            <div class="test-form">
+                <div class="form-group">
+                    <label>Bug Severity:</label>
+                    <select id="bugSeverity">
+                        <option value="">No bugs found</option>
+                        <option value="critical">🔴 Critical - Blocks release</option>
+                        <option value="high">🟠 High - Major impact</option>
+                        <option value="medium">🟡 Medium - Moderate impact</option>
+                        <option value="low">🟢 Low - Minor issue</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Bug Description:</label>
+                    <textarea id="bugDescription" placeholder="Detailed description of the bug, including steps to reproduce..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Expected vs Actual Behavior:</label>
+                    <textarea id="bugExpectedActual" placeholder="Expected: ... | Actual: ..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Browser/Device Details:</label>
+                    <input type="text" id="bugEnvironment" placeholder="e.g., Chrome 120.0.6099.109, Windows 11">
+                </div>
+            </div>
+        </div>
+
+        <!-- Final Assessment -->
+        <div class="test-section">
+            <h2><span class="step-number">✅</span>Final Assessment</h2>
+            <div class="test-form">
+                <div class="form-group">
+                    <label>Overall Journey Result:</label>
+                    <select id="overallResult" onchange="updateStatusBanner()">
+                        <option value="">Select...</option>
+                        <option value="pass">✓ PASS - All steps successful</option>
+                        <option value="conditional">⚠ PASS WITH ISSUES - Minor issues found</option>
+                        <option value="fail">✗ FAIL - Critical issues found</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>User Experience Rating (1-5):</label>
+                    <input type="number" id="uxRating" min="1" max="5" placeholder="1 (Poor) to 5 (Excellent)">
+                </div>
+                <div class="form-group">
+                    <label>Performance Notes:</label>
+                    <textarea id="performanceNotes" placeholder="Page load times, responsiveness, lag, etc..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>UX/UI Observations:</label>
+                    <textarea id="uxObservations" placeholder="Visual design, layout, usability issues, suggestions..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Recommendations:</label>
+                    <textarea id="recommendations" placeholder="Improvements, edge cases to handle, future considerations..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+            <button class="btn-secondary" onclick="saveProgress()">💾 Save Progress</button>
+            <button class="btn-primary" onclick="generateReport()">📄 Generate Report</button>
+            <button class="btn-success" onclick="markComplete()">✓ Mark Journey Complete</button>
+            <button class="btn-danger" onclick="resetTest()">🔄 Reset Test</button>
+        </div>
+
+        <!-- Results Display -->
+        <div id="validationResults" class="validation-results"></div>
+    </div>
+
+    <script>
+        function updateProgress() {
+            const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+            const allSelects = document.querySelectorAll('select[id*="Result"]');
+
+            let totalItems = allCheckboxes.length + allSelects.length;
+            let completedItems = 0;
+
+            allCheckboxes.forEach(cb => {
+                if (cb.checked) completedItems++;
+                const item = cb.closest('.checklist-item');
+                if (item) {
+                    item.classList.toggle('checked', cb.checked);
+                }
+            });
+
+            allSelects.forEach(sel => {
+                if (sel.value !== '') completedItems++;
+            });
+
+            const progress = (completedItems / totalItems) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+        }
+
+        function handleScreenshot(input, previewId) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById(previewId);
+                    preview.innerHTML = `<img src="${e.target.result}" style="max-width: 100%; border-radius: 8px; margin-top: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updateStatusBanner() {
+            const result = document.getElementById('overallResult').value;
+            const banner = document.getElementById('statusBanner');
+
+            if (result === 'pass') {
+                banner.className = 'status-banner status-passed';
+                banner.textContent = '✅ Test Status: PASSED - All criteria met';
+            } else if (result === 'conditional') {
+                banner.className = 'status-banner status-in-progress';
+                banner.textContent = '⚠️ Test Status: PASSED WITH ISSUES - Review required';
+            } else if (result === 'fail') {
+                banner.className = 'status-banner status-failed';
+                banner.textContent = '❌ Test Status: FAILED - Critical issues found';
+            }
+        }
+
+        function generateReport() {
+            const report = {
+                journey: 'Journey 1: New User Registration & Dashboard',
+                timestamp: new Date().toISOString(),
+                tester: 'Manual QA Tester',
+                environment: {
+                    backend: 'http://localhost:8080',
+                    frontend: 'http://localhost:3000',
+                    alpacaEnabled: document.getElementById('env3')?.checked || false
+                },
+                testEmail: document.getElementById('testEmail').value,
+                steps: {
+                    step1: {
+                        result: document.getElementById('step1Result').value,
+                        notes: document.getElementById('step1Notes').value
+                    },
+                    step2: {
+                        result: document.getElementById('step2Result').value,
+                        notes: document.getElementById('step2Notes').value
+                    },
+                    step3: {
+                        result: document.getElementById('step3Result').value,
+                        notes: document.getElementById('step3Notes').value
+                    },
+                    step4: {
+                        result: document.getElementById('step4Result').value,
+                        notes: document.getElementById('step4Notes').value
+                    },
+                    step5: {
+                        result: document.getElementById('step5Result').value,
+                        notes: document.getElementById('step5Notes').value
+                    },
+                    step6: {
+                        result: document.getElementById('step6Result').value,
+                        notes: document.getElementById('step6Notes').value
+                    },
+                    step7: {
+                        result: document.getElementById('step7Result').value,
+                        notes: document.getElementById('step7Notes').value
+                    },
+                    step8: {
+                        result: document.getElementById('step8Result').value,
+                        notes: document.getElementById('step8Notes').value,
+                        dataSource: document.getElementById('dataSource').value
+                    },
+                    step9: {
+                        result: document.getElementById('step9Result').value,
+                        notes: document.getElementById('step9Notes').value,
+                        priceUpdates: document.getElementById('priceUpdates').value,
+                        wsStatus: document.getElementById('wsStatus').value
+                    },
+                    step10: {
+                        result: document.getElementById('step10Result').value,
+                        notes: document.getElementById('step10Notes').value
+                    }
+                },
+                bugs: {
+                    severity: document.getElementById('bugSeverity').value,
+                    description: document.getElementById('bugDescription').value,
+                    expectedActual: document.getElementById('bugExpectedActual').value,
+                    environment: document.getElementById('bugEnvironment').value
+                },
+                assessment: {
+                    overallResult: document.getElementById('overallResult').value,
+                    uxRating: document.getElementById('uxRating').value,
+                    performanceNotes: document.getElementById('performanceNotes').value,
+                    uxObservations: document.getElementById('uxObservations').value,
+                    recommendations: document.getElementById('recommendations').value
+                }
+            };
+
+            const reportJson = JSON.stringify(report, null, 2);
+            const blob = new Blob([reportJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `journey1_test_report_${Date.now()}.json`;
+            a.click();
+
+            const resultsDiv = document.getElementById('validationResults');
+            resultsDiv.className = 'validation-results validation-success show';
+            resultsDiv.innerHTML = `
+                <h3>✅ Report Generated Successfully</h3>
+                <p>Test report has been downloaded as JSON. Review the file for detailed results.</p>
+                <pre style="background: #1f2937; color: #10b981; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px;">${reportJson}</pre>
+            `;
+        }
+
+        function saveProgress() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                progress: document.getElementById('progressBar').style.width
+            };
+            localStorage.setItem('journey1Progress', JSON.stringify(data));
+            alert('✅ Progress saved to browser local storage!');
+        }
+
+        function markComplete() {
+            const overallResult = document.getElementById('overallResult').value;
+            if (!overallResult) {
+                alert('⚠️ Please select an overall result before marking complete.');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('validationResults');
+            resultsDiv.className = 'validation-results validation-success show';
+            resultsDiv.innerHTML = `
+                <h3>✅ Journey 1 Marked Complete</h3>
+                <p><strong>Result:</strong> ${overallResult.toUpperCase()}</p>
+                <p>Proceed to Journey 2 or review findings.</p>
+            `;
+
+            generateReport();
+        }
+
+        function resetTest() {
+            if (confirm('⚠️ Are you sure you want to reset all test data? This cannot be undone.')) {
+                location.reload();
+            }
+        }
+
+        // Auto-save every 60 seconds
+        setInterval(saveProgress, 60000);
+
+        // Load saved progress on page load
+        window.addEventListener('load', () => {
+            const saved = localStorage.getItem('journey1Progress');
+            if (saved) {
+                const data = JSON.parse(saved);
+                console.log('Loaded saved progress from:', data.timestamp);
+            }
+        });
+    </script>
+</body>
+</html>

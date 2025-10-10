@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stock WebSocket Test - Raw Data Capture</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+        .log { margin: 5px 0; padding: 5px; background: #2a2a2a; }
+        .stock { border-left: 3px solid #0f0; }
+        .crypto { border-left: 3px solid #00f; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .info { color: #ff0; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Stock WebSocket Raw Data Test</h1>
+    <p>Testing previousClose field in stock broadcasts...</p>
+    <div id="status"></div>
+    <div id="logs"></div>
+
+    <script>
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+
+        function log(message, className = '') {
+            const div = document.createElement('div');
+            div.className = `log ${className}`;
+            div.innerHTML = `${new Date().toISOString().split('T')[1].slice(0, 12)} - ${message}`;
+            logs.insertBefore(div, logs.firstChild);
+            console.log(message);
+        }
+
+        async function connectAndTest() {
+            try {
+                status.innerHTML = '<span class="info">⏳ Connecting to SignalR...</span>';
+                log('Connecting to http://localhost:8080/hubs/market-data', 'info');
+
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl('http://localhost:8080/hubs/market-data', {
+                        skipNegotiation: true,
+                        transport: signalR.HttpTransportType.WebSockets
+                    })
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                connection.on('ReceivePriceUpdate', (data) => {
+                    const dataType = typeof data;
+                    log(`📊 ReceivePriceUpdate received (type: ${dataType})`, 'info');
+
+                    // Parse if string
+                    let parsed = data;
+                    if (typeof data === 'string') {
+                        try {
+                            parsed = JSON.parse(data);
+                            log('✅ Successfully parsed JSON string', 'success');
+                        } catch (e) {
+                            log(`❌ JSON parse failed: ${e.message}`, 'error');
+                        }
+                    }
+
+                    // Check if it's stock data
+                    const assetClass = parsed.assetClass || parsed.AssetClass;
+                    if (assetClass === 'STOCK' || assetClass === 'Stock') {
+                        log(`\n🎯 STOCK DATA RECEIVED: ${parsed.symbol || parsed.Symbol}`, 'stock');
+
+                        // Check all possible previousClose field names
+                        const fieldChecks = {
+                            'previousClose': parsed.previousClose,
+                            'PreviousClose': parsed.PreviousClose,
+                            'prevClose': parsed.prevClose,
+                            'PrevClose': parsed.PrevClose,
+                        };
+
+                        log(`Field checks: ${JSON.stringify(fieldChecks, null, 2)}`, 'stock');
+                        log(`All keys: ${Object.keys(parsed).join(', ')}`, 'stock');
+                        log(`Full data: <pre>${JSON.stringify(parsed, null, 2)}</pre>`, 'stock');
+
+                        // Check if ANY previousClose field exists
+                        const hasPreviousClose = Object.values(fieldChecks).some(v => v !== undefined && v !== null);
+                        if (hasPreviousClose) {
+                            log('✅ SUCCESS: previousClose field EXISTS!', 'success stock');
+                        } else {
+                            log('❌ ERROR: previousClose field MISSING!', 'error stock');
+                        }
+                    }
+                });
+
+                await connection.start();
+                status.innerHTML = '<span class="success">✅ Connected to SignalR</span>';
+                log('✅ Connected successfully', 'success');
+
+                // Subscribe to stock updates
+                log('📡 Subscribing to STOCK price updates...', 'info');
+                const stockSymbols = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'NVDA', 'BA', 'JPM'];
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK', stockSymbols);
+                log(`✅ Subscribed to STOCK symbols: ${stockSymbols.join(', ')}`, 'success');
+
+            } catch (error) {
+                status.innerHTML = `<span class="error">❌ Connection failed: ${error.message}</span>`;
+                log(`❌ Error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+
+        // Start the test
+        connectAndTest();
+    </script>
+</body>
+</html>

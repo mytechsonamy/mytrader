@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mobile API Response Test</title>
+</head>
+<body>
+    <h1>Mobile API Response Test</h1>
+    <div id="test-results"></div>
+
+    <script>
+        // Test the mobile response unwrapping middleware
+        async function testMobileApiResponse() {
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                // Test 1: Make request with mobile client headers
+                resultsDiv.innerHTML += '<h2>Test 1: Mobile Client Request</h2>';
+
+                const mobileResponse = await fetch('/api/v1/market-data/overview', {
+                    headers: {
+                        'X-Client-Type': 'mobile',
+                        'User-Agent': 'react-native/myTrader-mobile'
+                    }
+                });
+
+                const mobileData = await mobileResponse.json();
+                resultsDiv.innerHTML += `<p><strong>Mobile Response:</strong> ${JSON.stringify(mobileData, null, 2)}</p>`;
+
+                // Test 2: Make request without mobile headers (web client)
+                resultsDiv.innerHTML += '<h2>Test 2: Web Client Request</h2>';
+
+                const webResponse = await fetch('/api/v1/market-data/overview', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                    }
+                });
+
+                const webData = await webResponse.json();
+                resultsDiv.innerHTML += `<p><strong>Web Response:</strong> ${JSON.stringify(webData, null, 2)}</p>`;
+
+                // Test 3: Health endpoint (should be publicly accessible now)
+                resultsDiv.innerHTML += '<h2>Test 3: Health Endpoint Access</h2>';
+
+                const healthResponse = await fetch('/api/market-data/alpaca/health');
+                const healthStatus = healthResponse.status;
+                const healthData = await healthResponse.text();
+
+                resultsDiv.innerHTML += `<p><strong>Health Status:</strong> ${healthStatus}</p>`;
+                resultsDiv.innerHTML += `<p><strong>Health Response:</strong> ${healthData}</p>`;
+
+            } catch (error) {
+                resultsDiv.innerHTML += `<p><strong>Error:</strong> ${error.message}</p>`;
+            }
+        }
+
+        // Run tests when page loads
+        window.onload = testMobileApiResponse;
+    </script>
+</body>
+</html>

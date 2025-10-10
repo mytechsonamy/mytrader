@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using MyTrader.Core.Services;
+using MyTrader.Core.Data;
+using MyTrader.Infrastructure.Services;
 using System.ComponentModel.DataAnnotations;
 
 namespace MyTrader.Api.Controllers;
@@ -16,21 +19,327 @@ namespace MyTrader.Api.Controllers;
 public class YahooFinanceSyncController : ControllerBase
 {
     private readonly YahooFinanceDailyDataService _dailyDataService;
+    private readonly YahooFinanceIntradayDataService _intradayDataService;
     private readonly DataQualityValidationService _qualityService;
     private readonly YahooFinanceErrorHandlingService _errorHandlingService;
     private readonly ILogger<YahooFinanceSyncController> _logger;
 
     public YahooFinanceSyncController(
         YahooFinanceDailyDataService dailyDataService,
+        YahooFinanceIntradayDataService intradayDataService,
         DataQualityValidationService qualityService,
         YahooFinanceErrorHandlingService errorHandlingService,
         ILogger<YahooFinanceSyncController> logger)
     {
         _dailyDataService = dailyDataService;
+        _intradayDataService = intradayDataService;
         _qualityService = qualityService;
         _errorHandlingService = errorHandlingService;
         _logger = logger;
     }
+
+    // ==================== INTRADAY (5-MINUTE) ENDPOINTS ====================
+
+    /// <summary>
+    /// Manually trigger 5-minute intraday sync for all active markets
+    /// </summary>
+    [HttpPost("intraday/sync")]
+    public async Task<IActionResult> TriggerIntradaySync(
+        [FromQuery] string[]? markets = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Manual 5-minute intraday sync triggered by user {UserId} for markets: {Markets}",
+                User.Identity?.Name, markets != null ? string.Join(", ", markets) : "ALL");
+
+            var result = await _intradayDataService.SyncIntradayDataAsync(markets, cancellationToken: cancellationToken);
+
+            if (result.Success)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "5-minute intraday sync completed successfully",
+                    data = new
+                    {
+                        interval = result.Interval,
+                        markets = result.Markets,
+                        duration = result.Duration,
+                        statistics = new
+                        {
+                            totalProcessed = result.TotalSymbolsProcessed,
+                            successful = result.SuccessfulSymbols,
+                            failed = result.FailedSymbols,
+                            skipped = result.SkippedSymbols,
+                            totalRecords = result.TotalRecordsProcessed
+                        },
+                        marketResults = result.MarketResults.Select(mr => new
+                        {
+                            market = mr.Market,
+                            success = mr.Success,
+                            duration = mr.Duration,
+                            statistics = new
+                            {
+                                successful = mr.SuccessfulSymbols,
+                                failed = mr.FailedSymbols,
+                                skipped = mr.SkippedSymbols,
+                                records = mr.TotalRecordsProcessed
+                            },
+                            skippedReason = mr.SkippedReason,
+                            errorMessage = mr.ErrorMessage,
+                            dataTimeRange = mr.DataStartTime.HasValue && mr.DataEndTime.HasValue
+                                ? new { start = mr.DataStartTime, end = mr.DataEndTime }
+                                : null
+                        }).ToList()
+                    }
+                });
+            }
+            else
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = result.ErrorMessage ?? "5-minute intraday sync failed",
+                    duration = result.Duration,
+                    statistics = new
+                    {
+                        totalProcessed = result.TotalSymbolsProcessed,
+                        successful = result.SuccessfulSymbols,
+                        failed = result.FailedSymbols
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual 5-minute intraday sync");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Internal server error during 5-minute sync operation",
+                error = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Get the current status of the intraday collection service
+    /// </summary>
+    [HttpGet("intraday/status")]
+    public IActionResult GetIntradayServiceStatus()
+    {
+        try
+        {
+            var scheduledService = HttpContext.RequestServices
+                .GetService<YahooFinanceIntradayScheduledService>();
+
+            if (scheduledService == null)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    data = new
+                    {
+                        serviceStatus = "Not Available",
+                        message = "Intraday scheduled service is not registered or running"
+                    }
+                });
+            }
+
+            var healthStatus = scheduledService.GetHealthStatus();
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    serviceStatus = healthStatus.Status,
+                    isHealthy = healthStatus.IsHealthy,
+                    lastSuccessfulSync = healthStatus.LastSuccessfulSync,
+                    consecutiveFailures = healthStatus.ConsecutiveFailures,
+                    timeSinceLastSuccess = healthStatus.TimeSinceLastSuccess,
+                    isCurrentlyExecuting = healthStatus.IsCurrentlyExecuting,
+                    nextScheduledExecution = healthStatus.NextScheduledExecution,
+                    currentTime = DateTime.UtcNow
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting intraday service status");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Internal server error getting intraday service status",
+                error = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Check which markets are currently in trading hours
+    /// </summary>
+    [HttpGet("intraday/market-hours")]
+    public IActionResult GetMarketHoursStatus()
+    {
+        try
+        {
+            var currentTime = DateTime.UtcNow;
+            var markets = new[] { "BIST", "NYSE", "NASDAQ", "CRYPTO" };
+            var marketStatuses = new List<object>();
+
+            foreach (var market in markets)
+            {
+                var isOpen = CheckMarketTradingHours(market, currentTime);
+                var nextOpen = GetNextMarketOpen(market, currentTime);
+                var nextClose = GetNextMarketClose(market, currentTime);
+
+                marketStatuses.Add(new
+                {
+                    market = market,
+                    isOpen = isOpen,
+                    status = isOpen ? "OPEN" : "CLOSED",
+                    currentTime = currentTime,
+                    nextOpen = nextOpen,
+                    nextClose = nextClose,
+                    timeZone = GetMarketTimeZone(market)
+                });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    timestamp = currentTime,
+                    markets = marketStatuses
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting market hours status");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Internal server error getting market hours status",
+                error = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Get recent 5-minute data for a specific symbol
+    /// </summary>
+    [HttpGet("intraday/data/{market}/{symbol}")]
+    public async Task<IActionResult> GetRecentIntradayData(
+        [FromRoute] string market,
+        [FromRoute] string symbol,
+        [FromQuery] int hours = 2,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var dbContext = HttpContext.RequestServices.GetRequiredService<ITradingDbContext>();
+            var endTime = DateTime.UtcNow;
+            var startTime = endTime.AddHours(-hours);
+
+            var data = await dbContext.HistoricalMarketData
+                .Where(h => h.SymbolTicker == symbol &&
+                           h.MarketCode == market &&
+                           h.Timeframe == "5MIN" &&
+                           h.DataSource == "YAHOO" &&
+                           h.Timestamp >= startTime &&
+                           h.Timestamp <= endTime)
+                .OrderByDescending(h => h.Timestamp)
+                .Take(100)
+                .Select(h => new
+                {
+                    timestamp = h.Timestamp,
+                    open = h.OpenPrice,
+                    high = h.HighPrice,
+                    low = h.LowPrice,
+                    close = h.ClosePrice,
+                    volume = h.Volume,
+                    dataQualityScore = h.DataQualityScore
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    symbol = symbol,
+                    market = market,
+                    timeframe = "5MIN",
+                    timeRange = new { start = startTime, end = endTime },
+                    recordCount = data.Count,
+                    records = data
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recent intraday data for {Market}:{Symbol}", market, symbol);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Internal server error getting intraday data",
+                error = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Test intraday API connectivity for a symbol
+    /// </summary>
+    [HttpGet("intraday/test/{market}/{symbol}")]
+    public async Task<IActionResult> TestIntradayApiConnectivity(
+        [FromRoute] string market,
+        [FromRoute] string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var yahooApiService = HttpContext.RequestServices.GetRequiredService<YahooFinanceApiService>();
+
+            var endTime = DateTime.UtcNow;
+            var startTime = endTime.AddMinutes(-30); // Last 30 minutes
+
+            var result = await yahooApiService.GetIntradayDataAsync(symbol, startTime, endTime, "5m", market, cancellationToken);
+
+            return Ok(new
+            {
+                success = result.Success,
+                message = result.Success ? "Intraday API connectivity test successful" : "Intraday API connectivity test failed",
+                data = new
+                {
+                    symbol = result.Symbol,
+                    market = market,
+                    interval = "5m",
+                    timeRange = new { start = startTime, end = endTime },
+                    recordsReturned = result.RecordsCount,
+                    errorMessage = result.ErrorMessage,
+                    isRetryable = result.IsRetryable,
+                    requestTime = result.RequestTime
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error testing intraday API connectivity for {Market}:{Symbol}", market, symbol);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = "Internal server error during intraday API test",
+                error = ex.Message
+            });
+        }
+    }
+
+    // ==================== DAILY SYNC ENDPOINTS ====================
 
     /// <summary>
     /// Manually trigger daily sync for a specific market
@@ -399,6 +708,224 @@ public class YahooFinanceSyncController : ControllerBase
                 error = ex.Message
             });
         }
+    }
+
+    // ==================== HELPER METHODS ====================
+
+    /// <summary>
+    /// Check if a market is currently in trading hours
+    /// </summary>
+    private bool CheckMarketTradingHours(string market, DateTime utcTime)
+    {
+        return market.ToUpper() switch
+        {
+            "BIST" => IsInBistTradingHours(utcTime),
+            "NYSE" or "NASDAQ" => IsInUSMarketTradingHours(utcTime),
+            "CRYPTO" => true, // 24/7
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Get the next market open time
+    /// </summary>
+    private DateTime? GetNextMarketOpen(string market, DateTime utcTime)
+    {
+        try
+        {
+            return market.ToUpper() switch
+            {
+                "BIST" => GetNextBistOpen(utcTime),
+                "NYSE" or "NASDAQ" => GetNextUSMarketOpen(utcTime),
+                "CRYPTO" => null, // Always open
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get the next market close time
+    /// </summary>
+    private DateTime? GetNextMarketClose(string market, DateTime utcTime)
+    {
+        try
+        {
+            return market.ToUpper() switch
+            {
+                "BIST" => GetNextBistClose(utcTime),
+                "NYSE" or "NASDAQ" => GetNextUSMarketClose(utcTime),
+                "CRYPTO" => null, // Never closes
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get the market time zone string
+    /// </summary>
+    private string GetMarketTimeZone(string market)
+    {
+        return market.ToUpper() switch
+        {
+            "BIST" => "Turkey Standard Time",
+            "NYSE" or "NASDAQ" => "Eastern Standard Time",
+            "CRYPTO" => "UTC",
+            _ => "UTC"
+        };
+    }
+
+    /// <summary>
+    /// Check if current time is within BIST trading hours
+    /// </summary>
+    private bool IsInBistTradingHours(DateTime utcTime)
+    {
+        try
+        {
+            var turkeyTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Turkey Standard Time");
+            var turkeyTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, turkeyTimeZone);
+
+            if (turkeyTime.DayOfWeek == DayOfWeek.Saturday || turkeyTime.DayOfWeek == DayOfWeek.Sunday)
+                return false;
+
+            var marketOpen = new TimeOnly(10, 0);
+            var marketClose = new TimeOnly(18, 0);
+            var currentTime = TimeOnly.FromDateTime(turkeyTime);
+
+            return currentTime >= marketOpen && currentTime <= marketClose;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if current time is within US market trading hours
+    /// </summary>
+    private bool IsInUSMarketTradingHours(DateTime utcTime)
+    {
+        try
+        {
+            var etTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+            var etTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, etTimeZone);
+
+            if (etTime.DayOfWeek == DayOfWeek.Saturday || etTime.DayOfWeek == DayOfWeek.Sunday)
+                return false;
+
+            var marketOpen = new TimeOnly(9, 30);
+            var marketClose = new TimeOnly(16, 0);
+            var currentTime = TimeOnly.FromDateTime(etTime);
+
+            return currentTime >= marketOpen && currentTime <= marketClose;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get next BIST market open time
+    /// </summary>
+    private DateTime GetNextBistOpen(DateTime utcTime)
+    {
+        var turkeyTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Turkey Standard Time");
+        var turkeyTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, turkeyTimeZone);
+
+        var nextOpen = turkeyTime.Date.AddHours(10); // 10:00 Turkey time
+
+        // If it's past 10:00 today or weekend, move to next business day
+        if (turkeyTime.TimeOfDay >= new TimeSpan(10, 0, 0) ||
+            turkeyTime.DayOfWeek == DayOfWeek.Saturday ||
+            turkeyTime.DayOfWeek == DayOfWeek.Sunday)
+        {
+            do
+            {
+                nextOpen = nextOpen.AddDays(1);
+            } while (nextOpen.DayOfWeek == DayOfWeek.Saturday || nextOpen.DayOfWeek == DayOfWeek.Sunday);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(nextOpen, turkeyTimeZone);
+    }
+
+    /// <summary>
+    /// Get next BIST market close time
+    /// </summary>
+    private DateTime GetNextBistClose(DateTime utcTime)
+    {
+        var turkeyTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Turkey Standard Time");
+        var turkeyTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, turkeyTimeZone);
+
+        var nextClose = turkeyTime.Date.AddHours(18); // 18:00 Turkey time
+
+        // If it's past 18:00 today or weekend, move to next business day
+        if (turkeyTime.TimeOfDay >= new TimeSpan(18, 0, 0) ||
+            turkeyTime.DayOfWeek == DayOfWeek.Saturday ||
+            turkeyTime.DayOfWeek == DayOfWeek.Sunday)
+        {
+            do
+            {
+                nextClose = nextClose.AddDays(1);
+            } while (nextClose.DayOfWeek == DayOfWeek.Saturday || nextClose.DayOfWeek == DayOfWeek.Sunday);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(nextClose, turkeyTimeZone);
+    }
+
+    /// <summary>
+    /// Get next US market open time
+    /// </summary>
+    private DateTime GetNextUSMarketOpen(DateTime utcTime)
+    {
+        var etTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var etTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, etTimeZone);
+
+        var nextOpen = etTime.Date.AddHours(9).AddMinutes(30); // 9:30 ET
+
+        // If it's past 9:30 today or weekend, move to next business day
+        if (etTime.TimeOfDay >= new TimeSpan(9, 30, 0) ||
+            etTime.DayOfWeek == DayOfWeek.Saturday ||
+            etTime.DayOfWeek == DayOfWeek.Sunday)
+        {
+            do
+            {
+                nextOpen = nextOpen.AddDays(1);
+            } while (nextOpen.DayOfWeek == DayOfWeek.Saturday || nextOpen.DayOfWeek == DayOfWeek.Sunday);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(nextOpen, etTimeZone);
+    }
+
+    /// <summary>
+    /// Get next US market close time
+    /// </summary>
+    private DateTime GetNextUSMarketClose(DateTime utcTime)
+    {
+        var etTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var etTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, etTimeZone);
+
+        var nextClose = etTime.Date.AddHours(16); // 16:00 ET
+
+        // If it's past 16:00 today or weekend, move to next business day
+        if (etTime.TimeOfDay >= new TimeSpan(16, 0, 0) ||
+            etTime.DayOfWeek == DayOfWeek.Saturday ||
+            etTime.DayOfWeek == DayOfWeek.Sunday)
+        {
+            do
+            {
+                nextClose = nextClose.AddDays(1);
+            } while (nextClose.DayOfWeek == DayOfWeek.Saturday || nextClose.DayOfWeek == DayOfWeek.Sunday);
+        }
+
+        return TimeZoneInfo.ConvertTimeToUtc(nextClose, etTimeZone);
     }
 }
 

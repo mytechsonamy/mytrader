@@ -1,0 +1,158 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using MyTrader.Core.Interfaces;
+using MyTrader.Infrastructure.Extensions;
+using MyTrader.Infrastructure.Services;
+
+namespace MyTrader.Infrastructure.Configuration;
+
+/// <summary>
+/// Complete BIST integration setup for myTrader application
+/// Configures all BIST-related services, monitoring, and performance optimization
+/// </summary>
+public static class BistIntegrationSetup
+{
+    /// <summary>
+    /// Register all BIST services and infrastructure
+    /// Call this from Program.cs or Startup.cs
+    /// </summary>
+    public static IServiceCollection AddBistIntegration(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        // Core BIST services
+        services.AddBistServices(configuration);
+
+        // Performance monitoring
+        services.Configure<BistPerformanceConfig>(
+            configuration.GetSection("BistPerformance"));
+        services.AddSingleton<BistPerformanceMonitor>();
+        services.AddHostedService<BistPerformanceMonitor>(provider =>
+            provider.GetRequiredService<BistPerformanceMonitor>());
+
+        // Memory cache optimization for BIST
+        services.AddMemoryCache(options =>
+        {
+            options.SizeLimit = 10000; // Limit cache size
+            options.CompactionPercentage = 0.25; // Remove 25% when limit reached
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Verify BIST integration health
+    /// Call this during application startup to ensure everything is configured correctly
+    /// </summary>
+    public static async Task<BistIntegrationHealthCheck> VerifyBistIntegration(
+        this IServiceProvider serviceProvider)
+    {
+        var healthCheck = new BistIntegrationHealthCheck();
+
+        try
+        {
+            // Check BIST service registration
+            var bistService = serviceProvider.GetService<IBistMarketDataService>();
+            healthCheck.ServiceRegistered = bistService != null;
+
+            if (bistService != null)
+            {
+                // Check cache health
+                var cacheHealth = await bistService.GetCacheHealthAsync();
+                healthCheck.CacheConfigured = cacheHealth != null;
+
+                // Check performance monitoring
+                var performanceMonitor = serviceProvider.GetService<BistPerformanceMonitor>();
+                healthCheck.MonitoringEnabled = performanceMonitor != null;
+
+                // Test basic functionality
+                try
+                {
+                    var marketStatus = await bistService.GetBistMarketStatusAsync();
+                    healthCheck.BasicFunctionalityWorking = marketStatus != null;
+                }
+                catch (Exception ex)
+                {
+                    healthCheck.BasicFunctionalityWorking = false;
+                    healthCheck.Issues.Add($"Basic functionality test failed: {ex.Message}");
+                }
+            }
+            else
+            {
+                healthCheck.Issues.Add("BIST service not registered");
+            }
+
+            healthCheck.OverallHealthy = healthCheck.ServiceRegistered &&
+                                        healthCheck.CacheConfigured &&
+                                        healthCheck.BasicFunctionalityWorking;
+        }
+        catch (Exception ex)
+        {
+            healthCheck.OverallHealthy = false;
+            healthCheck.Issues.Add($"Integration verification failed: {ex.Message}");
+        }
+
+        return healthCheck;
+    }
+}
+
+/// <summary>
+/// BIST integration health check result
+/// </summary>
+public class BistIntegrationHealthCheck
+{
+    public bool OverallHealthy { get; set; }
+    public bool ServiceRegistered { get; set; }
+    public bool CacheConfigured { get; set; }
+    public bool MonitoringEnabled { get; set; }
+    public bool BasicFunctionalityWorking { get; set; }
+    public List<string> Issues { get; set; } = new();
+    public DateTime CheckTime { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Sample configuration for BIST services
+/// Add this to your appsettings.json
+/// </summary>
+public static class BistConfigurationSample
+{
+    public static readonly object SampleConfiguration = new
+    {
+        BistConfiguration = new
+        {
+            EnableCaching = true,
+            CacheExpirySeconds = 30,
+            MaxConcurrentQueries = 10,
+            EnablePerformanceLogging = true,
+            DefaultSymbols = new[]
+            {
+                "THYAO", "AKBNK", "ISCTR", "ASELS", "BIMAS",
+                "EREGL", "KRDMD", "SASA", "TOASO", "PETKM"
+            }
+        },
+        BistPerformance = new
+        {
+            EnableMetricsCollection = true,
+            LogMetricsSummary = true,
+            MetricsIntervalMinutes = 5,
+            AutoResetIntervalHours = 24,
+            MinCacheHitRatio = 0.8,
+            MaxErrorRate = 0.05
+        },
+        ConnectionStrings = new
+        {
+            // Your existing connection string
+            DefaultConnection = "Host=localhost;Database=mytrader;Username=postgres;Password=yourpassword"
+        },
+        Logging = new
+        {
+            LogLevel = new
+            {
+                Default = "Information",
+                // Reduce BIST logging noise in production
+                BistMarketDataService = "Warning",
+                BistPerformanceMonitor = "Information"
+            }
+        }
+    };
+}

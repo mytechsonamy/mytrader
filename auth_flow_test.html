@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Flow Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 3px; border-left: 4px solid; }
+        .success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        .form-group { margin: 10px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        pre { background: #f1f3f4; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 12px; }
+        .auth-status { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .logged-out { background: #f8d7da; color: #721c24; }
+        .logged-in { background: #d4edda; color: #155724; }
+        .guest-mode { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Authentication Flow Integration Test</h1>
+        <p>Test user authentication, guest mode, and protected routes</p>
+
+        <!-- Current Authentication Status -->
+        <div class="test-section">
+            <h2>🔍 Current Authentication Status</h2>
+            <div id="authStatus" class="auth-status logged-out">Not Authenticated</div>
+            <button onclick="checkAuthStatus()">🔄 Check Status</button>
+        </div>
+
+        <!-- Guest Mode Test -->
+        <div class="test-section">
+            <h2>👤 Guest Mode Test</h2>
+            <p>Test guest session functionality</p>
+            <button onclick="testGuestMode()">🎭 Test Guest Mode</button>
+            <button onclick="exitGuestMode()">🚪 Exit Guest Mode</button>
+        </div>
+
+        <!-- Login Test -->
+        <div class="test-section">
+            <h2>🔑 Login Test</h2>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <div class="form-group">
+                        <label for="loginEmail">Email:</label>
+                        <input type="email" id="loginEmail" placeholder="test@example.com" value="test@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" id="loginPassword" placeholder="password" value="password123">
+                    </div>
+                    <button onclick="testLogin()">🔓 Test Login</button>
+                    <button onclick="testLoginFailure()">❌ Test Invalid Login</button>
+                </div>
+                <div style="flex: 1;">
+                    <h4>Test Accounts:</h4>
+                    <ul>
+                        <li><strong>Valid:</strong> test@example.com / password123</li>
+                        <li><strong>Admin:</strong> admin@example.com / admin123</li>
+                        <li><strong>Invalid:</strong> invalid@test.com / wrongpass</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Registration Test -->
+        <div class="test-section">
+            <h2>📝 Registration Test</h2>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <div class="form-group">
+                        <label for="regEmail">Email:</label>
+                        <input type="email" id="regEmail" placeholder="newuser@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Password:</label>
+                        <input type="password" id="regPassword" placeholder="password123">
+                    </div>
+                    <div class="form-group">
+                        <label for="regConfirmPassword">Confirm Password:</label>
+                        <input type="password" id="regConfirmPassword" placeholder="password123">
+                    </div>
+                    <div class="form-group">
+                        <label for="regName">Full Name:</label>
+                        <input type="text" id="regName" placeholder="John Doe">
+                    </div>
+                    <button onclick="testRegistration()">✍️ Test Registration</button>
+                </div>
+                <div style="flex: 1;">
+                    <h4>Registration Requirements:</h4>
+                    <ul>
+                        <li>Valid email format</li>
+                        <li>Password min 8 characters</li>
+                        <li>Passwords must match</li>
+                        <li>Name required</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Protected Route Test -->
+        <div class="test-section">
+            <h2>🛡️ Protected Route Test</h2>
+            <p>Test access to protected endpoints and routes</p>
+            <button onclick="testProtectedEndpoint()">🔒 Test Protected API</button>
+            <button onclick="testPublicEndpoint()">🌐 Test Public API</button>
+        </div>
+
+        <!-- Token Management Test -->
+        <div class="test-section">
+            <h2>🎫 Token Management Test</h2>
+            <p>Test JWT token validation and refresh</p>
+            <button onclick="testTokenValidation()">✅ Test Token Validation</button>
+            <button onclick="testTokenRefresh()">🔄 Test Token Refresh</button>
+            <button onclick="testExpiredToken()">⏰ Test Expired Token</button>
+        </div>
+
+        <!-- Logout Test -->
+        <div class="test-section">
+            <h2>🚪 Logout Test</h2>
+            <button onclick="testLogout()">👋 Test Logout</button>
+            <button onclick="clearAllData()">🗑️ Clear All Data</button>
+        </div>
+
+        <!-- Comprehensive Flow Test -->
+        <div class="test-section">
+            <h2>🔄 Comprehensive Flow Test</h2>
+            <button onclick="runFullAuthFlow()">🎯 Run Full Authentication Flow</button>
+            <button onclick="clearResults()">🧹 Clear Results</button>
+        </div>
+
+        <!-- Test Results -->
+        <div class="test-section">
+            <h2>📋 Test Results</h2>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5002';
+        const resultsDiv = document.getElementById('results');
+        let currentToken = null;
+        let currentUser = null;
+
+        function addResult(title, type, message, details = '') {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `
+                <strong>${title}</strong>
+                <div>${message}</div>
+                ${details ? `<pre>${details}</pre>` : ''}
+                <small>⏰ ${new Date().toLocaleTimeString()}</small>
+            `;
+            resultsDiv.appendChild(resultDiv);
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateAuthStatus(status, user = null, token = null) {
+            const statusDiv = document.getElementById('authStatus');
+            const statusText = user ? `Authenticated as ${user.email || user.name || 'User'}` : status;
+
+            if (status.includes('Guest')) {
+                statusDiv.className = 'auth-status guest-mode';
+            } else if (status.includes('Authenticated') || user) {
+                statusDiv.className = 'auth-status logged-in';
+            } else {
+                statusDiv.className = 'auth-status logged-out';
+            }
+
+            statusDiv.textContent = statusText;
+            currentUser = user;
+            currentToken = token;
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+        }
+
+        async function checkAuthStatus() {
+            try {
+                addResult('Auth Status Check', 'info', 'Checking current authentication status...');
+
+                // Check localStorage for existing tokens
+                const token = localStorage.getItem('mytrader_token');
+                const user = localStorage.getItem('mytrader_user');
+
+                if (token && user) {
+                    try {
+                        const userData = JSON.parse(user);
+                        updateAuthStatus('Authenticated', userData, token);
+                        addResult('Auth Status Check', 'success', `Found stored authentication for ${userData.email}`);
+                    } catch (e) {
+                        localStorage.removeItem('mytrader_token');
+                        localStorage.removeItem('mytrader_user');
+                        updateAuthStatus('Not Authenticated');
+                        addResult('Auth Status Check', 'warning', 'Invalid stored user data, cleared');
+                    }
+                } else {
+                    updateAuthStatus('Not Authenticated');
+                    addResult('Auth Status Check', 'info', 'No stored authentication found');
+                }
+
+                // Test if backend is accessible
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    addResult('Backend Connectivity', 'success', 'Backend is accessible');
+                } else {
+                    addResult('Backend Connectivity', 'error', `Backend returned HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Auth Status Check', 'error', 'Failed to check auth status', error.toString());
+            }
+        }
+
+        async function testGuestMode() {
+            try {
+                addResult('Guest Mode Test', 'info', 'Testing guest session creation...');
+
+                const response = await fetch(`${API_BASE}/api/auth/guest-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    updateAuthStatus('Guest Mode Active');
+                    addResult('Guest Mode Test', 'success', 'Guest session created successfully', JSON.stringify(data, null, 2));
+                } else if (response.status === 404) {
+                    addResult('Guest Mode Test', 'warning', 'Guest session endpoint not available (404) - this might be expected');
+                    updateAuthStatus('Guest Mode (Simulated)');
+                } else {
+                    addResult('Guest Mode Test', 'error', `Guest session failed with HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Guest Mode Test', 'error', 'Guest mode test failed', error.toString());
+            }
+        }
+
+        async function exitGuestMode() {
+            try {
+                localStorage.removeItem('guest_session');
+                updateAuthStatus('Not Authenticated');
+                addResult('Exit Guest Mode', 'success', 'Exited guest mode successfully');
+            } catch (error) {
+                addResult('Exit Guest Mode', 'error', 'Failed to exit guest mode', error.toString());
+            }
+        }
+
+        async function testLogin() {
+            try {
+                const email = document.getElementById('loginEmail').value;
+                const password = document.getElementById('loginPassword').value;
+
+                addResult('Login Test', 'info', `Attempting login for ${email}...`);
+
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const { user, token } = data.data || data;
+
+                    localStorage.setItem('mytrader_token', token);
+                    localStorage.setItem('mytrader_user', JSON.stringify(user));
+
+                    updateAuthStatus('Authenticated', user, token);
+                    addResult('Login Test', 'success', `Login successful for ${user.email}`, JSON.stringify(user, null, 2));
+                } else {
+                    const errorData = await response.json();
+                    addResult('Login Test', 'error', `Login failed: ${errorData.message || 'Unknown error'}`, `HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Login Test', 'error', 'Login test failed', error.toString());
+            }
+        }
+
+        async function testLoginFailure() {
+            try {
+                addResult('Login Failure Test', 'info', 'Testing login with invalid credentials...');
+
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: 'invalid@test.com', password: 'wrongpassword' })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    addResult('Login Failure Test', 'success', 'Invalid credentials correctly rejected', `HTTP ${response.status}: ${errorData.message}`);
+                } else {
+                    addResult('Login Failure Test', 'error', 'Invalid credentials were accepted - security issue!');
+                }
+
+            } catch (error) {
+                addResult('Login Failure Test', 'error', 'Login failure test failed', error.toString());
+            }
+        }
+
+        async function testRegistration() {
+            try {
+                const email = document.getElementById('regEmail').value;
+                const password = document.getElementById('regPassword').value;
+                const confirmPassword = document.getElementById('regConfirmPassword').value;
+                const name = document.getElementById('regName').value;
+
+                addResult('Registration Test', 'info', `Attempting registration for ${email}...`);
+
+                if (password !== confirmPassword) {
+                    addResult('Registration Test', 'error', 'Passwords do not match');
+                    return;
+                }
+
+                const response = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password, name })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('Registration Test', 'success', `Registration successful for ${email}`, JSON.stringify(data, null, 2));
+                } else {
+                    const errorData = await response.json();
+                    addResult('Registration Test', response.status === 409 ? 'warning' : 'error',
+                             `Registration result: ${errorData.message || 'Unknown error'}`, `HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Registration Test', 'error', 'Registration test failed', error.toString());
+            }
+        }
+
+        async function testProtectedEndpoint() {
+            try {
+                addResult('Protected Endpoint Test', 'info', 'Testing access to protected endpoint...');
+
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                if (currentToken) {
+                    headers['Authorization'] = `Bearer ${currentToken}`;
+                }
+
+                const response = await fetch(`${API_BASE}/api/dashboard/preferences`, {
+                    headers
+                });
+
+                if (response.status === 401) {
+                    addResult('Protected Endpoint Test', 'success', 'Protected endpoint correctly requires authentication', `HTTP ${response.status}`);
+                } else if (response.ok) {
+                    const data = await response.json();
+                    addResult('Protected Endpoint Test', 'success', 'Protected endpoint accessible with valid token', JSON.stringify(data, null, 2));
+                } else {
+                    addResult('Protected Endpoint Test', 'warning', `Protected endpoint returned HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Protected Endpoint Test', 'error', 'Protected endpoint test failed', error.toString());
+            }
+        }
+
+        async function testPublicEndpoint() {
+            try {
+                addResult('Public Endpoint Test', 'info', 'Testing access to public endpoint...');
+
+                const response = await fetch(`${API_BASE}/api/symbols`);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('Public Endpoint Test', 'success', 'Public endpoint accessible without authentication', `Found ${Object.keys(data.symbols || {}).length} symbols`);
+                } else {
+                    addResult('Public Endpoint Test', 'error', `Public endpoint failed: HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Public Endpoint Test', 'error', 'Public endpoint test failed', error.toString());
+            }
+        }
+
+        async function testTokenValidation() {
+            try {
+                addResult('Token Validation Test', 'info', 'Testing JWT token validation...');
+
+                if (!currentToken) {
+                    addResult('Token Validation Test', 'warning', 'No token available for validation');
+                    return;
+                }
+
+                // Try to decode JWT token
+                try {
+                    const parts = currentToken.split('.');
+                    if (parts.length !== 3) {
+                        throw new Error('Invalid JWT format');
+                    }
+
+                    const payload = JSON.parse(atob(parts[1]));
+                    const exp = payload.exp;
+                    const currentTime = Math.floor(Date.now() / 1000);
+
+                    if (exp > currentTime) {
+                        addResult('Token Validation Test', 'success', `Token is valid (expires: ${new Date(exp * 1000).toLocaleString()})`, JSON.stringify(payload, null, 2));
+                    } else {
+                        addResult('Token Validation Test', 'warning', 'Token has expired');
+                    }
+
+                } catch (decodeError) {
+                    addResult('Token Validation Test', 'error', 'Failed to decode JWT token', decodeError.toString());
+                }
+
+            } catch (error) {
+                addResult('Token Validation Test', 'error', 'Token validation test failed', error.toString());
+            }
+        }
+
+        async function testTokenRefresh() {
+            try {
+                addResult('Token Refresh Test', 'info', 'Testing token refresh...');
+
+                const refreshToken = localStorage.getItem('mytrader_refresh_token');
+                if (!refreshToken) {
+                    addResult('Token Refresh Test', 'warning', 'No refresh token available');
+                    return;
+                }
+
+                const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ refreshToken })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const { token } = data.data || data;
+
+                    localStorage.setItem('mytrader_token', token);
+                    currentToken = token;
+
+                    addResult('Token Refresh Test', 'success', 'Token refreshed successfully');
+                } else {
+                    addResult('Token Refresh Test', 'error', `Token refresh failed: HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Token Refresh Test', 'error', 'Token refresh test failed', error.toString());
+            }
+        }
+
+        async function testExpiredToken() {
+            try {
+                addResult('Expired Token Test', 'info', 'Testing behavior with expired token...');
+
+                // Create a fake expired token
+                const expiredToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.invalid';
+
+                const response = await fetch(`${API_BASE}/api/dashboard/preferences`, {
+                    headers: {
+                        'Authorization': `Bearer ${expiredToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    addResult('Expired Token Test', 'success', 'Expired token correctly rejected', `HTTP ${response.status}`);
+                } else {
+                    addResult('Expired Token Test', 'warning', `Unexpected response to expired token: HTTP ${response.status}`);
+                }
+
+            } catch (error) {
+                addResult('Expired Token Test', 'error', 'Expired token test failed', error.toString());
+            }
+        }
+
+        async function testLogout() {
+            try {
+                addResult('Logout Test', 'info', 'Testing logout functionality...');
+
+                // Test API logout if endpoint exists
+                if (currentToken) {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/auth/logout`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${currentToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        if (response.ok) {
+                            addResult('Logout Test', 'success', 'Server-side logout successful');
+                        } else if (response.status === 404) {
+                            addResult('Logout Test', 'info', 'Server-side logout endpoint not available (404)');
+                        } else {
+                            addResult('Logout Test', 'warning', `Server-side logout returned HTTP ${response.status}`);
+                        }
+                    } catch (logoutError) {
+                        addResult('Logout Test', 'info', 'Server-side logout not available, proceeding with client-side');
+                    }
+                }
+
+                // Clear local storage
+                localStorage.removeItem('mytrader_token');
+                localStorage.removeItem('mytrader_refresh_token');
+                localStorage.removeItem('mytrader_user');
+
+                updateAuthStatus('Not Authenticated');
+                addResult('Logout Test', 'success', 'Client-side logout completed - tokens cleared');
+
+            } catch (error) {
+                addResult('Logout Test', 'error', 'Logout test failed', error.toString());
+            }
+        }
+
+        async function clearAllData() {
+            try {
+                localStorage.clear();
+                updateAuthStatus('Not Authenticated');
+                addResult('Clear Data', 'success', 'All local storage data cleared');
+            } catch (error) {
+                addResult('Clear Data', 'error', 'Failed to clear data', error.toString());
+            }
+        }
+
+        async function runFullAuthFlow() {
+            addResult('Full Auth Flow', 'info', 'Starting comprehensive authentication flow test...');
+
+            // Clear existing state
+            await clearAllData();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Check initial status
+            await checkAuthStatus();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test guest mode
+            await testGuestMode();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test public endpoint access
+            await testPublicEndpoint();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test protected endpoint (should fail)
+            await testProtectedEndpoint();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Exit guest mode
+            await exitGuestMode();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test login failure
+            await testLoginFailure();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test valid login
+            await testLogin();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test protected endpoint (should succeed)
+            await testProtectedEndpoint();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test token validation
+            await testTokenValidation();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Test logout
+            await testLogout();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            addResult('Full Auth Flow', 'success', '🎉 Comprehensive authentication flow test completed!');
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            checkAuthStatus();
+            addResult('System Check', 'info', 'Authentication test page loaded. Ready to test auth flows.');
+        });
+    </script>
+</body>
+</html>

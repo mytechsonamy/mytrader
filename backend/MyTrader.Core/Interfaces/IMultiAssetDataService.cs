@@ -56,6 +56,11 @@ public interface IMultiAssetDataService
     Task<TopMoversDto> GetTopMoversAsync(string? assetClassCode = null, int limit = 20, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get top symbols by volume per asset class for market leaders dashboard
+    /// </summary>
+    Task<List<VolumeLeaderDto>> GetTopByVolumePerAssetClassAsync(int perClass = 8, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get market overview data for dashboard
     /// </summary>
     Task<MarketOverviewDto> GetMarketOverviewAsync(CancellationToken cancellationToken = default);

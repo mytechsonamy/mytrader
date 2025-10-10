@@ -1,4 +1,5 @@
 import * as signalR from '@microsoft/signalr';
+import { encode } from 'base-64';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { WS_BASE_URL as CFG_WS_BASE_URL, API_BASE_URL as CFG_API_BASE_URL } from '../config';
@@ -57,6 +58,7 @@ class EnhancedWebSocketService {
 
   private options: ConnectionOptions;
   private sessionToken: string | null = null;
+  private lastSubscriptionAttempt: { assetClass?: string; symbols?: string[] } | null = null;
 
   constructor(options: Partial<ConnectionOptions> = {}) {
     this.options = { ...this.defaultOptions, ...options };
@@ -111,7 +113,7 @@ class EnhancedWebSocketService {
   private buildHubUrl(customUrl?: string): string {
     if (customUrl) return customUrl;
 
-    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://192.168.68.103:5002/api';
+    const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL || CFG_API_BASE_URL || 'http://192.168.68.102:8080/api';
     const configuredHubUrl = Constants.expoConfig?.extra?.WS_BASE_URL || CFG_WS_BASE_URL;
     const rawHubUrl = configuredHubUrl || API_BASE_URL.replace('/api', '/hubs/dashboard');
 
@@ -197,8 +199,27 @@ class EnhancedWebSocketService {
     // Price updates with error handling - dual listeners for backend compatibility
     this.connection.on('ReceivePriceUpdate', (data: any) => {
       try {
+        // CRITICAL DEBUG: Log RAW data BEFORE any processing
+        if (__DEV__) {
+          console.log('[WebSocketService] ======= RAW ReceivePriceUpdate =======');
+          console.log('[WebSocketService] RAW data type:', typeof data);
+          console.log('[WebSocketService] RAW data keys:', Object.keys(data || {}));
+          console.log('[WebSocketService] RAW data:', JSON.stringify(data, null, 2));
+          console.log('[WebSocketService] Has previousClose?:', 'previousClose' in (data || {}));
+          console.log('[WebSocketService] Has PreviousClose?:', 'PreviousClose' in (data || {}));
+          console.log('[WebSocketService] previousClose value:', data?.previousClose);
+          console.log('[WebSocketService] PreviousClose value:', data?.PreviousClose);
+          console.log('[WebSocketService] ==========================================');
+        }
+
         const parsedData = this.safeParseMessageData(data, 'price_update');
         if (parsedData) {
+          // Log parsed data to compare with raw
+          if (__DEV__) {
+            console.log('[WebSocketService] PARSED data keys:', Object.keys(parsedData || {}));
+            console.log('[WebSocketService] PARSED previousClose:', parsedData?.previousClose);
+            console.log('[WebSocketService] PARSED PreviousClose:', parsedData?.PreviousClose);
+          }
           this.emitEvent('price_update', parsedData);
           this.emitEvent('market_data', parsedData); // Legacy compatibility
         }
@@ -283,9 +304,35 @@ class EnhancedWebSocketService {
       this.emitEvent('subscription_error', data);
     });
 
+    // Also handle lowercase 'subscriptionerror' for backward compatibility
+    this.connection.on('subscriptionerror', (error: any) => {
+      console.error('[SignalR] Subscription error (lowercase event):', {
+        error,
+        attemptedSymbols: this.lastSubscriptionAttempt?.symbols,
+        assetClass: this.lastSubscriptionAttempt?.assetClass
+      });
+      this.emitEvent('subscription_error', { error: error?.message || error, subscriptionType: 'unknown' });
+    });
+
     // Heartbeat
     this.connection.on('Heartbeat', (data: { timestamp: string }) => {
+      if (__DEV__) {
+        console.log('[SignalR] Heartbeat received:', data.timestamp);
+      }
       this.emitEvent('heartbeat', data);
+    });
+
+    // Connection status updates
+    this.connection.on('connectionstatus', (data: { status: string; message?: string }) => {
+      console.log('[SignalR] Connection status update:', data);
+      this.emitEvent('connectionstatus', data);
+      
+      // Update internal connection state based on status
+      if (data.status === 'connected') {
+        this.connectionState.isConnected = true;
+      } else if (data.status === 'disconnected' || data.status === 'error') {
+        this.connectionState.isConnected = false;
+      }
     });
 
     // Legacy compatibility handlers with error handling
@@ -447,17 +494,25 @@ class EnhancedWebSocketService {
 
   // ENHANCED: Subscribe to live crypto data specifically (matches backend symbols)
   async subscribeToCryptoUpdates(): Promise<string> {
-    const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD'];
+    const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'AVAXUSDT'];
     console.log('Subscribing to crypto price updates for symbols:', cryptoSymbols);
+
+    // Track this subscription attempt for debugging
+    this.lastSubscriptionAttempt = { assetClass: 'CRYPTO', symbols: cryptoSymbols };
 
     if (this.connection && this.connectionState.isConnected) {
       try {
         // Use the specific method that matches the backend SignalR hub
+        console.log('Invoking SubscribeToPriceUpdates with:', { assetClass: 'CRYPTO', symbols: cryptoSymbols });
         await this.connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', cryptoSymbols);
         console.log('Successfully invoked SubscribeToPriceUpdates for CRYPTO');
         return 'crypto-subscription';
       } catch (error) {
-        console.error('Failed to subscribe to crypto updates:', error);
+        console.error('Failed to subscribe to crypto updates:', {
+          error,
+          attemptedSymbols: cryptoSymbols,
+          assetClass: 'CRYPTO'
+        });
         throw error;
       }
     } else {
@@ -534,7 +589,7 @@ class EnhancedWebSocketService {
       JSON.stringify(request.filters || {}),
     ];
 
-    return btoa(components.join('|')).replace(/[+/=]/g, '');
+    return encode(components.join('|')).replace(/[+/=]/g, '');
   }
 
   // Event handling
@@ -667,6 +722,23 @@ class EnhancedWebSocketService {
 
   isConnected(): boolean {
     return this.connectionState.isConnected;
+  }
+
+  // Direct subscription method for specific asset class and symbols
+  async subscribeToAssetClass(assetClass: string, symbols: string[]): Promise<void> {
+    if (this.connection && this.connectionState.isConnected) {
+      console.log(`[WebSocket] Subscribing to ${assetClass} with symbols:`, symbols);
+      try {
+        await this.connection.invoke('SubscribeToPriceUpdates', assetClass, symbols);
+        console.log(`[WebSocket] Successfully subscribed to ${assetClass} price updates`);
+      } catch (error) {
+        console.error(`[WebSocket] Failed to subscribe to ${assetClass}:`, error);
+        throw error;
+      }
+    } else {
+      console.warn('[WebSocket] Cannot subscribe - connection not established');
+      throw new Error('WebSocket connection not established');
+    }
   }
 
   async updateToken(newToken: string): Promise<void> {

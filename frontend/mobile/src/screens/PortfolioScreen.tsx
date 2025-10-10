@@ -50,7 +50,7 @@ const PortfolioScreen = ({ navigation }: any) => {
         { text: 'İptal', style: 'cancel' },
         {
           text: 'Oluştur',
-          onPress: async (name) => {
+          onPress: async (name?: string) => {
             if (name?.trim()) {
               // Navigate to create portfolio screen or handle inline
               console.log('Creating portfolio:', name);

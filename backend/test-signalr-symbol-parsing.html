@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Symbol Parsing Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 10px;
+            border: 1px solid #00ff00;
+        }
+        .test-title {
+            color: #ffff00;
+            font-weight: bold;
+        }
+        .success {
+            color: #00ff00;
+        }
+        .error {
+            color: #ff0000;
+        }
+        .info {
+            color: #00ffff;
+        }
+        button {
+            background-color: #333;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        #log {
+            background-color: #000;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>SignalR Symbol Parsing Test - Phase 2B Fix Verification</h1>
+
+    <div class="test-section">
+        <div class="test-title">Connection Settings</div>
+        <input type="text" id="hubUrl" value="http://localhost:5086/hubs/marketdata" style="width: 300px;" />
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <div id="connectionStatus">Status: Disconnected</div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">Test Cases</div>
+        <button onclick="testCase1()">Test 1: Array of Symbols (object[])</button>
+        <button onclick="testCase2()">Test 2: Single Symbol (string)</button>
+        <button onclick="testCase3()">Test 3: Empty Array</button>
+        <button onclick="testCase4()">Test 4: Null Value</button>
+        <button onclick="testCase5()">Test 5: Mixed Asset Classes</button>
+        <button onclick="runAllTests()">Run All Tests</button>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">Activity Log</div>
+        <div id="log"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.js"></script>
+    <script>
+        let connection;
+        const logElement = document.getElementById('log');
+        let testResults = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+            const prefix = type === 'error' ? '[ERROR]' : type === 'success' ? '[SUCCESS]' : '[INFO]';
+            const colorClass = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+
+            const logEntry = document.createElement('div');
+            logEntry.className = colorClass;
+            logEntry.textContent = `${timestamp} ${prefix} ${message}`;
+            logElement.appendChild(logEntry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        async function connect() {
+            try {
+                const hubUrl = document.getElementById('hubUrl').value;
+                log(`Connecting to ${hubUrl}...`);
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(hubUrl)
+                    .configureLogging(signalR.LogLevel.Debug)
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Set up event handlers
+                connection.on('SubscriptionConfirmed', (data) => {
+                    log(`✅ Subscription Confirmed: ${JSON.stringify(data)}`, 'success');
+                    log(`   Asset Class: ${data.assetClass}`, 'success');
+                    log(`   Symbols: ${data.symbols?.join(', ') || 'none'}`, 'success');
+                });
+
+                connection.on('SubscriptionError', (data) => {
+                    log(`❌ Subscription Error: ${JSON.stringify(data)}`, 'error');
+                    log(`   Error: ${data.error}`, 'error');
+                    log(`   Message: ${data.message}`, 'error');
+                    if (data.receivedData) {
+                        log(`   Received Data: ${JSON.stringify(data.receivedData)}`, 'error');
+                    }
+                });
+
+                connection.on('PriceUpdate', (data) => {
+                    log(`📊 Price Update: ${data.symbol} = ${data.price}`, 'info');
+                });
+
+                connection.onclose((error) => {
+                    document.getElementById('connectionStatus').textContent = 'Status: Disconnected';
+                    if (error) {
+                        log(`Connection closed with error: ${error}`, 'error');
+                    }
+                });
+
+                await connection.start();
+                document.getElementById('connectionStatus').textContent = 'Status: Connected';
+                log('Connected successfully!', 'success');
+
+            } catch (error) {
+                log(`Connection failed: ${error}`, 'error');
+                document.getElementById('connectionStatus').textContent = 'Status: Failed';
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                document.getElementById('connectionStatus').textContent = 'Status: Disconnected';
+                log('Disconnected', 'info');
+            }
+        }
+
+        async function testCase1() {
+            log('\n=== Test Case 1: Array of Symbols (object[]) ===', 'info');
+            log('Testing JavaScript array -> object[] conversion', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'AVAXUSDT'];
+                log(`Sending array: ${JSON.stringify(symbols)}`, 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbols);
+                log('✅ Test Case 1 completed - check for SubscriptionConfirmed event', 'success');
+            } catch (error) {
+                log(`❌ Test Case 1 failed: ${error}`, 'error');
+            }
+        }
+
+        async function testCase2() {
+            log('\n=== Test Case 2: Single Symbol (string) ===', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                const symbol = 'BTCUSDT';
+                log(`Sending single symbol: "${symbol}"`, 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbol);
+                log('✅ Test Case 2 completed - check for SubscriptionConfirmed event', 'success');
+            } catch (error) {
+                log(`❌ Test Case 2 failed: ${error}`, 'error');
+            }
+        }
+
+        async function testCase3() {
+            log('\n=== Test Case 3: Empty Array ===', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                const symbols = [];
+                log(`Sending empty array: ${JSON.stringify(symbols)}`, 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbols);
+                log('Test Case 3 completed - should receive NoSymbols error', 'info');
+            } catch (error) {
+                log(`Test Case 3 invoke error: ${error}`, 'error');
+            }
+        }
+
+        async function testCase4() {
+            log('\n=== Test Case 4: Null Value ===', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                log('Sending null value', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', null);
+                log('Test Case 4 completed - should receive NoSymbols error', 'info');
+            } catch (error) {
+                log(`Test Case 4 invoke error: ${error}`, 'error');
+            }
+        }
+
+        async function testCase5() {
+            log('\n=== Test Case 5: Mixed Asset Classes ===', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                // Test STOCK_BIST
+                log('Testing STOCK_BIST with array...', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK_BIST', ['THYAO', 'GARAN', 'AKBNK']);
+
+                // Wait a bit
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Test STOCK_NASDAQ
+                log('Testing STOCK_NASDAQ with array...', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK_NASDAQ', ['AAPL', 'GOOGL', 'MSFT']);
+
+                log('✅ Test Case 5 completed', 'success');
+            } catch (error) {
+                log(`❌ Test Case 5 failed: ${error}`, 'error');
+            }
+        }
+
+        async function runAllTests() {
+            log('\n🚀 Running All Tests...', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Please connect first!', 'error');
+                return;
+            }
+
+            await testCase1();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            await testCase2();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            await testCase3();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            await testCase4();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            await testCase5();
+
+            log('\n✅ All tests completed!', 'success');
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            log('SignalR Symbol Parsing Test Ready', 'info');
+            log('This test verifies the Phase 2B fix for object[] handling', 'info');
+            log('Expected behavior:', 'info');
+            log('  - Arrays should be properly parsed as object[]', 'info');
+            log('  - Single strings should work', 'info');
+            log('  - Empty arrays and null should return NoSymbols error with details', 'info');
+        });
+    </script>
+</body>
+</html>

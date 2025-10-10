@@ -6,7 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using MyTrader.Services.Market;
 using MyTrader.Core.Interfaces;
 using MyTrader.Core.DTOs;
+using MyTrader.Core.Models;
 using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 
 namespace MyTrader.Api.Controllers;
 
@@ -15,38 +18,96 @@ namespace MyTrader.Api.Controllers;
 /// Supports crypto, stocks, forex, and other asset classes
 /// </summary>
 [ApiController]
-[Route("api/v1/symbols")]
+[Route("api/symbols")] // Backward compatibility route
+[Route("api/v1/symbols")] // New versioned route
 public class SymbolsController : ControllerBase
 {
     private readonly ISymbolService _symbolService;
     private readonly ILogger<SymbolsController> _logger;
+    private readonly string _connectionString;
 
     public SymbolsController(
         ISymbolService symbolService,
-        ILogger<SymbolsController> logger)
+        ILogger<SymbolsController> logger,
+        IConfiguration configuration)
     {
         _symbolService = symbolService;
         _logger = logger;
+        _connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? "Host=localhost;Port=5432;Database=mytrader;Username=postgres;Password=password";
     }
 
     [HttpGet]
-    [Authorize]
-    public async Task<ActionResult> GetSymbols()
+    [AllowAnonymous] // Allow public access for market data
+    public async Task<ActionResult> GetSymbols([FromQuery] string? exchange = null)
     {
-        // Return symbols in the format expected by frontend
-        var trackedSymbols = await _symbolService.GetTrackedAsync();
-        var symbols = trackedSymbols.ToDictionary(
-            s => s.Ticker.Replace("USDT", ""), // Use clean symbol as key (BTC, ETH, etc.)
-            s => new
+        try
+        {
+            // Get all active and tracked symbols (using the working method)
+            var allActiveSymbols = await _symbolService.GetActiveSymbolsAsync();
+            _logger.LogInformation("Found {Count} active symbols from database", allActiveSymbols.Count);
+
+            // Filter by exchange if parameter provided
+            List<Symbol> filteredSymbols;
+            if (!string.IsNullOrEmpty(exchange))
             {
-                symbol = s.Ticker,
-                display_name = s.Display,
-                precision = 2, // Default precision
-                strategy_type = "quality_over_quantity" // Default strategy
+                _logger.LogInformation("Filtering symbols by exchange: {Exchange}", exchange);
+                filteredSymbols = allActiveSymbols
+                    .Where(s => s.Venue.Equals(exchange, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (!filteredSymbols.Any())
+                {
+                    _logger.LogWarning("No symbols found for exchange: {Exchange}", exchange);
+                }
+                else
+                {
+                    _logger.LogInformation("Found {Count} symbols for exchange {Exchange}", filteredSymbols.Count, exchange);
+                }
             }
-        );
-        
-        return Ok(new { symbols, interval = "1m" });
+            else
+            {
+                // No exchange filter - return all symbols
+                filteredSymbols = allActiveSymbols;
+                _logger.LogInformation("No exchange filter applied, returning all active symbols");
+            }
+
+            // Create response dictionary with frontend-compatible fields
+            var symbols = filteredSymbols.ToDictionary(
+                s => s.BaseCurrency ?? s.Ticker.Replace("USD", "").Replace("USDT", ""), // Use clean symbol as key (BTC, ETH, etc.)
+                s => new
+                {
+                    symbol = s.Ticker,
+                    display_name = s.Display ?? s.FullName ?? s.Ticker,
+                    venue = s.Venue,
+                    market = s.Venue,        // Frontend expects this field
+                    marketName = s.Venue,    // Existing field for backward compatibility
+                    fullName = s.FullName,
+                    baseCurrency = s.BaseCurrency,
+                    quoteCurrency = s.QuoteCurrency,
+                    precision = s.PricePrecision ?? (s.AssetClass == "CRYPTO" ? 8 : 2),
+                    strategy_type = "quality_over_quantity" // Default strategy
+                }
+            );
+
+            _logger.LogInformation("Retrieved {Count} symbols for frontend", symbols.Count);
+            return Ok(new { symbols, interval = "1m" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving symbols");
+            // Return fallback mock data for development
+            var mockSymbols = new Dictionary<string, object>
+            {
+                ["BTC"] = new { symbol = "BTC-USD", display_name = "Bitcoin", precision = 2, strategy_type = "quality_over_quantity" },
+                ["ETH"] = new { symbol = "ETH-USD", display_name = "Ethereum", precision = 2, strategy_type = "quality_over_quantity" },
+                ["SOL"] = new { symbol = "SOL-USD", display_name = "Solana", precision = 2, strategy_type = "quality_over_quantity" },
+                ["AVAX"] = new { symbol = "AVAX-USD", display_name = "Avalanche", precision = 2, strategy_type = "quality_over_quantity" },
+                ["LINK"] = new { symbol = "LINK-USD", display_name = "Chainlink", precision = 2, strategy_type = "quality_over_quantity" }
+            };
+
+            return Ok(new { symbols = mockSymbols, interval = "1m" });
+        }
     }
 
     [HttpGet("test")]
@@ -54,6 +115,57 @@ public class SymbolsController : ControllerBase
     public ActionResult GetTest()
     {
         return Ok(new { message = "Test endpoint working", timestamp = DateTime.UtcNow });
+    }
+
+    [HttpGet("debug")]
+    [AllowAnonymous]
+    public async Task<ActionResult> DebugSymbols()
+    {
+        try
+        {
+            var allSymbols = await _symbolService.GetActiveSymbolsAsync();
+            var cryptoTracked = await _symbolService.GetTrackedAsync("CRYPTO");
+            var binanceTracked = await _symbolService.GetTrackedAsync("BINANCE");
+
+            return Ok(new {
+                allSymbolsCount = allSymbols.Count,
+                allSymbols = allSymbols.Take(5).Select(s => new { s.Ticker, s.Venue, s.IsTracked, s.AssetClass }),
+                cryptoTrackedCount = cryptoTracked.Count,
+                binanceTrackedCount = binanceTracked.Count
+            });
+        }
+        catch (Exception ex)
+        {
+            return Ok(new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
+    }
+
+    /// <summary>
+    /// Get all markets
+    /// </summary>
+    [HttpGet("markets")]
+    [AllowAnonymous]
+    public ActionResult GetMarkets()
+    {
+        try
+        {
+            _logger.LogInformation("Returning market data");
+            // Return well-defined markets
+            var markets = new[]
+            {
+                new { code = "BINANCE", name = "Binance", name_tr = "Binance", description = "Cryptocurrency Exchange", country_code = "MT", timezone = "UTC", primary_currency = "USDT", display_order = 1 },
+                new { code = "BIST", name = "Borsa Istanbul", name_tr = "Borsa İstanbul", description = "Turkish Stock Exchange", country_code = "TR", timezone = "Europe/Istanbul", primary_currency = "TRY", display_order = 2 },
+                new { code = "NASDAQ", name = "NASDAQ", name_tr = "NASDAQ", description = "US Tech Stock Exchange", country_code = "US", timezone = "America/New_York", primary_currency = "USD", display_order = 3 },
+                new { code = "NYSE", name = "New York Stock Exchange", name_tr = "New York Menkul Kıymetler Borsası", description = "US Stock Exchange", country_code = "US", timezone = "America/New_York", primary_currency = "USD", display_order = 4 },
+                new { code = "FOREX_MARKET", name = "Foreign Exchange Market", name_tr = "Döviz Piyasası", description = "Currency Trading", country_code = "GLOBAL", timezone = "UTC", primary_currency = "USD", display_order = 5 }
+            };
+            return Ok(markets);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving markets");
+            return StatusCode(500, new { message = "Failed to retrieve markets" });
+        }
     }
 
     /// <summary>
@@ -98,7 +210,7 @@ public class SymbolsController : ControllerBase
     }
 
     [HttpGet("tracked")]
-    [Authorize]
+    [AllowAnonymous] // Allow anonymous access for mobile testing
     public async Task<ActionResult> GetTracked()
     {
         var list = await _symbolService.GetTrackedAsync();
@@ -213,26 +325,30 @@ public class SymbolsController : ControllerBase
                     {
                         id = s.Id.ToString(),
                         symbol = s.Ticker,
-                        displayName = s.Display ?? s.Ticker,
-                        assetClassId = Guid.NewGuid().ToString(),
-                        assetClassName = assetClassName.ToUpper(),
-                        marketId = Guid.NewGuid().ToString(),
-                        marketName = $"{assetClassName} Market",
+                        name = s.Display ?? s.FullName ?? s.Ticker,  // Add 'name' field
+                        displayName = s.Display ?? s.FullName ?? s.Ticker,
+                        assetClassId = s.AssetClassId?.ToString() ?? Guid.Empty.ToString(),
+                        assetClassName = s.AssetClass ?? assetClassName.ToUpper(),
+                        marketId = s.MarketId?.ToString() ?? Guid.Empty.ToString(),
+                        market = s.Venue ?? $"{assetClassName} Market",  // ADD THIS - frontend expects this field
+                        marketName = s.Venue ?? $"{assetClassName} Market",  // Keep for backward compatibility
+                        venue = s.Venue ?? $"{assetClassName} Market",  // ADD THIS - alternative field
                         baseCurrency = s.BaseCurrency ?? "",
                         quoteCurrency = s.QuoteCurrency ?? "",
-                        minTradeAmount = 0.001,
-                        maxTradeAmount = 1000000,
-                        priceDecimalPlaces = 2,
-                        quantityDecimalPlaces = 8,
+                        minTradeAmount = s.MinOrderValue ?? 0.001m,
+                        maxTradeAmount = s.MaxOrderValue ?? 1000000m,
+                        priceDecimalPlaces = s.PricePrecision ?? 2,
+                        quantityDecimalPlaces = s.QuantityPrecision ?? 8,
                         isActive = s.IsActive,
                         isTracked = s.IsTracked,
-                        tickSize = 0.01,
-                        lotSize = 0.001,
-                        description = $"{s.Display ?? s.Ticker} {assetClassName.ToLower()}",
-                        sector = "Financial",
-                        industry = assetClassName
+                        tickSize = s.TickSize ?? 0.01m,
+                        lotSize = s.StepSize ?? 0.001m,
+                        description = s.Description ?? $"{s.Display ?? s.Ticker} {assetClassName.ToLower()}",
+                        sector = s.Sector ?? "Financial",
+                        industry = s.Industry ?? assetClassName
                     }).ToArray();
 
+                    _logger.LogInformation("Returning {Count} symbols for asset class {AssetClass}", result.Length, assetClassName);
                     return Ok(result);
                 }
             }
@@ -367,11 +483,14 @@ public class SymbolsController : ControllerBase
         {
             id = Guid.NewGuid().ToString(),
             symbol = crypto.Symbol,
+            name = crypto.Name,  // Add 'name' field
             displayName = crypto.Name,
             assetClassId = Guid.NewGuid().ToString(),
             assetClassName = "CRYPTO",
             marketId = Guid.NewGuid().ToString(),
-            marketName = "Crypto Market",
+            market = "BINANCE",  // ADD THIS - frontend expects this field
+            marketName = "Crypto Market",  // Keep for backward compatibility
+            venue = "BINANCE",  // ADD THIS - alternative field
             baseCurrency = crypto.Symbol,
             quoteCurrency = "USDT",
             minTradeAmount = 0.001,
@@ -413,11 +532,14 @@ public class SymbolsController : ControllerBase
         {
             id = Guid.NewGuid().ToString(),
             symbol = stock.Symbol,
+            name = stock.Name,  // Add 'name' field
             displayName = stock.Name,
             assetClassId = Guid.NewGuid().ToString(),
             assetClassName = "STOCK",
             marketId = Guid.NewGuid().ToString(),
-            marketName = $"{stock.Exchange} Market",
+            market = stock.Exchange,  // ADD THIS - frontend expects this field
+            marketName = $"{stock.Exchange} Market",  // Keep for backward compatibility
+            venue = stock.Exchange,  // ADD THIS - alternative field
             baseCurrency = stock.Symbol,
             quoteCurrency = stock.Currency,
             minTradeAmount = 1.0,

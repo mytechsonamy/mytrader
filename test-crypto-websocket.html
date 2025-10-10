@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto WebSocket Test Client</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .crypto-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .crypto-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .crypto-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            transition: all 0.5s;
+            opacity: 0;
+        }
+        .crypto-card.updated::before {
+            animation: shine 0.5s ease-in-out;
+        }
+        .crypto-symbol {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .crypto-price {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .crypto-change {
+            font-size: 14px;
+        }
+        .positive {
+            color: #4caf50;
+        }
+        .negative {
+            color: #f44336;
+        }
+        .crypto-time {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        .log-container {
+            margin-top: 20px;
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .connect-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .disconnect-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+        .clear-btn {
+            background-color: #6c757d;
+            color: white;
+        }
+        @keyframes shine {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MyTrader Crypto WebSocket Test Client</h1>
+
+        <div id="status" class="status disconnected">
+            ❌ Disconnected - Click Connect to start receiving live crypto prices
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="connect-btn">🔌 Connect to WebSocket</button>
+            <button id="disconnectBtn" class="disconnect-btn" disabled>🔌 Disconnect</button>
+            <button id="clearLogsBtn" class="clear-btn">🗑️ Clear Logs</button>
+        </div>
+
+        <div class="crypto-grid" id="cryptoGrid">
+            <!-- Crypto cards will be dynamically added here -->
+        </div>
+
+        <h3>📊 Live Updates Log</h3>
+        <div id="logContainer" class="log-container">
+            <div>Waiting for connection...</div>
+        </div>
+    </div>
+
+    <script>
+        const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'AVAXUSDT', 'ADAUSDT', 'LINKUSDT', 'DOTUSDT', 'UNIUSDT', 'ATOMUSDT', 'MATICUSDT'];
+        let connection = null;
+        let updateCount = 0;
+
+        // Initialize crypto cards
+        function initializeCryptoCards() {
+            const grid = document.getElementById('cryptoGrid');
+            grid.innerHTML = '';
+
+            cryptoSymbols.forEach(symbol => {
+                const card = document.createElement('div');
+                card.className = 'crypto-card';
+                card.id = `card-${symbol}`;
+                card.innerHTML = `
+                    <div class="crypto-symbol">${symbol.replace('USDT', '/USDT')}</div>
+                    <div class="crypto-price" id="price-${symbol}">--</div>
+                    <div class="crypto-change" id="change-${symbol}">--</div>
+                    <div class="crypto-time" id="time-${symbol}">Never updated</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Update crypto card
+        function updateCryptoCard(symbol, price, change, timestamp) {
+            const card = document.getElementById(`card-${symbol}`);
+            const priceEl = document.getElementById(`price-${symbol}`);
+            const changeEl = document.getElementById(`change-${symbol}`);
+            const timeEl = document.getElementById(`time-${symbol}`);
+
+            if (card && priceEl && changeEl && timeEl) {
+                // Add shine animation
+                card.classList.add('updated');
+                setTimeout(() => card.classList.remove('updated'), 500);
+
+                // Update price
+                priceEl.textContent = `$${parseFloat(price).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 8
+                })}`;
+
+                // Update change with color
+                const changePercent = parseFloat(change);
+                changeEl.textContent = `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`;
+                changeEl.className = `crypto-change ${changePercent >= 0 ? 'positive' : 'negative'}`;
+
+                // Update timestamp
+                timeEl.textContent = new Date(timestamp).toLocaleTimeString();
+            }
+        }
+
+        // Log message
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+
+            const logEntry = document.createElement('div');
+            logEntry.style.color = color;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Connect to SignalR hub
+        async function connect() {
+            try {
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/market-data")
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Handle connection events
+                connection.onclose(error => {
+                    updateStatus(false);
+                    log(`❌ Connection closed: ${error || 'Unknown reason'}`, 'error');
+                });
+
+                connection.onreconnecting(error => {
+                    log(`🔄 Reconnecting: ${error || 'Network issue'}`, 'info');
+                });
+
+                connection.onreconnected(connectionId => {
+                    log(`✅ Reconnected with ID: ${connectionId}`, 'success');
+                    subscribeToGroups();
+                });
+
+                // Register event handlers for different message types
+                connection.on("PriceUpdate", handlePriceUpdate);
+                connection.on("MarketDataUpdate", handleMarketDataUpdate);
+                connection.on("ReceivePriceUpdate", handleLegacyPriceUpdate);
+                connection.on("ReceiveMarketData", handleLegacyMarketData);
+
+                // Handle hub confirmation messages
+                connection.on("ConnectionStatus", (data) => {
+                    log(`🔌 Connection Status: ${data.message}`, 'success');
+                });
+                connection.on("SubscriptionConfirmed", (data) => {
+                    log(`✅ Subscription confirmed for ${data.assetClass}: ${data.symbols.length} symbols`, 'success');
+                });
+                connection.on("AssetClassSubscriptionConfirmed", (data) => {
+                    log(`✅ Asset class subscription confirmed: ${data.assetClass}`, 'success');
+                });
+                connection.on("SubscriptionError", (data) => {
+                    log(`❌ Subscription error: ${data.message}`, 'error');
+                });
+                connection.on("Heartbeat", (data) => {
+                    log(`💓 Heartbeat received from server`, 'info');
+                });
+
+                // Start connection
+                await connection.start();
+                updateStatus(true);
+                log("✅ Connected to SignalR hub successfully!", 'success');
+
+                // Subscribe to crypto groups
+                await subscribeToGroups();
+
+            } catch (error) {
+                updateStatus(false);
+                log(`❌ Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Subscribe to crypto groups
+        async function subscribeToGroups() {
+            try {
+                // Subscribe to CRYPTO asset class for all crypto symbols
+                await connection.invoke("SubscribeToAssetClass", "CRYPTO");
+                log("📡 Subscribed to CRYPTO asset class", 'success');
+
+                // Subscribe to specific crypto symbols
+                await connection.invoke("SubscribeToPriceUpdates", "CRYPTO", cryptoSymbols);
+                log(`📡 Subscribed to ${cryptoSymbols.length} crypto symbols`, 'success');
+
+                // Also try legacy subscription method
+                await connection.invoke("SubscribeToCrypto", cryptoSymbols);
+                log("📡 Legacy crypto subscription completed", 'success');
+
+            } catch (error) {
+                log(`❌ Subscription failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle standard price update
+        function handlePriceUpdate(data) {
+            updateCount++;
+            log(`📈 PriceUpdate #${updateCount}: ${data.Symbol} = $${data.Price} (${data.Change24h}%)`, 'success');
+            updateCryptoCard(data.Symbol, data.Price, data.Change24h, data.Timestamp);
+        }
+
+        // Handle market data update
+        function handleMarketDataUpdate(data) {
+            updateCount++;
+            log(`📊 MarketDataUpdate #${updateCount}: ${data.Symbol} = $${data.Price}`, 'info');
+            updateCryptoCard(data.Symbol, data.Price, data.Change24h, data.Timestamp);
+        }
+
+        // Handle legacy price update
+        function handleLegacyPriceUpdate(data) {
+            updateCount++;
+            log(`🔄 LegacyPriceUpdate #${updateCount}: ${data.symbol} = $${data.price} (${data.change}%)`, 'info');
+            updateCryptoCard(data.symbol, data.price, data.change, data.timestamp);
+        }
+
+        // Handle legacy market data
+        function handleLegacyMarketData(data) {
+            updateCount++;
+            log(`📈 LegacyMarketData #${updateCount}: ${data.Symbol} = $${data.Price}`, 'info');
+            updateCryptoCard(data.Symbol, data.Price, data.Change24h, data.Timestamp);
+        }
+
+        // Disconnect from hub
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                connection = null;
+                updateStatus(false);
+                log("🔌 Disconnected from SignalR hub", 'info');
+            }
+        }
+
+        // Update connection status
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '✅ Connected - Receiving live crypto price updates';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '❌ Disconnected - No live data';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        // Clear logs
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '<div>Logs cleared...</div>';
+            updateCount = 0;
+        }
+
+        // Event listeners
+        document.getElementById('connectBtn').addEventListener('click', connect);
+        document.getElementById('disconnectBtn').addEventListener('click', disconnect);
+        document.getElementById('clearLogsBtn').addEventListener('click', clearLogs);
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeCryptoCards();
+            log("🚀 Test client initialized. Click 'Connect' to start receiving live crypto prices.");
+        });
+    </script>
+</body>
+</html>

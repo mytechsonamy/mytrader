@@ -222,7 +222,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderRegisterStep = () => (
     <View style={styles.formContainer}>
-      <Text style={styles.title}>🚀 Trader Dashboard</Text>
+      
       <Text style={styles.subtitle}>Yeni hesap oluşturun</Text>
       <Text style={styles.stepIndicator}>Adım 1/2: Bilgilerinizi girin</Text>
 

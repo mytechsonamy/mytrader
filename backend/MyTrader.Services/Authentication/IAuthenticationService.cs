@@ -8,7 +8,7 @@ public interface IAuthenticationService
     Task<RegisterResponse> RegisterAsync(RegisterRequest request);
     Task<RegisterResponse> VerifyEmailAsync(VerifyEmailRequest request);
     Task<RegisterResponse> ResendVerificationAsync(string email);
-    Task<UserSessionResponse> LoginAsync(LoginRequest request);
+    Task<UserSessionResponse> LoginAsync(LoginRequest request, string? userAgent = null, string? ipAddress = null);
     Task LogoutAsync(Guid userId);
     Task<UserResponse?> GetUserAsync(Guid userId);
     Task<RegisterResponse> UpdateUserAsync(Guid userId, UpdateProfileRequest request);

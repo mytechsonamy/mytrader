@@ -1,0 +1,2112 @@
+openapi: 3.1.0
+info:
+  title: MyTrader Unified API
+  version: 1.1.0
+  description: |
+    ## MyTrader Trading Platform Unified API Specification
+
+    **CONTRACT VERSION**: 1.1.0
+    **EFFECTIVE DATE**: 2024-09-24
+    **PRIORITY IMPLEMENTATION**: Phase 1 - WebSocket Standardization, Phase 2 - API Versioning
+
+    ### Critical Issues Addressed:
+    1. **Port Configuration**: Standardized on port 5002 (backend) for all environments
+    2. **WebSocket Event Naming**: Unified event naming without "Receive" prefixes
+    3. **API Versioning**: Consistent `/api/v1/` pattern with backward compatibility
+    4. **Volume Leaders Endpoint**: New endpoint for top volume assets per class
+
+    ### Access Patterns
+    - **Public Access**: Market data, dashboard, real-time updates (no authentication required)
+    - **Authenticated Access**: Trading operations, user profiles, personal data (JWT Bearer token required)
+
+    ### Supported Asset Classes
+    - **CRYPTO** - 24/7 trading via multiple data providers
+    - **STOCK_BIST** - Borsa Istanbul during Turkish market hours
+    - **STOCK_NASDAQ** - US stocks during market hours
+    - **FOREX** - Currency pairs (future implementation)
+
+    ### Port Configuration (CRITICAL FIX)
+    - **Backend API**: Port 5002 (all environments)
+    - **WebSocket Hubs**: Port 5002 (unified with API server)
+    - **Frontend Web**: Connects to port 5002 (not 8080)
+    - **Frontend Mobile**: Connects to port 5002
+
+    ### WebSocket Event Standardization
+    All WebSocket events follow the pattern: `{EventType}` without "Receive" prefixes
+    - `PriceUpdate` (not `ReceivePriceUpdate`)
+    - `MarketStatusUpdate` (not `ReceiveMarketStatusUpdate`)
+    - `SubscriptionConfirmed` (not `ReceiveSubscriptionConfirmed`)
+
+    ### API Versioning Strategy
+    - **Current**: Mixed `/api/` and `/api/v1/` patterns
+    - **Target**: Unified `/api/v1/` for all endpoints
+    - **Backward Compatibility**: Legacy routes maintained for 90 days with deprecation notices
+
+  contact:
+    name: MyTrader API Support
+    email: support@mytrader.com
+  license:
+    name: Proprietary
+    url: https://mytrader.com/license
+
+servers:
+  - url: http://localhost:5002/api/v1
+    description: Local development (CORRECTED PORT)
+  - url: https://api.mytrader.com/api/v1
+    description: Production server
+
+security:
+  - bearerAuth: []
+  - {}  # Allow anonymous access for public endpoints
+
+paths:
+  # ====================================================================
+  # SYSTEM HEALTH AND INFORMATION
+  # ====================================================================
+  /health:
+    get:
+      tags: [System]
+      summary: API health check
+      description: Check API health status and service availability
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /info:
+    get:
+      tags: [System]
+      summary: API information
+      description: Get API version, capabilities, and endpoint discovery
+      security: []
+      responses:
+        '200':
+          description: API information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfoResponse'
+
+  # ====================================================================
+  # AUTHENTICATION ENDPOINTS (v1)
+  # ====================================================================
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      description: Create a new user account with email verification
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      description: Authenticate user and return JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh JWT token
+      description: Exchange refresh token for new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get user profile
+      description: Get current user's profile information
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Authentication]
+      summary: Update user profile
+      description: Update current user's profile information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: User logout
+      description: Invalidate current session and revoke tokens
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ====================================================================
+  # SYMBOLS MANAGEMENT (v1)
+  # ====================================================================
+  /symbols:
+    get:
+      tags: [Symbols]
+      summary: Get tracked symbols
+      description: Get list of symbols being tracked by the user or system defaults
+      security: []
+      responses:
+        '200':
+          description: Tracked symbols retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackedSymbolsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Symbols]
+      summary: Create new symbol
+      description: Add a new symbol to the tracking system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSymbolRequest'
+      responses:
+        '201':
+          description: Symbol created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /symbols/{symbolId}:
+    get:
+      tags: [Symbols]
+      summary: Get symbol by ID
+      description: Get detailed information for a specific symbol
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SymbolIdParam'
+      responses:
+        '200':
+          description: Symbol retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnhancedSymbolResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    patch:
+      tags: [Symbols]
+      summary: Update symbol tracking
+      description: Update symbol tracking status and preferences
+      parameters:
+        - $ref: '#/components/parameters/SymbolIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSymbolRequest'
+      responses:
+        '200':
+          description: Symbol updated successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /symbols/by-asset-class/{assetClassName}:
+    get:
+      tags: [Symbols]
+      summary: Get symbols by asset class
+      description: Get symbols filtered by asset class with pagination
+      security: []
+      parameters:
+        - name: assetClassName
+          in: path
+          required: true
+          description: Asset class identifier
+          schema:
+            type: string
+            enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        - name: limit
+          in: query
+          description: Maximum number of symbols to return
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of symbols to skip for pagination
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: includeInactive
+          in: query
+          description: Include inactive symbols in results
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Symbols retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolListResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /symbols/search:
+    get:
+      tags: [Symbols]
+      summary: Search symbols
+      description: Search symbols by ticker, name, or other criteria
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query (minimum 2 characters)
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 50
+        - name: assetClass
+          in: query
+          description: Filter by asset class
+          schema:
+            type: string
+            enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Search results retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolSearchResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /symbols/popular:
+    get:
+      tags: [Symbols]
+      summary: Get popular symbols
+      description: Get most popular symbols across all asset classes
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of symbols to return
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+        - name: assetClass
+          in: query
+          description: Filter by specific asset class
+          schema:
+            type: string
+            enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+      responses:
+        '200':
+          description: Popular symbols retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PopularSymbolsResponse'
+
+  # ====================================================================
+  # MARKET DATA ENDPOINTS (v1)
+  # ====================================================================
+  /market-data/overview:
+    get:
+      tags: [Market Data]
+      summary: Market overview
+      description: Comprehensive market overview for dashboard display
+      security: []
+      responses:
+        '200':
+          description: Market overview retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketOverviewResponse'
+
+  /market-data/realtime/{symbolId}:
+    get:
+      tags: [Market Data]
+      summary: Real-time market data
+      description: Get real-time market data for a specific symbol
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SymbolIdParam'
+      responses:
+        '200':
+          description: Real-time data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealtimeMarketDataResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /market-data/batch:
+    post:
+      tags: [Market Data]
+      summary: Batch market data
+      description: Get market data for multiple symbols in a single request
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchMarketDataRequest'
+      responses:
+        '200':
+          description: Batch market data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchMarketDataResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /market-data/historical/{symbolId}:
+    get:
+      tags: [Market Data]
+      summary: Historical market data
+      description: Get historical candlestick data for a symbol
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SymbolIdParam'
+        - name: interval
+          in: query
+          required: true
+          description: Candlestick interval
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M]
+        - name: startTime
+          in: query
+          description: Start time for historical data
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          description: End time for historical data
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Maximum number of candles to return
+          schema:
+            type: integer
+            default: 500
+            minimum: 1
+            maximum: 1000
+      responses:
+        '200':
+          description: Historical data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalDataResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /market-data/top-movers:
+    get:
+      tags: [Market Data]
+      summary: Top movers
+      description: Get top gaining and losing symbols by asset class
+      security: []
+      parameters:
+        - name: assetClass
+          in: query
+          description: Filter by asset class
+          schema:
+            type: string
+            enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        - name: limit
+          in: query
+          description: Number of symbols per category (gainers/losers)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Top movers retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopMoversResponse'
+
+  # ====================================================================
+  # NEW ENDPOINT: TOP VOLUME LEADERS BY ASSET CLASS
+  # ====================================================================
+  /market-data/top-by-volume:
+    get:
+      tags: [Market Data]
+      summary: Top volume leaders by asset class
+      description: |
+        **NEW ENDPOINT** - Get highest volume assets per asset class for dashboard widgets.
+
+        **PRIORITY**: RICE Score 216 - Phase 2 Implementation
+
+        Returns the top N symbols with highest trading volume for each asset class.
+        This endpoint supports the "Volume Leaders" dashboard widget requirements.
+      security: []
+      parameters:
+        - name: perClass
+          in: query
+          description: Number of top volume symbols per asset class
+          schema:
+            type: integer
+            default: 8
+            minimum: 1
+            maximum: 50
+        - name: assetClasses
+          in: query
+          description: Specific asset classes to include (comma-separated)
+          schema:
+            type: string
+            pattern: '^(CRYPTO|STOCK_BIST|STOCK_NASDAQ|FOREX)(,(CRYPTO|STOCK_BIST|STOCK_NASDAQ|FOREX))*$'
+            example: "CRYPTO,STOCK_NASDAQ"
+        - name: timeframe
+          in: query
+          description: Volume calculation timeframe
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+            default: 24h
+      responses:
+        '200':
+          description: Volume leaders retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VolumeLeadersResponse'
+          headers:
+            Cache-Control:
+              description: Response caching directive
+              schema:
+                type: string
+                example: "public, max-age=60"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /market-data/statistics/{symbolId}:
+    get:
+      tags: [Market Data]
+      summary: Market statistics
+      description: Get detailed market statistics for a symbol
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SymbolIdParam'
+      responses:
+        '200':
+          description: Market statistics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketStatisticsResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /market-data/subscribe:
+    post:
+      tags: [Market Data]
+      summary: Subscribe to real-time updates
+      description: Subscribe to real-time market data updates via WebSocket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionRequest'
+      responses:
+        '200':
+          description: Subscription successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ====================================================================
+  # ASSET-SPECIFIC ENDPOINTS
+  # ====================================================================
+  /market-data/crypto:
+    get:
+      tags: [Market Data]
+      summary: Cryptocurrency market data
+      description: Get market data specifically for cryptocurrency assets
+      security: []
+      parameters:
+        - name: symbols
+          in: query
+          description: Comma-separated list of crypto symbols
+          schema:
+            type: string
+            pattern: '^[A-Z]{2,10}(,[A-Z]{2,10})*$'
+            example: "BTC,ETH,ADA"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Cryptocurrency market data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoMarketDataResponse'
+
+  /market-data/bist:
+    get:
+      tags: [Market Data]
+      summary: BIST market data
+      description: Get market data for Borsa Istanbul stocks
+      security: []
+      parameters:
+        - name: symbols
+          in: query
+          description: Comma-separated list of BIST symbols
+          schema:
+            type: string
+            pattern: '^[A-Z]{4,6}(,[A-Z]{4,6})*$'
+            example: "THYAO,AKBNK,ISCTR"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: BIST market data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BistMarketDataResponse'
+
+  /market-data/nasdaq:
+    get:
+      tags: [Market Data]
+      summary: NASDAQ market data
+      description: Get market data for NASDAQ-listed stocks
+      security: []
+      parameters:
+        - name: symbols
+          in: query
+          description: Comma-separated list of stock symbols
+          schema:
+            type: string
+            pattern: '^[A-Z]{1,5}(,[A-Z]{1,5})*$'
+            example: "AAPL,MSFT,GOOGL"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: NASDAQ market data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NasdaqMarketDataResponse'
+
+  # ====================================================================
+  # LEGACY ENDPOINTS (DEPRECATED - BACKWARD COMPATIBILITY)
+  # ====================================================================
+  /prices/live:
+    get:
+      tags: [Legacy - Deprecated]
+      summary: "[DEPRECATED] Live prices"
+      description: |
+        **DEPRECATED**: This endpoint is deprecated and will be removed in v2.0.0
+
+        **Migration**: Use `/api/v1/market-data/batch` instead
+
+        **Deprecation Timeline**: 90 days from contract effective date
+      security: []
+      deprecated: true
+      responses:
+        '200':
+          description: Live prices (legacy format)
+          headers:
+            Deprecation:
+              description: Deprecation date
+              schema:
+                type: string
+                format: date
+                example: "2024-12-24"
+            Link:
+              description: Link to replacement endpoint
+              schema:
+                type: string
+                example: '</api/v1/market-data/batch>; rel="successor-version"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyPricesResponse'
+
+# ====================================================================
+# REUSABLE COMPONENTS
+# ====================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Bearer token obtained from login endpoint
+
+  parameters:
+    SymbolIdParam:
+      name: symbolId
+      in: path
+      required: true
+      description: Unique symbol identifier
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+
+    UnauthorizedError:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ConflictError:
+      description: Resource already exists or conflict occurred
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ================================================================
+    # SYSTEM SCHEMAS
+    # ================================================================
+    HealthResponse:
+      type: object
+      required: [status, timestamp, version]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        uptime:
+          type: string
+        services:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [up, down, degraded]
+              responseTime:
+                type: number
+              lastChecked:
+                type: string
+                format: date-time
+
+    ApiInfoResponse:
+      type: object
+      required: [name, version, status]
+      properties:
+        name:
+          type: string
+          example: "MyTrader Unified API"
+        version:
+          type: string
+          example: "1.1.0"
+        status:
+          type: string
+          example: "running"
+        timestamp:
+          type: string
+          format: date-time
+        capabilities:
+          type: array
+          items:
+            type: string
+          example: ["real-time-data", "multi-asset", "websockets"]
+        endpoints:
+          type: object
+          properties:
+            health:
+              type: string
+              example: "/api/v1/health"
+            websockets:
+              type: string
+              example: "/hubs/market-data"
+            documentation:
+              type: string
+              example: "/swagger"
+
+    # ================================================================
+    # AUTHENTICATION SCHEMAS
+    # ================================================================
+    RegisterRequest:
+      type: object
+      required: [email, password, firstName, lastName]
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+        password:
+          type: string
+          minLength: 8
+          pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]'
+          description: Password with minimum complexity requirements
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        acceptTerms:
+          type: boolean
+          description: Must be true to register
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        rememberMe:
+          type: boolean
+          default: false
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        email:
+          type: string
+          format: email
+
+    RegisterResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        verificationRequired:
+          type: boolean
+
+    UserSessionResponse:
+      type: object
+      required: [success, user, accessToken, refreshToken, tokenExpiry]
+      properties:
+        success:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenExpiry:
+          type: string
+          format: date-time
+        sessionId:
+          type: string
+          format: uuid
+
+    UserProfile:
+      type: object
+      required: [id, email, firstName, lastName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        isEmailVerified:
+          type: boolean
+        avatar:
+          type: string
+          format: uri
+        preferences:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+
+    UserProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfile'
+
+    UpdateProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfile'
+
+    TokenResponse:
+      type: object
+      required: [accessToken, refreshToken, tokenExpiry]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenExpiry:
+          type: string
+          format: date-time
+
+    LogoutResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+
+    # ================================================================
+    # SYMBOL MANAGEMENT SCHEMAS
+    # ================================================================
+    CreateSymbolRequest:
+      type: object
+      required: [ticker, assetClass]
+      properties:
+        ticker:
+          type: string
+          minLength: 1
+          maxLength: 20
+          pattern: '^[A-Z0-9.-]+$'
+        assetClass:
+          type: string
+          enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        market:
+          type: string
+        baseCurrency:
+          type: string
+          minLength: 2
+          maxLength: 10
+        quoteCurrency:
+          type: string
+          minLength: 2
+          maxLength: 10
+        displayName:
+          type: string
+          maxLength: 100
+
+    UpdateSymbolRequest:
+      type: object
+      properties:
+        isTracked:
+          type: boolean
+        displayName:
+          type: string
+          maxLength: 100
+        notes:
+          type: string
+          maxLength: 500
+
+    Symbol:
+      type: object
+      required: [id, ticker, assetClass, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        displayName:
+          type: string
+        assetClass:
+          type: string
+          enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        market:
+          type: string
+        baseCurrency:
+          type: string
+        quoteCurrency:
+          type: string
+        isActive:
+          type: boolean
+        isTracked:
+          type: boolean
+        tradingHours:
+          $ref: '#/components/schemas/TradingHours'
+        precision:
+          type: object
+          properties:
+            price:
+              type: integer
+              minimum: 0
+              maximum: 8
+            quantity:
+              type: integer
+              minimum: 0
+              maximum: 8
+        limits:
+          type: object
+          properties:
+            minTradeAmount:
+              type: number
+              format: decimal
+            maxTradeAmount:
+              type: number
+              format: decimal
+            tickSize:
+              type: number
+              format: decimal
+            lotSize:
+              type: number
+              format: decimal
+        metadata:
+          type: object
+          properties:
+            sector:
+              type: string
+            industry:
+              type: string
+            description:
+              type: string
+            website:
+              type: string
+              format: uri
+
+    TradingHours:
+      type: object
+      properties:
+        timezone:
+          type: string
+          example: "America/New_York"
+        is24h:
+          type: boolean
+        regular:
+          type: object
+          properties:
+            monday:
+              $ref: '#/components/schemas/DaySchedule'
+            tuesday:
+              $ref: '#/components/schemas/DaySchedule'
+            wednesday:
+              $ref: '#/components/schemas/DaySchedule'
+            thursday:
+              $ref: '#/components/schemas/DaySchedule'
+            friday:
+              $ref: '#/components/schemas/DaySchedule'
+            saturday:
+              $ref: '#/components/schemas/DaySchedule'
+            sunday:
+              $ref: '#/components/schemas/DaySchedule'
+
+    DaySchedule:
+      type: object
+      properties:
+        open:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "09:30"
+        close:
+          type: string
+          pattern: '^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
+          example: "16:00"
+        isClosed:
+          type: boolean
+
+    TrackedSymbolsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                symbols:
+                  type: object
+                  additionalProperties:
+                    $ref: '#/components/schemas/SymbolSummary'
+                interval:
+                  type: string
+                  example: "1m"
+                count:
+                  type: integer
+
+    SymbolSummary:
+      type: object
+      required: [symbol, displayName]
+      properties:
+        symbol:
+          type: string
+        displayName:
+          type: string
+        precision:
+          type: integer
+        strategy_type:
+          type: string
+
+    SymbolResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Symbol'
+
+    EnhancedSymbolResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Symbol'
+
+    SymbolListResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                symbols:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Symbol'
+                pagination:
+                  $ref: '#/components/schemas/Pagination'
+                filters:
+                  type: object
+                  properties:
+                    assetClass:
+                      type: string
+                    includeInactive:
+                      type: boolean
+
+    SymbolSearchResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                results:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SymbolSearchResult'
+                query:
+                  type: string
+                resultCount:
+                  type: integer
+
+    SymbolSearchResult:
+      type: object
+      required: [id, ticker, displayName, assetClass]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        displayName:
+          type: string
+        assetClass:
+          type: string
+        market:
+          type: string
+        matchScore:
+          type: number
+          minimum: 0
+          maximum: 1
+        matchReason:
+          type: string
+          enum: [ticker, name, alias]
+
+    PopularSymbolsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                symbols:
+                  type: array
+                  items:
+                    allOf:
+                      - $ref: '#/components/schemas/Symbol'
+                      - type: object
+                        properties:
+                          popularityScore:
+                            type: number
+                          volume24h:
+                            type: number
+                            format: decimal
+                          marketCap:
+                            type: number
+                            format: decimal
+
+    # ================================================================
+    # MARKET DATA SCHEMAS
+    # ================================================================
+    UnifiedMarketData:
+      type: object
+      required: [symbolId, ticker, assetClass, price, timestamp]
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        assetClass:
+          type: string
+          enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        market:
+          type: string
+
+        # Price Information
+        price:
+          type: number
+          format: decimal
+          description: Current price
+        previousClose:
+          type: number
+          format: decimal
+        openPrice:
+          type: number
+          format: decimal
+        highPrice:
+          type: number
+          format: decimal
+        lowPrice:
+          type: number
+          format: decimal
+
+        # Volume Information
+        volume:
+          type: number
+          format: decimal
+          description: Volume in base currency
+        volumeQuote:
+          type: number
+          format: decimal
+          description: Volume in quote currency
+        volume24h:
+          type: number
+          format: decimal
+
+        # Price Changes
+        priceChange:
+          type: number
+          format: decimal
+        priceChangePercent:
+          type: number
+          format: decimal
+        priceChange24h:
+          type: number
+          format: decimal
+        priceChangePercent24h:
+          type: number
+          format: decimal
+
+        # Order Book (if available)
+        bidPrice:
+          type: number
+          format: decimal
+        bidQuantity:
+          type: number
+          format: decimal
+        askPrice:
+          type: number
+          format: decimal
+        askQuantity:
+          type: number
+          format: decimal
+        spread:
+          type: number
+          format: decimal
+
+        # Market Information
+        marketCap:
+          type: number
+          format: decimal
+        tradeCount:
+          type: integer
+        marketStatus:
+          type: string
+          enum: [OPEN, CLOSED, PRE_MARKET, AFTER_HOURS, HOLIDAY, UNKNOWN]
+        isMarketOpen:
+          type: boolean
+
+        # Timestamps
+        timestamp:
+          type: string
+          format: date-time
+          description: Data timestamp
+        lastTradeTime:
+          type: string
+          format: date-time
+        receivedTimestamp:
+          type: string
+          format: date-time
+
+        # Data Quality
+        dataProvider:
+          type: string
+        isRealTime:
+          type: boolean
+        dataDelayMinutes:
+          type: integer
+          minimum: 0
+
+        # Currency and Precision
+        currency:
+          type: string
+        pricePrecision:
+          type: integer
+        quantityPrecision:
+          type: integer
+
+    BatchMarketDataRequest:
+      type: object
+      required: [symbolIds]
+      properties:
+        symbolIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 100
+        includeOrderBook:
+          type: boolean
+          default: false
+        includeTradeHistory:
+          type: boolean
+          default: false
+        dataProvider:
+          type: string
+
+    MarketOverviewResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MarketOverview'
+
+    MarketOverview:
+      type: object
+      required: [timestamp, summary]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        summary:
+          type: object
+          properties:
+            totalSymbols:
+              type: integer
+            activeSymbols:
+              type: integer
+            marketsOpen:
+              type: integer
+            totalMarketCap:
+              type: number
+              format: decimal
+        assetClasses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetClassSummary'
+        topMovers:
+          $ref: '#/components/schemas/TopMovers'
+        marketStatus:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MarketStatus'
+
+    AssetClassSummary:
+      type: object
+      properties:
+        assetClass:
+          type: string
+          enum: [CRYPTO, STOCK_BIST, STOCK_NASDAQ, FOREX]
+        symbolCount:
+          type: integer
+        totalVolume24h:
+          type: number
+          format: decimal
+        totalMarketCap:
+          type: number
+          format: decimal
+        avgPriceChange:
+          type: number
+          format: decimal
+        topSymbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolMovement'
+
+    MarketStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OPEN, CLOSED, PRE_MARKET, AFTER_HOURS, HOLIDAY]
+        nextOpen:
+          type: string
+          format: date-time
+        nextClose:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+
+    RealtimeMarketDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/UnifiedMarketData'
+
+    BatchMarketDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                marketData:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/UnifiedMarketData'
+                requestTimestamp:
+                  type: string
+                  format: date-time
+                responseTimestamp:
+                  type: string
+                  format: date-time
+                summary:
+                  type: object
+                  properties:
+                    totalRequested:
+                      type: integer
+                    successful:
+                      type: integer
+                    failed:
+                      type: integer
+                    errors:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/DataError'
+
+    HistoricalDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HistoricalData'
+
+    HistoricalData:
+      type: object
+      required: [symbolId, ticker, interval, candles]
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        interval:
+          type: string
+        candles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candlestick'
+        timeRange:
+          type: object
+          properties:
+            startTime:
+              type: string
+              format: date-time
+            endTime:
+              type: string
+              format: date-time
+        candleCount:
+          type: integer
+        dataProvider:
+          type: string
+
+    Candlestick:
+      type: object
+      required: [openTime, open, high, low, close, volume]
+      properties:
+        openTime:
+          type: string
+          format: date-time
+        open:
+          type: number
+          format: decimal
+        high:
+          type: number
+          format: decimal
+        low:
+          type: number
+          format: decimal
+        close:
+          type: number
+          format: decimal
+        volume:
+          type: number
+          format: decimal
+        closeTime:
+          type: string
+          format: date-time
+        volumeQuote:
+          type: number
+          format: decimal
+        tradeCount:
+          type: integer
+
+    TopMoversResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TopMovers'
+
+    TopMovers:
+      type: object
+      required: [gainers, losers, timestamp]
+      properties:
+        gainers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolMovement'
+        losers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolMovement'
+        timestamp:
+          type: string
+          format: date-time
+        criteria:
+          type: object
+          properties:
+            assetClass:
+              type: string
+            timeframe:
+              type: string
+            limit:
+              type: integer
+
+    SymbolMovement:
+      type: object
+      required: [symbolId, ticker, price, priceChangePercent]
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        displayName:
+          type: string
+        price:
+          type: number
+          format: decimal
+        priceChange:
+          type: number
+          format: decimal
+        priceChangePercent:
+          type: number
+          format: decimal
+        volume:
+          type: number
+          format: decimal
+        volumeChange:
+          type: number
+          format: decimal
+        assetClass:
+          type: string
+
+    # ================================================================
+    # NEW SCHEMA: VOLUME LEADERS
+    # ================================================================
+    VolumeLeadersResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/VolumeLeaders'
+
+    VolumeLeaders:
+      type: object
+      required: [assetClasses, timestamp]
+      properties:
+        assetClasses:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/VolumeLeader'
+        timestamp:
+          type: string
+          format: date-time
+        criteria:
+          type: object
+          properties:
+            perClass:
+              type: integer
+            timeframe:
+              type: string
+            totalSymbols:
+              type: integer
+
+    VolumeLeader:
+      type: object
+      required: [symbolId, ticker, volume, rank]
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        displayName:
+          type: string
+        volume:
+          type: number
+          format: decimal
+          description: Trading volume in the specified timeframe
+        volumeQuote:
+          type: number
+          format: decimal
+          description: Volume in quote currency
+        price:
+          type: number
+          format: decimal
+        priceChangePercent:
+          type: number
+          format: decimal
+        rank:
+          type: integer
+          minimum: 1
+          description: Volume rank within asset class
+        assetClass:
+          type: string
+        market:
+          type: string
+
+    MarketStatisticsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MarketStatistics'
+
+    MarketStatistics:
+      type: object
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        ticker:
+          type: string
+        period:
+          type: object
+          properties:
+            "24h":
+              $ref: '#/components/schemas/PeriodStatistics'
+            "7d":
+              $ref: '#/components/schemas/PeriodStatistics'
+            "30d":
+              $ref: '#/components/schemas/PeriodStatistics'
+            "1y":
+              $ref: '#/components/schemas/PeriodStatistics'
+        volatility:
+          type: object
+          properties:
+            daily:
+              type: number
+              format: decimal
+            weekly:
+              type: number
+              format: decimal
+            monthly:
+              type: number
+              format: decimal
+        correlations:
+          type: array
+          items:
+            type: object
+            properties:
+              symbolId:
+                type: string
+                format: uuid
+              ticker:
+                type: string
+              coefficient:
+                type: number
+                format: decimal
+
+    PeriodStatistics:
+      type: object
+      properties:
+        high:
+          type: number
+          format: decimal
+        low:
+          type: number
+          format: decimal
+        open:
+          type: number
+          format: decimal
+        close:
+          type: number
+          format: decimal
+        volume:
+          type: number
+          format: decimal
+        priceChange:
+          type: number
+          format: decimal
+        priceChangePercent:
+          type: number
+          format: decimal
+
+    SubscriptionRequest:
+      type: object
+      required: [symbolIds, subscriptionType]
+      properties:
+        symbolIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 100
+        subscriptionType:
+          type: string
+          enum: [realtime, historical, news]
+        filters:
+          type: object
+          properties:
+            assetClass:
+              type: string
+            updateInterval:
+              type: string
+              enum: [1s, 5s, 10s, 30s, 1m]
+
+    SubscriptionResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                subscriptionId:
+                  type: string
+                  format: uuid
+                symbolIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                isActive:
+                  type: boolean
+
+    # ================================================================
+    # ASSET-SPECIFIC RESPONSES
+    # ================================================================
+    CryptoMarketDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/UnifiedMarketData'
+                  - type: object
+                    properties:
+                      dominance:
+                        type: number
+                        format: decimal
+                      fearGreedIndex:
+                        type: integer
+                        minimum: 0
+                        maximum: 100
+
+    BistMarketDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/UnifiedMarketData'
+                  - type: object
+                    properties:
+                      lot:
+                        type: number
+                        format: decimal
+                      ceiling:
+                        type: number
+                        format: decimal
+                      floor:
+                        type: number
+                        format: decimal
+
+    NasdaqMarketDataResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/UnifiedMarketData'
+                  - type: object
+                    properties:
+                      dividendYield:
+                        type: number
+                        format: decimal
+                      peRatio:
+                        type: number
+                        format: decimal
+                      beta:
+                        type: number
+                        format: decimal
+
+    # ================================================================
+    # LEGACY SCHEMAS (DEPRECATED)
+    # ================================================================
+    LegacyPricesResponse:
+      type: object
+      deprecated: true
+      properties:
+        symbols:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              price:
+                type: number
+              change:
+                type: number
+              timestamp:
+                type: string
+        timestamp:
+          type: string
+          format: date-time
+        traceId:
+          type: string
+
+    # ================================================================
+    # UTILITY SCHEMAS
+    # ================================================================
+    BaseResponse:
+      type: object
+      required: [success, timestamp]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        requestId:
+          type: string
+          format: uuid
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              enum: [false]
+            error:
+              type: object
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+                details:
+                  type: string
+                field:
+                  type: string
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            success:
+              type: boolean
+              enum: [false]
+            errors:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+
+    DataError:
+      type: object
+      properties:
+        symbolId:
+          type: string
+          format: uuid
+        error:
+          type: string
+        reason:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+tags:
+  - name: System
+    description: System health, information, and discovery endpoints
+  - name: Authentication
+    description: User authentication, profile management, and session handling
+  - name: Symbols
+    description: Symbol management, discovery, and tracking
+  - name: Market Data
+    description: Real-time and historical market data for all asset classes
+  - name: Legacy - Deprecated
+    description: Deprecated endpoints maintained for backward compatibility
+
+externalDocs:
+  description: MyTrader API Documentation and Migration Guide
+  url: https://docs.mytrader.com/api/unified

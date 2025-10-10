@@ -7,15 +7,15 @@ console.log('Config Debug - __DEV__:', __DEV__);
 console.log('Config Debug - Constants.isDevice:', Constants.isDevice);
 console.log('Config Debug - extra:', extra);
 
-// Force IP address for testing - ignore extra config
-const baseUrl = 'http://192.168.68.103:5002';
+// Use IP address from app.json or fallback to hardcoded for testing
+const baseUrl = extra.API_BASE_URL?.replace('/api', '') || 'http://192.168.68.102:8080';
 
 console.log('Config Debug - baseUrl:', baseUrl);
 
 export const API_BASE_URL: string = `${baseUrl}/api`;
 export const AUTH_BASE_URL: string = API_BASE_URL;
-// Default to the server's unified dashboard hub route
-export const WS_BASE_URL: string = `${baseUrl}/hubs/dashboard`;
+// Use WS_BASE_URL from app.json or fallback to market-data hub
+export const WS_BASE_URL: string = extra.WS_BASE_URL || `${baseUrl}/hubs/market-data`;
 
 console.log('Config Debug - API_BASE_URL:', API_BASE_URL);
 console.log('Config Debug - WS_BASE_URL:', WS_BASE_URL);

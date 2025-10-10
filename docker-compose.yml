@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
@@ -8,14 +6,13 @@ services:
       POSTGRES_DB: mytrader
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     ports:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mytrader"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d mytrader" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,13 +20,14 @@ services:
       - mytrader_network
 
   mytrader_api:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: mytrader_api
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
+      - Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=mytrader;Username=postgres;Password=password
     ports:
       - "8080:8080"

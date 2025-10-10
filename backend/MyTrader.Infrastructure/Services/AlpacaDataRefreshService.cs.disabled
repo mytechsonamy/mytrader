@@ -1,0 +1,146 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MyTrader.Core.DTOs;
+using MyTrader.Core.Interfaces;
+
+namespace MyTrader.Infrastructure.Services;
+
+/// <summary>
+/// Background service that periodically refreshes Alpaca market data
+/// </summary>
+public class AlpacaDataRefreshService : BackgroundService
+{
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<AlpacaDataRefreshService> _logger;
+    private readonly AlpacaConfiguration _config;
+    private readonly TimeSpan _refreshInterval;
+
+    public AlpacaDataRefreshService(
+        IServiceProvider serviceProvider,
+        ILogger<AlpacaDataRefreshService> logger,
+        IOptions<AlpacaConfiguration> config)
+    {
+        _serviceProvider = serviceProvider;
+        _logger = logger;
+        _config = config.Value;
+        _refreshInterval = TimeSpan.FromSeconds(_config.CacheExpirySeconds / 2); // Refresh at half the cache expiry
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Alpaca data refresh service starting with {RefreshInterval}s interval", _refreshInterval.TotalSeconds);
+
+        // Wait a bit before starting to allow other services to initialize
+        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RefreshMarketDataAsync(stoppingToken);
+                await Task.Delay(_refreshInterval, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancellation is requested
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Alpaca data refresh service");
+
+                // Wait a bit longer on error to avoid spamming
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            }
+        }
+
+        _logger.LogInformation("Alpaca data refresh service stopping");
+    }
+
+    private async Task RefreshMarketDataAsync(CancellationToken cancellationToken)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var alpacaService = scope.ServiceProvider.GetRequiredService<IAlpacaMarketDataService>();
+
+        try
+        {
+            // Check if we should refresh (respect rate limits and circuit breaker)
+            var rateLimitStatus = alpacaService.GetRateLimitStatus();
+            var circuitBreakerStatus = alpacaService.GetCircuitBreakerStatus();
+
+            if (circuitBreakerStatus.IsOpen)
+            {
+                _logger.LogWarning("Skipping refresh due to open circuit breaker");
+                return;
+            }
+
+            if (rateLimitStatus.RequestsRemaining < 10) // Keep some buffer
+            {
+                _logger.LogWarning("Skipping refresh due to low rate limit: {Remaining} requests remaining",
+                    rateLimitStatus.RequestsRemaining);
+                return;
+            }
+
+            _logger.LogDebug("Starting market data refresh");
+
+            // Refresh crypto data
+            if (_config.DefaultSymbols.Crypto.Any())
+            {
+                try
+                {
+                    var cryptoData = await alpacaService.GetCryptoMarketDataAsync(
+                        _config.DefaultSymbols.Crypto.Take(5).ToList(), // Limit to avoid rate limits
+                        cancellationToken);
+
+                    _logger.LogDebug("Refreshed {Count} crypto symbols", cryptoData.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error refreshing crypto data");
+                }
+            }
+
+            // Refresh stock data
+            if (_config.DefaultSymbols.Stocks.Any())
+            {
+                try
+                {
+                    var stockData = await alpacaService.GetNasdaqMarketDataAsync(
+                        _config.DefaultSymbols.Stocks.Take(5).ToList(), // Limit to avoid rate limits
+                        cancellationToken);
+
+                    _logger.LogDebug("Refreshed {Count} stock symbols", stockData.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error refreshing stock data");
+                }
+            }
+
+            // Refresh market overview (this will pull both crypto and stocks)
+            try
+            {
+                var overview = await alpacaService.GetMarketOverviewAsync(cancellationToken);
+                _logger.LogDebug("Refreshed market overview with {TotalAssets} assets", overview.TotalAssets);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error refreshing market overview");
+            }
+
+            _logger.LogDebug("Market data refresh completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during market data refresh");
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Alpaca data refresh service is stopping");
+        await base.StopAsync(cancellationToken);
+    }
+}

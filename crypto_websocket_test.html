@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto WebSocket Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/9.0.6/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .crypto-item {
+            border: 1px solid #ccc;
+            margin: 5px 0;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            background: #f8f9fa;
+        }
+        .crypto-item.updated {
+            background: #d4edda;
+            animation: flash 0.5s ease-in-out;
+        }
+        @keyframes flash {
+            0% { background: #28a745; }
+            100% { background: #d4edda; }
+        }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .status.connected { background: #d4edda; }
+        .status.disconnected { background: #f8d7da; }
+        .status.connecting { background: #fff3cd; }
+        #log { background: #f8f9fa; padding: 10px; height: 200px; overflow-y: scroll; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Crypto WebSocket Real-Time Test</h1>
+
+    <div id="connection-status" class="status connecting">Connecting to WebSocket...</div>
+
+    <h3>Live Crypto Prices</h3>
+    <div id="crypto-list">
+        <div class="crypto-item">
+            <span><strong>BTCUSDT</strong></span>
+            <span id="BTC-price">Loading...</span>
+        </div>
+        <div class="crypto-item">
+            <span><strong>ETHUSDT</strong></span>
+            <span id="ETH-price">Loading...</span>
+        </div>
+        <div class="crypto-item">
+            <span><strong>ADAUSDT</strong></span>
+            <span id="ADA-price">Loading...</span>
+        </div>
+        <div class="crypto-item">
+            <span><strong>LINKUSDT</strong></span>
+            <span id="LINK-price">Loading...</span>
+        </div>
+        <div class="crypto-item">
+            <span><strong>DOTUSDT</strong></span>
+            <span id="DOT-price">Loading...</span>
+        </div>
+    </div>
+
+    <h3>Connection Log</h3>
+    <div id="log"></div>
+
+    <script>
+        let connection;
+        let lastUpdateTimes = {};
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `status ${status}`;
+            statusElement.textContent = message;
+            log(`Connection status: ${message}`);
+        }
+
+        function updateCryptoPrice(symbol, data) {
+            // Extract symbol prefix (BTC from BTCUSDT)
+            const symbolPrefix = symbol.replace('USDT', '');
+            const priceElement = document.getElementById(`${symbolPrefix}-price`);
+
+            if (priceElement) {
+                const price = parseFloat(data.price || data.Price || 0);
+                const change = parseFloat(data.change || data.Change || 0);
+                const changeText = change >= 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`;
+                const changeColor = change >= 0 ? 'green' : 'red';
+
+                priceElement.innerHTML = `
+                    $${price.toLocaleString()}
+                    <span style="color: ${changeColor}">${changeText}</span>
+                `;
+
+                // Flash animation
+                const cryptoItem = priceElement.closest('.crypto-item');
+                cryptoItem.classList.add('updated');
+                setTimeout(() => cryptoItem.classList.remove('updated'), 500);
+
+                lastUpdateTimes[symbol] = new Date();
+                log(`Updated ${symbol}: $${price.toLocaleString()} (${changeText})`);
+            }
+        }
+
+        async function connectWebSocket() {
+            try {
+                // Create SignalR connection
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/dashboard")
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Handle connection events
+                connection.onclose(error => {
+                    updateConnectionStatus('disconnected', 'Connection closed');
+                    if (error) {
+                        log(`Connection error: ${error}`);
+                    }
+                });
+
+                connection.onreconnecting(error => {
+                    updateConnectionStatus('connecting', 'Reconnecting...');
+                    if (error) {
+                        log(`Reconnection attempt: ${error}`);
+                    }
+                });
+
+                connection.onreconnected(connectionId => {
+                    updateConnectionStatus('connected', `Reconnected (${connectionId})`);
+                });
+
+                // Handle market data events
+                connection.on("MarketDataUpdate", (data) => {
+                    log(`Received MarketDataUpdate: ${JSON.stringify(data)}`);
+                    if (data.symbol || data.Symbol) {
+                        updateCryptoPrice(data.symbol || data.Symbol, data);
+                    }
+                });
+
+                connection.on("PriceUpdate", (data) => {
+                    log(`Received PriceUpdate: ${JSON.stringify(data)}`);
+                    if (data.symbol || data.Symbol) {
+                        updateCryptoPrice(data.symbol || data.Symbol, data);
+                    }
+                });
+
+                connection.on("CryptoUpdate", (data) => {
+                    log(`Received CryptoUpdate: ${JSON.stringify(data)}`);
+                    if (data.symbol || data.Symbol) {
+                        updateCryptoPrice(data.symbol || data.Symbol, data);
+                    }
+                });
+
+                // Generic handler for any method
+                connection.on("ReceiveMessage", (data) => {
+                    log(`Received ReceiveMessage: ${JSON.stringify(data)}`);
+                });
+
+                // Start connection
+                await connection.start();
+                updateConnectionStatus('connected', `Connected (${connection.connectionId})`);
+
+                // Join crypto group if available
+                try {
+                    await connection.invoke("JoinGroup", "crypto");
+                    log("Joined crypto group");
+                } catch (error) {
+                    log(`Failed to join crypto group: ${error}`);
+                }
+
+                // Request crypto data
+                try {
+                    await connection.invoke("GetCryptoData");
+                    log("Requested crypto data");
+                } catch (error) {
+                    log(`Failed to request crypto data: ${error}`);
+                }
+
+            } catch (error) {
+                updateConnectionStatus('disconnected', `Connection failed: ${error.message}`);
+                log(`WebSocket connection error: ${error}`);
+            }
+        }
+
+        // Also fetch initial data via REST API
+        async function fetchInitialData() {
+            const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'LINKUSDT', 'DOTUSDT'];
+
+            for (const symbol of symbols) {
+                try {
+                    const response = await fetch(`http://localhost:5002/api/prices/${symbol}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        updateCryptoPrice(symbol, data);
+                    } else {
+                        log(`Failed to fetch ${symbol}: ${data.message || 'Unknown error'}`);
+                    }
+                } catch (error) {
+                    log(`Error fetching ${symbol}: ${error.message}`);
+                }
+            }
+        }
+
+        // Start everything when page loads
+        window.onload = async function() {
+            log("Page loaded, starting tests...");
+            await fetchInitialData();
+            await connectWebSocket();
+
+            // Set up periodic updates check
+            setInterval(() => {
+                const now = new Date();
+                let hasRecentUpdates = false;
+
+                for (const [symbol, lastUpdate] of Object.entries(lastUpdateTimes)) {
+                    if (now - lastUpdate < 30000) { // 30 seconds
+                        hasRecentUpdates = true;
+                        break;
+                    }
+                }
+
+                if (!hasRecentUpdates && Object.keys(lastUpdateTimes).length > 0) {
+                    log("WARNING: No price updates received in the last 30 seconds");
+                }
+            }, 30000);
+        };
+
+        // Cleanup on page unload
+        window.onbeforeunload = function() {
+            if (connection) {
+                connection.stop();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ using MyTrader.Api.Services;
 using MyTrader.Api.Setup;
 using MyTrader.API.Hubs;
 using MyTrader.Api.Middleware;
+// using MyTrader.Infrastructure.Monitoring;
 using Serilog;
 using Serilog.Sinks.Grafana.Loki;
 using Polly;
@@ -42,15 +43,25 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Add services to the container
+// Add services to the container with JSON configuration optimized for web frontend
 builder.Services.AddControllers(options =>
 {
     // Configure model validation
     options.ModelValidatorProviders.Clear();
 })
+.AddJsonOptions(options =>
+{
+    // Configure JSON serialization for web frontend compatibility
+    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.JsonSerializerOptions.WriteIndented = builder.Environment.IsDevelopment();
+    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    options.JsonSerializerOptions.AllowTrailingCommas = true;
+    options.JsonSerializerOptions.ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip;
+})
 .ConfigureApiBehaviorOptions(options =>
 {
-    // Customize validation error responses
+    // Customize validation error responses for consistent web frontend consumption
     options.InvalidModelStateResponseFactory = context =>
     {
         var errors = context.ModelState
@@ -115,14 +126,21 @@ builder.Services.AddCors(options =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            // Allow all localhost origins in development for React Native and web clients
+            // Allow all localhost origins and local network IPs in development for React Native and web clients
             corsBuilder.SetIsOriginAllowed(origin =>
                 {
                     if (string.IsNullOrEmpty(origin) || origin == "null") return true; // Allow null origin for mobile apps
                     try
                     {
                         var uri = new Uri(origin);
-                        return uri.Host == "localhost" || uri.Host == "127.0.0.1" || uri.Host.EndsWith(".local");
+                        return uri.Host == "localhost" ||
+                               uri.Host == "127.0.0.1" ||
+                               uri.Host.StartsWith("192.168.") || // Local network range
+                               uri.Host.StartsWith("10.") ||      // Private network range
+                               uri.Host.StartsWith("172.") ||     // Private network range
+                               uri.Host.EndsWith(".local") ||     // mDNS local domains
+                               uri.Host == "expo.io" ||           // Expo dev server
+                               uri.Host.EndsWith(".expo.dev");    // Expo cloud builds
                     }
                     catch
                     {
@@ -133,23 +151,29 @@ builder.Services.AddCors(options =>
                 .AllowAnyHeader()
                 .AllowCredentials()
                 .SetPreflightMaxAge(TimeSpan.FromMinutes(5))
-                // Explicitly allow SignalR headers
-                .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With");
+                // Explicitly allow SignalR headers for mobile and web clients
+                .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "x-signalr-user-agent", "X-SignalR-User-Agent");
         }
         else
         {
-            // Production - restrict to specific origins
+            // Production - restrict to specific origins including web frontend ports
             corsBuilder.WithOrigins(
-                           "http://localhost:3000", "https://localhost:3000",
-                           "http://localhost:8081", "https://localhost:8081",
-                           "http://localhost:8084", "https://localhost:8084",
-                           "http://localhost:3333", "https://localhost:3333"
+                           // Web frontend origins
+                           "http://localhost:3000", "https://localhost:3000",   // React dev server
+                           "http://localhost:5173", "https://localhost:5173",   // Vite dev server
+                           "http://localhost:4173", "https://localhost:4173",   // Vite preview
+                           "http://localhost:8080", "https://localhost:8080",   // Alternative web ports
+                           // Mobile app origins
+                           "http://localhost:8081", "https://localhost:8081",   // React Native Metro
+                           "http://localhost:8084", "https://localhost:8084",   // Expo development
+                           "http://localhost:3333", "https://localhost:3333",   // Alternative mobile port
+                           "http://localhost:19006", "https://localhost:19006"  // Expo web
                        )
                        .AllowAnyMethod()
                        .AllowAnyHeader()
                        .AllowCredentials()
                        .SetPreflightMaxAge(TimeSpan.FromMinutes(5))
-                       .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With");
+                       .WithHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "x-signalr-user-agent", "X-SignalR-User-Agent");
         }
     });
 });
@@ -157,7 +181,7 @@ builder.Services.AddCors(options =>
 // Add database
 var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Port=5434;Database=mytrader;Username=postgres;Password=password";
+    ?? "Host=localhost;Port=5432;Database=mytrader;Username=postgres;Password=password";
 
 builder.Services.AddDbContext<TradingDbContext>(options =>
 {
@@ -238,17 +262,24 @@ builder.Services.AddAuthentication(x =>
 
 builder.Services.AddAuthorization();
 
-// Add SignalR with enhanced configuration for WebSocket support
+// Add SignalR with enhanced configuration for WebSocket support and web browsers
 builder.Services.AddSignalR(options =>
 {
+    // Optimize for web browser connections
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
     options.StreamBufferCapacity = 10;
+    options.MaximumParallelInvocationsPerClient = 1;
+    options.StatefulReconnectBufferSize = 1000;
 }).AddJsonProtocol(options =>
 {
+    // Configure JSON serialization for web frontend compatibility
     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.PayloadSerializerOptions.WriteIndented = false;
+    options.PayloadSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 });
 
 // Add MyTrader core services
@@ -274,6 +305,10 @@ builder.Services.AddScoped<MyTrader.Core.Services.IIndicatorService, MyTrader.Co
 builder.Services.AddScoped<MyTrader.Core.Services.ISignalGenerationEngine, MyTrader.Core.Services.SignalGenerationEngine>();
 builder.Services.AddScoped<MyTrader.Core.Services.ITradingStrategyService, MyTrader.Core.Services.TradingStrategyService>();
 
+// Register Symbol Management Service for SymbolPreferencesController
+builder.Services.AddScoped<MyTrader.Core.Services.ISymbolManagementService, MyTrader.Infrastructure.Services.SymbolManagementService>();
+builder.Services.AddScoped<MyTrader.Core.Services.ISymbolCacheService, MyTrader.Infrastructure.Services.SymbolCacheService>();
+
 // Register multi-asset services
 builder.Services.AddScoped<MyTrader.Core.Interfaces.IAssetClassService, MyTrader.Infrastructure.Services.AssetClassService>();
 builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketService, MyTrader.Infrastructure.Services.MarketService>();
@@ -281,8 +316,8 @@ builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketService, MyTrader.Inf
 // Register singleton for data provider orchestrator to maintain provider state across requests
 builder.Services.AddSingleton<MyTrader.Core.Interfaces.IDataProviderOrchestrator, MyTrader.Core.Services.DataProviderOrchestrator>();
 
-// Register missing services with mock implementations to fix HTTP 409 errors
-builder.Services.AddScoped<MyTrader.Core.Interfaces.IMultiAssetDataService, MyTrader.Api.Services.MockMultiAssetDataService>();
+// Register multi-asset data service with real database implementation
+builder.Services.AddScoped<MyTrader.Core.Interfaces.IMultiAssetDataService, MyTrader.Infrastructure.Services.MultiAssetDataService>();
 builder.Services.AddScoped<MyTrader.Core.Interfaces.IEnhancedSymbolService, MyTrader.Api.Services.MockEnhancedSymbolService>();
 builder.Services.AddScoped<MyTrader.Core.Interfaces.IMarketStatusService, MyTrader.Api.Services.MockMarketStatusService>();
 
@@ -306,6 +341,11 @@ builder.Services.AddScoped<MyTrader.Services.Gamification.IGamificationService, 
 builder.Services.AddScoped<MyTrader.Core.Data.ITradingDbContext>(provider =>
     provider.GetRequiredService<TradingDbContext>());
 
+// Register database seeder service
+builder.Services.AddScoped<MyTrader.Api.Services.DatabaseSeederService>();
+// Register database initialization service
+builder.Services.AddScoped<MyTrader.Api.Services.DatabaseInitializationService>();
+
 // Register data import service for Stock_Scrapper data
 builder.Services.AddScoped<MyTrader.Core.Interfaces.IDataImportService, MyTrader.Infrastructure.Services.InfrastructureDataImportService>();
 
@@ -324,8 +364,17 @@ builder.Services.AddHostedService(provider =>
     provider.GetRequiredService<MyTrader.Infrastructure.Services.BatchProcessing.NativeBatchJobOrchestrator>());
 
 // Register background services: WebSocket + Daily backtest automation
-builder.Services.AddSingleton<IBinanceWebSocketService, BinanceWebSocketService>();
-builder.Services.AddHostedService<BinanceWebSocketService>();
+// Register BinanceWebSocketService as both singleton and hosted service properly
+builder.Services.AddSingleton<BinanceWebSocketService>();
+builder.Services.AddSingleton<IBinanceWebSocketService>(provider => provider.GetRequiredService<BinanceWebSocketService>());
+builder.Services.AddHostedService(provider => provider.GetRequiredService<BinanceWebSocketService>());
+
+// Register MarketHoursService as singleton (required by MultiAssetDataBroadcastService)
+builder.Services.AddSingleton<MyTrader.Core.Interfaces.IMarketHoursService, MyTrader.Core.Services.MarketHoursService>();
+
+// Register YahooFinancePollingService as singleton (required by MultiAssetDataBroadcastService)
+builder.Services.AddSingleton<YahooFinancePollingService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<YahooFinancePollingService>());
 
 // Register enhanced multi-asset data broadcast service (replaces old MarketDataBroadcastService)
 builder.Services.AddHostedService<MyTrader.Api.Services.MultiAssetDataBroadcastService>();
@@ -351,6 +400,48 @@ builder.Services.AddMemoryCache();
 
 // Add logging
 builder.Services.AddLogging();
+
+// Add basic health checks
+builder.Services.AddHealthChecks()
+    .AddNpgSql(connectionString,
+        healthQuery: "SELECT 1;",
+        name: "postgresql_database",
+        tags: new[] { "database", "critical" })
+    .AddCheck("memory_usage", () =>
+    {
+        var totalMemory = GC.GetTotalMemory(false);
+        var maxMemory = 1024L * 1024 * 1024; // 1GB threshold
+
+        if (totalMemory > maxMemory)
+        {
+            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded(
+                $"Memory usage is high: {totalMemory / (1024 * 1024)} MB");
+        }
+
+        return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(
+            $"Memory usage is normal: {totalMemory / (1024 * 1024)} MB");
+    }, tags: new[] { "system", "performance" });
+
+// TODO: Re-enable monitoring services when infrastructure is ready
+// builder.Services.AddSingleton<SignalRHealthCheck>();
+// builder.Services.AddSingleton<WebSocketHealthCheck>();
+// builder.Services.AddSingleton<MarketDataHealthCheck>();
+// builder.Services.AddSingleton<ApiEndpointHealthCheck>();
+// builder.Services.AddSingleton<PrometheusMetricsExporter>();
+
+// TODO: Re-enable alerting and monitoring services when infrastructure is ready
+// builder.Services.Configure<AlertingConfiguration>(options => { ... });
+// builder.Services.AddSingleton<AlertingService>();
+// builder.Services.AddHostedService<HealthMonitoringService>();
+
+// Add Health Checks UI for monitoring dashboard
+builder.Services.AddHealthChecksUI(setup =>
+{
+    setup.SetEvaluationTimeInSeconds(30); // Check every 30 seconds
+    setup.MaximumHistoryEntriesPerEndpoint(50);
+    setup.AddHealthCheckEndpoint("MyTrader API", "/health");
+    setup.AddHealthCheckEndpoint("MyTrader Detailed", "/health/ready");
+}).AddInMemoryStorage();
 
 // Add Agent Pack Services (after dependencies are registered)
 builder.Services.AddMyTraderAgentPack();
@@ -417,6 +508,10 @@ builder.Services.AddScoped<MyTrader.Core.Services.ETL.ISymbolSynchronizationServ
 builder.Services.AddScoped<MyTrader.Core.Services.ETL.IAssetEnrichmentService, MyTrader.Infrastructure.Services.ETL.AssetEnrichmentService>();
 builder.Services.AddScoped<MyTrader.Core.Services.ETL.IMarketDataBootstrapService, MyTrader.Infrastructure.Services.ETL.MarketDataBootstrapService>();
 
+// AssetClass Correction ETL Services temporarily disabled for authentication fix
+// builder.Services.AddScoped<MyTrader.Core.Services.ETL.IMarketDataAssetClassCorrectionService, MyTrader.Infrastructure.Services.ETL.MarketDataAssetClassCorrectionService>();
+// builder.Services.AddSingleton<MyTrader.Infrastructure.Monitoring.AssetClassCorrectionMonitor>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -431,11 +526,25 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+// In development, avoid forcing HTTPS because local certs and mobile simulators
+// can cause negotiation/login to fail.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("DefaultPolicy");
+
+// Add mobile response unwrapping middleware (before authentication)
+app.UseMobileResponseUnwrapping();
 
 // Add custom validation middleware
 app.UseValidationMiddleware();
+
+// Add API metrics collection middleware
+// app.UseApiMetrics(); // TODO: Implement metrics middleware
+
+// Add Prometheus metrics endpoint
+// app.UsePrometheusMetrics(); // TODO: Implement Prometheus metrics
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -444,7 +553,7 @@ app.MapControllers();
 
 // Map SignalR hubs
 app.MapHub<TradingHub>("/hubs/trading");
-// app.MapHub<MyTrader.Api.Hubs.DashboardHub>("/hubs/dashboard"); // Temporarily disabled - dependency issues
+app.MapHub<DashboardHub>("/hubs/dashboard");
 app.MapHub<MockTradingHub>("/hubs/mock-trading");
 app.MapHub<MarketDataHub>("/hubs/market-data");
 app.MapHub<PortfolioHub>("/hubs/portfolio");
@@ -452,12 +561,59 @@ app.MapHub<PortfolioHub>("/hubs/portfolio");
 // Native batch processing dashboard removed - use API endpoints at /api/batch-processing/*
 // Health check and monitoring available through REST API instead of Hangfire dashboard
 
-// Health check endpoint
-app.MapGet("/health", () => Results.Ok(new { 
-    status = "healthy", 
-    timestamp = DateTime.UtcNow,
-    message = "MyTrader API is running" 
-}));
+// Map health check endpoints
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            timestamp = DateTime.UtcNow,
+            duration = report.TotalDuration,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                duration = e.Value.Duration,
+                description = e.Value.Description,
+                data = e.Value.Data,
+                exception = e.Value.Exception?.Message,
+                tags = e.Value.Tags
+            }).ToArray()
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        }));
+    }
+});
+
+// Health check UI (monitoring dashboard)
+app.MapHealthChecksUI(setup =>
+{
+    setup.UIPath = "/health-ui";
+    setup.ApiPath = "/health-ui-api";
+});
+
+// Health check endpoints by category
+app.MapHealthChecks("/health/critical", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("critical")
+});
+
+app.MapHealthChecks("/health/database", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("database")
+});
+
+app.MapHealthChecks("/health/realtime", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("realtime")
+});
 
 // Simple API info endpoint
 app.MapGet("/", () => Results.Ok(new {
@@ -467,6 +623,11 @@ app.MapGet("/", () => Results.Ok(new {
     timestamp = DateTime.UtcNow,
     endpoints = new {
         health = "/health",
+        healthDashboard = "/health-ui",
+        healthCritical = "/health/critical",
+        healthDatabase = "/health/database",
+        healthRealtime = "/health/realtime",
+        metrics = "/metrics",
         auth = "/api/auth",
         swagger = "/swagger",
         hubs = "/hubs/trading"
@@ -493,7 +654,7 @@ try
     var context = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
 
     // Only migrate if not using in-memory database
-    if (!context.Database.IsInMemory())
+    if (!Microsoft.EntityFrameworkCore.InMemoryDatabaseFacadeExtensions.IsInMemory(context.Database))
     {
         await context.Database.MigrateAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();

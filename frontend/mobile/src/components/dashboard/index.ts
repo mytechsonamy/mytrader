@@ -5,3 +5,5 @@ export { default as MarketStatusIndicator, MarketStatusBadge, MarketStatusGrid }
 export { default as CompactLeaderboard } from './CompactLeaderboard';
 export { default as NewsPreview } from './NewsPreview';
 export { default as ErrorBoundary, DashboardErrorBoundary, AccordionErrorBoundary, withErrorBoundary } from './ErrorBoundary';
+export { SkeletonLoader } from './SkeletonLoader';
+export { default as DataSourceIndicator } from './DataSourceIndicator';

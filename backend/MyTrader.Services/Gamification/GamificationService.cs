@@ -168,42 +168,58 @@ public class GamificationService : IGamificationService
 
     public async Task<List<LeaderboardEntry>> GetLeaderboardAsync(string metric = "TotalReturn", int limit = 10)
     {
-        var query = from p in _context.StrategyPerformances
-                    join u in _context.Users on p.UserId equals u.Id
-                    group p by new { p.UserId, u.FirstName, u.LastName } into g
-                    let achievements = _context.UserAchievements.Where(a => a.UserId == g.Key.UserId)
-                    select new
-                    {
-                        UserId = g.Key.UserId,
-                        UserName = $"{g.Key.FirstName} {g.Key.LastName}",
-                        BestReturn = g.Max(x => x.TotalReturn),
-                        BestWinRate = g.Max(x => x.WinRate),
-                        BestSharpe = g.Max(x => x.SharpeRatio),
-                        TotalAchievements = achievements.Count(),
-                        TotalPoints = achievements.Sum(a => a.Points)
-                    };
+        // First, get the performance data
+        var performanceQuery = from p in _context.StrategyPerformances
+                              join u in _context.Users on p.UserId equals u.Id
+                              group p by new { p.UserId, u.FirstName, u.LastName } into g
+                              select new
+                              {
+                                  UserId = g.Key.UserId,
+                                  UserName = $"{g.Key.FirstName} {g.Key.LastName}",
+                                  BestReturn = g.Max(x => x.TotalReturn),
+                                  BestWinRate = g.Max(x => x.WinRate),
+                                  BestSharpe = g.Max(x => x.SharpeRatio)
+                              };
 
-        var results = metric.ToUpper() switch
+        var performanceResults = metric.ToUpper() switch
         {
-            "WINRATE" => await query.OrderByDescending(x => x.BestWinRate).Take(limit).ToListAsync(),
-            "SHARPERATIO" => await query.OrderByDescending(x => x.BestSharpe).Take(limit).ToListAsync(),
-            _ => await query.OrderByDescending(x => x.BestReturn).Take(limit).ToListAsync()
+            "WINRATE" => await performanceQuery.OrderByDescending(x => x.BestWinRate).Take(limit).ToListAsync(),
+            "SHARPERATIO" => await performanceQuery.OrderByDescending(x => x.BestSharpe).Take(limit).ToListAsync(),
+            _ => await performanceQuery.OrderByDescending(x => x.BestReturn).Take(limit).ToListAsync()
         };
 
-        return results.Select((r, index) => new LeaderboardEntry(
-            r.UserId,
-            r.UserName,
-            metric.ToUpper() switch
+        // Then, get achievements for these users separately
+        var userIds = performanceResults.Select(r => r.UserId).ToList();
+        var achievementStats = await _context.UserAchievements
+            .Where(a => userIds.Contains(a.UserId))
+            .GroupBy(a => a.UserId)
+            .Select(g => new
             {
-                "WINRATE" => r.BestWinRate,
-                "SHARPERATIO" => r.BestSharpe,
-                _ => r.BestReturn
-            },
-            index + 1,
-            metric,
-            r.TotalAchievements,
-            r.TotalPoints
-        )).ToList();
+                UserId = g.Key,
+                TotalAchievements = g.Count(),
+                TotalPoints = g.Sum(a => a.Points)
+            })
+            .ToListAsync();
+
+        // Combine the results
+        return performanceResults.Select((r, index) =>
+        {
+            var achievements = achievementStats.FirstOrDefault(a => a.UserId == r.UserId);
+            return new LeaderboardEntry(
+                r.UserId,
+                r.UserName,
+                metric.ToUpper() switch
+                {
+                    "WINRATE" => r.BestWinRate,
+                    "SHARPERATIO" => r.BestSharpe,
+                    _ => r.BestReturn
+                },
+                index + 1,
+                metric,
+                achievements?.TotalAchievements ?? 0,
+                achievements?.TotalPoints ?? 0
+            );
+        }).ToList();
     }
 
     public async Task<UserStats> GetUserStatsAsync(Guid userId)

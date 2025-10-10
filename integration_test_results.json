@@ -1,0 +1,173 @@
+{
+  "timestamp": "2025-09-28T14:42:45.021051",
+  "tests_passed": 14,
+  "tests_failed": 1,
+  "tests_total": 15,
+  "backend_connectivity": {
+    "health": {
+      "status": "Healthy",
+      "timestamp": "2025-09-28T11:42:45.079832Z",
+      "duration": "00:00:00.0008350",
+      "checks": [
+        {
+          "name": "postgresql_database",
+          "status": "Healthy",
+          "duration": "00:00:00.0006121",
+          "description": null,
+          "data": {},
+          "exception": null,
+          "tags": [
+            "database",
+            "critical"
+          ]
+        },
+        {
+          "name": "memory_usage",
+          "status": "Healthy",
+          "duration": "00:00:00.0001039",
+          "description": "Memory usage is normal: 247 MB",
+          "data": {},
+          "exception": null,
+          "tags": [
+            "system",
+            "performance"
+          ]
+        }
+      ]
+    },
+    "cors": {
+      "access-control-allow-origin": "http://localhost:3000",
+      "access-control-allow-methods": null,
+      "access-control-allow-headers": null
+    }
+  },
+  "frontend_connectivity": {
+    "accessible": true,
+    "has_react": true,
+    "has_vite": true
+  },
+  "api_endpoints": {
+    "Root API": {
+      "name": "MyTrader API",
+      "version": "1.0.0",
+      "status": "running",
+      "timestamp": "2025-09-28T11:42:45.091429Z",
+      "endpoints": {
+        "health": "/health",
+        "healthDashboard": "/health-ui",
+        "healthCritical": "/health/critical",
+        "healthDatabase": "/health/database",
+        "healthRealtime": "/health/realtime",
+        "metrics": "/metrics",
+        "auth": "/api/auth",
+        "swagger": "/swagger",
+        "hubs": "/hubs/trading"
+      }
+    },
+    "Health Check": {
+      "status": "Healthy",
+      "timestamp": "2025-09-28T11:42:45.094227Z",
+      "duration": "00:00:00.0005377",
+      "checks": [
+        {
+          "name": "postgresql_database",
+          "status": "Healthy",
+          "duration": "00:00:00.0004727",
+          "description": null,
+          "data": {},
+          "exception": null,
+          "tags": [
+            "database",
+            "critical"
+          ]
+        },
+        {
+          "name": "memory_usage",
+          "status": "Healthy",
+          "duration": "00:00:00.0000092",
+          "description": "Memory usage is normal: 247 MB",
+          "data": {},
+          "exception": null,
+          "tags": [
+            "system",
+            "performance"
+          ]
+        }
+      ]
+    },
+    "Symbols API": {
+      "symbols": {
+        "ADA": {
+          "symbol": "ADAUSDT",
+          "display_name": "ADA/USDT - Cardano",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "ATOM": {
+          "symbol": "ATOMUSDT",
+          "display_name": "ATOM/USDT - Cosmos",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "AVAX": {
+          "symbol": "AVAXUSDT",
+          "display_name": "AVAX/USDT - Avalanche",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "BTC": {
+          "symbol": "BTCUSDT",
+          "display_name": "BTC/USDT - Bitcoin",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "DOT": {
+          "symbol": "DOTUSDT",
+          "display_name": "DOT/USDT - Polkadot",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "ETH": {
+          "symbol": "ETHUSDT",
+          "display_name": "ETH/USDT - Ethereum",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "LINK": {
+          "symbol": "LINKUSDT",
+          "display_name": "LINK/USDT - Chainlink",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "MATIC": {
+          "symbol": "MATICUSDT",
+          "display_name": "MATIC/USDT - Polygon",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "SOL": {
+          "symbol": "SOLUSDT",
+          "display_name": "SOL/USDT - Solana",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        },
+        "UNI": {
+          "symbol": "UNIUSDT",
+          "display_name": "UNI/USDT - Uniswap",
+          "precision": 8,
+          "strategy_type": "quality_over_quantity"
+        }
+      },
+      "interval": "1m"
+    }
+  },
+  "websocket_tests": {
+    "marketdata_hub_available": true,
+    "dashboard_hub_available": true
+  },
+  "performance_metrics": {
+    "backend_response_time_ms": 3.79,
+    "frontend_response_time_ms": 3.27
+  },
+  "errors": []
+}

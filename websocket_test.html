@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTrader WebSocket Integration Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .reconnecting { background-color: #fff3cd; color: #856404; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        .price-update {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #e7f3ff;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MyTrader WebSocket Integration Test</h1>
+        <p>Testing real-time connectivity to: <strong>http://localhost:5002/hubs/market-data</strong></p>
+
+        <div id="connectionStatus" class="status disconnected">
+            Status: Disconnected
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="btn-primary" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" class="btn-danger" onclick="disconnect()" disabled>Disconnect</button>
+            <button class="btn-secondary" onclick="clearLog()">Clear Log</button>
+            <button class="btn-secondary" onclick="testApiCall()">Test API Call</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="messagesReceived">0</div>
+                <div class="stat-label">Messages Received</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="priceUpdates">0</div>
+                <div class="stat-label">Price Updates</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="connectionTime">0s</div>
+                <div class="stat-label">Connected Time</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="lastUpdate">Never</div>
+                <div class="stat-label">Last Update</div>
+            </div>
+        </div>
+
+        <div id="priceUpdatesContainer">
+            <h3>Latest Price Updates</h3>
+            <div id="priceUpdates"></div>
+        </div>
+
+        <div id="logContainer">
+            <h3>Connection Log</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let connection = null;
+        let messageCount = 0;
+        let priceUpdateCount = 0;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('log');
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #666">[${timestamp}]</span> <span style="color: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007bff'}">${message}</span>`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.textContent = `Status: ${status}`;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function updateStats() {
+            document.getElementById('messagesReceived').textContent = messageCount;
+            document.getElementById('priceUpdates').textContent = priceUpdateCount;
+
+            if (connectionStartTime) {
+                const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+                document.getElementById('connectionTime').textContent = `${elapsed}s`;
+            }
+        }
+
+        function updatePriceDisplay(data) {
+            const container = document.getElementById('priceUpdates');
+            const priceDiv = document.createElement('div');
+            priceDiv.className = 'price-update';
+
+            // Handle both new and legacy format
+            const symbol = data.Symbol || data.symbol || 'Unknown';
+            const price = data.Price || data.price || 0;
+            const change24h = data.Change24h || data.changePercent || 0;
+            const volume = data.Volume || data.volume || 0;
+            const timestamp = data.Timestamp || data.timestamp || new Date().toISOString();
+
+            priceDiv.innerHTML = `
+                <strong>${symbol}</strong>: $${parseFloat(price).toFixed(2)}
+                <span style="color: ${change24h >= 0 ? '#28a745' : '#dc3545'}">
+                    (${change24h >= 0 ? '+' : ''}${parseFloat(change24h).toFixed(2)}%)
+                </span>
+                <br>
+                <small>Volume: ${parseFloat(volume).toLocaleString()} | ${new Date(timestamp).toLocaleTimeString()}</small>
+            `;
+
+            container.insertBefore(priceDiv, container.firstChild);
+
+            // Keep only last 5 updates
+            while (container.children.length > 5) {
+                container.removeChild(container.lastChild);
+            }
+
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        }
+
+        async function connect() {
+            try {
+                log('Creating SignalR connection...', 'info');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/market-data")
+                    .withAutomaticReconnect([0, 2000, 10000, 30000])
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Set up event handlers
+                connection.onclose((error) => {
+                    log(`Connection closed: ${error ? error.toString() : 'No error'}`, 'error');
+                    updateStatus('Disconnected', 'disconnected');
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+
+                    if (connectionTimer) {
+                        clearInterval(connectionTimer);
+                        connectionTimer = null;
+                    }
+                });
+
+                connection.onreconnecting((error) => {
+                    log(`Reconnecting: ${error ? error.toString() : 'Unknown error'}`, 'info');
+                    updateStatus('Reconnecting', 'reconnecting');
+                });
+
+                connection.onreconnected((connectionId) => {
+                    log(`Reconnected with connection ID: ${connectionId}`, 'success');
+                    updateStatus('Connected', 'connected');
+                });
+
+                // Listen for both event names for compatibility testing
+                connection.on("PriceUpdate", (data) => {
+                    messageCount++;
+                    priceUpdateCount++;
+                    log(`Received PriceUpdate: ${JSON.stringify(data).substring(0, 100)}...`, 'success');
+                    updatePriceDisplay(data);
+                    updateStats();
+                });
+
+                connection.on("ReceivePriceUpdate", (data) => {
+                    messageCount++;
+                    priceUpdateCount++;
+                    log(`Received ReceivePriceUpdate: ${JSON.stringify(data).substring(0, 100)}...`, 'success');
+                    updatePriceDisplay(data);
+                    updateStats();
+                });
+
+                // Start the connection
+                await connection.start();
+
+                log('Connected to SignalR hub successfully!', 'success');
+                updateStatus('Connected', 'connected');
+
+                connectionStartTime = Date.now();
+                connectionTimer = setInterval(updateStats, 1000);
+
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+
+                // Test subscription
+                try {
+                    await connection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSDT", "ETHUSDT"]);
+                    log('Subscribed to BTCUSDT and ETHUSDT price updates', 'success');
+                } catch (error) {
+                    log(`Failed to subscribe: ${error.toString()}`, 'error');
+                }
+
+            } catch (error) {
+                log(`Connection failed: ${error.toString()}`, 'error');
+                updateStatus('Connection Failed', 'disconnected');
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                try {
+                    await connection.stop();
+                    log('Disconnected successfully', 'info');
+                } catch (error) {
+                    log(`Error during disconnect: ${error.toString()}`, 'error');
+                }
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('priceUpdates').innerHTML = '';
+            messageCount = 0;
+            priceUpdateCount = 0;
+            updateStats();
+        }
+
+        async function testApiCall() {
+            try {
+                log('Testing API call to /health...', 'info');
+                const response = await fetch('http://localhost:5002/health');
+                const data = await response.json();
+                log(`API call successful: ${JSON.stringify(data)}`, 'success');
+            } catch (error) {
+                log(`API call failed: ${error.toString()}`, 'error');
+            }
+        }
+
+        // Initialize stats display
+        updateStats();
+    </script>
+</body>
+</html>

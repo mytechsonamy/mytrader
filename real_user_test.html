@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real User Experience Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { border: 1px solid #ccc; margin: 10px 0; padding: 15px; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        .pending { background-color: #fff3cd; }
+        pre { background: #f8f9fa; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Real User Experience Test</h1>
+
+    <div class="test-section pending" id="backend-test">
+        <h3>1. Backend API Test</h3>
+        <p>Testing if backend is responding...</p>
+        <div id="backend-result"></div>
+    </div>
+
+    <div class="test-section pending" id="crypto-prices-test">
+        <h3>2. Crypto Prices Test</h3>
+        <p>Testing if crypto prices are available...</p>
+        <div id="crypto-result"></div>
+    </div>
+
+    <div class="test-section pending" id="websocket-test">
+        <h3>3. WebSocket Connection Test</h3>
+        <p>Testing if WebSocket connection works...</p>
+        <div id="websocket-result"></div>
+    </div>
+
+    <div class="test-section pending" id="login-test">
+        <h3>4. User Login Test</h3>
+        <p>Testing login with mustepe@gmail.com / Qq121212...</p>
+        <div id="login-result"></div>
+    </div>
+
+    <div class="test-section pending" id="frontend-test">
+        <h3>5. Frontend Access Test</h3>
+        <p>Testing if frontend is accessible...</p>
+        <div id="frontend-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5002';
+        const FRONTEND_BASE = 'http://localhost:3000';
+
+        // Test 1: Backend API
+        async function testBackend() {
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                document.getElementById('backend-test').className = 'test-section success';
+                document.getElementById('backend-result').innerHTML = `<strong>SUCCESS:</strong> Backend is running<br><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('backend-test').className = 'test-section error';
+                document.getElementById('backend-result').innerHTML = `<strong>FAILED:</strong> ${error.message}`;
+            }
+        }
+
+        // Test 2: Crypto Prices
+        async function testCryptoPrices() {
+            try {
+                const btcResponse = await fetch(`${API_BASE}/api/prices/BTCUSDT`);
+                const btcData = await btcResponse.json();
+
+                const ethResponse = await fetch(`${API_BASE}/api/prices/ETHUSDT`);
+                const ethData = await ethResponse.json();
+
+                if (btcData.success && ethData.success) {
+                    document.getElementById('crypto-prices-test').className = 'test-section success';
+                    document.getElementById('crypto-result').innerHTML = `
+                        <strong>SUCCESS:</strong> Crypto prices are available<br>
+                        <strong>BTC:</strong> $${btcData.price.toLocaleString()} (${btcData.change}%)<br>
+                        <strong>ETH:</strong> $${ethData.price.toLocaleString()} (${ethData.change}%)<br>
+                        <pre>Sample: ${JSON.stringify(btcData, null, 2)}</pre>
+                    `;
+                } else {
+                    throw new Error('Crypto API returned failure');
+                }
+            } catch (error) {
+                document.getElementById('crypto-prices-test').className = 'test-section error';
+                document.getElementById('crypto-result').innerHTML = `<strong>FAILED:</strong> ${error.message}`;
+            }
+        }
+
+        // Test 3: WebSocket Connection
+        async function testWebSocket() {
+            try {
+                const ws = new WebSocket('ws://localhost:5002/hubs/dashboard');
+
+                ws.onopen = function() {
+                    document.getElementById('websocket-test').className = 'test-section success';
+                    document.getElementById('websocket-result').innerHTML = '<strong>SUCCESS:</strong> WebSocket connection established';
+                    ws.close();
+                };
+
+                ws.onerror = function(error) {
+                    document.getElementById('websocket-test').className = 'test-section error';
+                    document.getElementById('websocket-result').innerHTML = `<strong>FAILED:</strong> WebSocket connection failed`;
+                };
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.CONNECTING) {
+                        ws.close();
+                        document.getElementById('websocket-test').className = 'test-section error';
+                        document.getElementById('websocket-result').innerHTML = '<strong>FAILED:</strong> WebSocket connection timeout';
+                    }
+                }, 5000);
+
+            } catch (error) {
+                document.getElementById('websocket-test').className = 'test-section error';
+                document.getElementById('websocket-result').innerHTML = `<strong>FAILED:</strong> ${error.message}`;
+            }
+        }
+
+        // Test 4: User Login
+        async function testLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'mustepe@gmail.com',
+                        password: 'Qq121212'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success !== false) {
+                    document.getElementById('login-test').className = 'test-section success';
+                    document.getElementById('login-result').innerHTML = `<strong>SUCCESS:</strong> Login successful<br><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    document.getElementById('login-test').className = 'test-section error';
+                    document.getElementById('login-result').innerHTML = `<strong>FAILED:</strong> Login failed<br><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('login-test').className = 'test-section error';
+                document.getElementById('login-result').innerHTML = `<strong>FAILED:</strong> ${error.message}`;
+            }
+        }
+
+        // Test 5: Frontend Access
+        async function testFrontend() {
+            try {
+                const response = await fetch(FRONTEND_BASE);
+                if (response.ok) {
+                    document.getElementById('frontend-test').className = 'test-section success';
+                    document.getElementById('frontend-result').innerHTML = `<strong>SUCCESS:</strong> Frontend is accessible at <a href="${FRONTEND_BASE}" target="_blank">${FRONTEND_BASE}</a>`;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                document.getElementById('frontend-test').className = 'test-section error';
+                document.getElementById('frontend-result').innerHTML = `<strong>FAILED:</strong> ${error.message}`;
+            }
+        }
+
+        // Run all tests
+        async function runTests() {
+            await testBackend();
+            await testCryptoPrices();
+            await testWebSocket();
+            await testLogin();
+            await testFrontend();
+        }
+
+        // Start tests when page loads
+        window.onload = runTests;
+    </script>
+</body>
+</html>

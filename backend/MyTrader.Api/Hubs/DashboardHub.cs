@@ -15,7 +15,7 @@ namespace MyTrader.Api.Hubs;
 public class DashboardHub : Hub
 {
     private readonly TradingDbContext _context;
-    private readonly ISymbolService _symbolService;
+    private readonly MyTrader.Services.Market.ISymbolService _symbolService;
     private readonly IIndicatorService _indicatorService;
     private readonly ISignalGenerationEngine _signalEngine;
     private readonly ILogger<DashboardHub> _logger;
@@ -26,7 +26,7 @@ public class DashboardHub : Hub
 
     public DashboardHub(
         TradingDbContext context,
-        ISymbolService symbolService, 
+    MyTrader.Services.Market.ISymbolService symbolService, 
         IIndicatorService indicatorService,
         ISignalGenerationEngine signalEngine,
         ILogger<DashboardHub> logger)
@@ -47,7 +47,12 @@ public class DashboardHub : Hub
         
         // Add to user group
         await Groups.AddToGroupAsync(connectionId, $"user_{userId}");
-        
+
+        // Add to asset class groups for price updates
+        await Groups.AddToGroupAsync(connectionId, "AssetClass_CRYPTO");
+        await Groups.AddToGroupAsync(connectionId, "AssetClass_STOCK");
+        await Groups.AddToGroupAsync(connectionId, "AssetClass_GENERAL");
+
         // Initialize user subscriptions
         _userSubscriptions.TryAdd(connectionId, new UserSubscriptions { UserId = userId });
         

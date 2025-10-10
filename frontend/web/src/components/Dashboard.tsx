@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { logout } from '../store/slices/authSlice';
-import { setSidebarOpen } from '../store/slices/uiSlice';
+import { useAuthStore, useSidebar, useTheme, useUIActions } from '../store';
 import MarketOverview from './dashboard/MarketOverview';
 import UserProfile from './dashboard/UserProfile';
 import NotificationCenter from './dashboard/NotificationCenter';
 import NewsSection from './dashboard/NewsSection';
 import LeaderboardSection from './dashboard/LeaderboardSection';
+import RealTimeStats from './dashboard/RealTimeStats';
+import ConnectionStatus from './dashboard/ConnectionStatus';
 import AuthPrompt from './AuthPrompt';
 import Footer from './Footer';
+import { safeNavigate } from '../utils/navigation';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -16,9 +17,10 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
-  const dispatch = useAppDispatch();
-  const { user, isAuthenticated, isGuest } = useAppSelector((state) => state.auth);
-  const { sidebarOpen, theme } = useAppSelector((state) => state.ui);
+  const { user, isAuthenticated, isGuest, logout } = useAuthStore();
+  const sidebar = useSidebar();
+  const theme = useTheme();
+  const { setSidebarOpen } = useUIActions();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   }, [user, isGuest]);
 
   const handleLogout = () => {
-    dispatch(logout());
+    logout();
     if (onLogout) {
       onLogout();
     }
@@ -46,11 +48,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   };
 
   const navigateToLogin = () => {
-    window.location.href = '/login';
+    safeNavigate('/login', 'Please navigate to the login page manually');
   };
 
   const toggleSidebar = () => {
-    dispatch(setSidebarOpen(!sidebarOpen));
+    setSidebarOpen(!sidebar.isOpen);
   };
 
   return (
@@ -106,7 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       </header>
 
       <div className="dashboard-layout">
-        <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <aside className={`dashboard-sidebar ${sidebar.isOpen ? 'open' : 'closed'}`}>
           <div className="sidebar-header">
             <UserProfile className="sidebar-profile" />
           </div>
@@ -206,6 +208,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             </div>
           </nav>
 
+          {/* Connection Status */}
+          <div className="sidebar-status">
+            <ConnectionStatus
+              showDetails={true}
+              showTestButtons={false}
+              className="sidebar-connection-status"
+            />
+          </div>
+
           {!isAuthenticated && (
             <div className="sidebar-guest">
               <div className="guest-welcome">
@@ -219,9 +230,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 >
                   Sign In
                 </button>
-                <a href="/register" className="guest-action-btn secondary">
+                <button
+                  onClick={() => safeNavigate('/register')}
+                  className="guest-action-btn secondary"
+                >
                   Create Account
-                </a>
+                </button>
               </div>
               <div className="feature-preview">
                 <h4>Premium Features</h4>
@@ -239,6 +253,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           <div className="dashboard-content">
             {/* Top Section - Market Data Accordion */}
             <MarketOverview className="market-accordion-section" />
+
+            {/* Middle Section - Real-Time Analytics */}
+            <RealTimeStats className="real-time-section" />
 
             {/* Bottom Section - News & Leaderboard */}
             <div className="bottom-section">

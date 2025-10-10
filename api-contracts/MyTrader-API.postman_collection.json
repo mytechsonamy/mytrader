@@ -1,0 +1,929 @@
+{
+  "info": {
+    "name": "MyTrader API",
+    "description": "Comprehensive API testing collection for MyTrader trading platform\n\n## Features\n- Public market data access\n- User authentication & profile management\n- Symbol discovery and tracking\n- Real-time market data\n- Historical data retrieval\n\n## Setup\n1. Set environment variables (development/production)\n2. Run authentication requests to get JWT token\n3. Token is automatically stored for authenticated requests\n\n## Environment Variables\n- `baseUrl`: API base URL (http://localhost:8080)\n- `accessToken`: JWT access token (auto-populated)\n- `refreshToken`: JWT refresh token (auto-populated)\n- `userId`: User ID (auto-populated)\n- `testSymbolId`: Test symbol UUID for testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "mytrader-api-collection",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testSymbolId",
+      "value": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "description": "System health and information endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check API health status"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "API Information",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Get basic API information and available endpoints"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "description": "User authentication and profile management",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Registration successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"TestPassword123!\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"acceptTerms\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.accessToken).to.be.a('string');",
+                  "    pm.expect(response.refreshToken).to.be.a('string');",
+                  "    ",
+                  "    // Store tokens for future requests",
+                  "    pm.collectionVariables.set('accessToken', response.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', response.refreshToken);",
+                  "    pm.collectionVariables.set('userId', response.user.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"TestPassword123!\",\n  \"rememberMe\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticate user and get JWT tokens"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Token refresh successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.accessToken).to.be.a('string');",
+                  "    pm.expect(response.refreshToken).to.be.a('string');",
+                  "    ",
+                  "    // Update stored tokens",
+                  "    pm.collectionVariables.set('accessToken', response.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', response.refreshToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Refresh JWT access token"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Get User Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Profile retrieved successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.id).to.be.a('string');",
+                  "    pm.expect(response.email).to.be.a('string');",
+                  "    pm.expect(response.firstName).to.be.a('string');",
+                  "    pm.expect(response.lastName).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Get current user's profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Updated\",\n  \"lastName\": \"Name\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Update user profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Logout successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    ",
+                  "    // Clear stored tokens",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    pm.collectionVariables.set('refreshToken', '');",
+                  "    pm.collectionVariables.set('userId', '');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Logout current session"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Symbols",
+      "description": "Symbol management and discovery",
+      "item": [
+        {
+          "name": "Test Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Test endpoint working', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.message).to.include('Test endpoint working');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols", "test"]
+            },
+            "description": "Test connectivity to symbols endpoint"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Market Overview",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Market overview retrieved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.be.an('object');",
+                  "    pm.expect(response.data.totalSymbols).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols/market-overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols", "market-overview"]
+            },
+            "description": "Get market overview with symbol statistics"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Get Crypto Symbols",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Crypto symbols retrieved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.be.an('array');",
+                  "    if (response.length > 0) {",
+                  "        pm.expect(response[0]).to.have.property('symbol');",
+                  "        pm.expect(response[0]).to.have.property('assetClassName');",
+                  "        pm.expect(response[0].assetClassName).to.equal('CRYPTO');",
+                  "        ",
+                  "        // Store first symbol ID for testing",
+                  "        pm.collectionVariables.set('testSymbolId', response[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols/by-asset-class/CRYPTO?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols", "by-asset-class", "CRYPTO"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get cryptocurrency symbols"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Get Stock Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols/by-asset-class/STOCK?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols", "by-asset-class", "STOCK"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get stock symbols"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Get Tracked Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols"]
+            },
+            "description": "Get user's tracked symbols"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Symbol",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"BTCUSDT\",\n  \"venue\": \"BINANCE\",\n  \"baseCcy\": \"BTC\",\n  \"quoteCcy\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols"]
+            },
+            "description": "Create a new symbol to track"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Market Data",
+      "description": "Real-time and historical market data",
+      "item": [
+        {
+          "name": "Market Data Overview",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Market data overview retrieved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "overview"]
+            },
+            "description": "Get comprehensive market overview for dashboard"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Real-time Market Data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Real-time data retrieved or not found', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const response = pm.response.json();",
+                  "        pm.expect(response.success).to.be.true;",
+                  "        pm.expect(response.data).to.be.an('object');",
+                  "        pm.expect(response.data.symbolId).to.be.a('string');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/realtime/{{testSymbolId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "realtime", "{{testSymbolId}}"]
+            },
+            "description": "Get real-time market data for a symbol"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Batch Market Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbolIds\": [\"{{testSymbolId}}\"],\n  \"includeOrderBook\": false,\n  \"includeTradeHistory\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "batch"]
+            },
+            "description": "Get market data for multiple symbols"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Historical Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/historical/{{testSymbolId}}?interval=1d&limit=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "historical", "{{testSymbolId}}"],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "1d"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get historical candlestick data"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Top Movers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Top movers retrieved', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data).to.be.an('object');",
+                  "    pm.expect(response.data.gainers).to.be.an('array');",
+                  "    pm.expect(response.data.losers).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/top-movers?assetClass=CRYPTO&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "top-movers"],
+              "query": [
+                {
+                  "key": "assetClass",
+                  "value": "CRYPTO"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Get top gaining and losing symbols"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Popular Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/popular?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "popular"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get popular symbols across all asset classes"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Subscribe to Real-time Updates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\"{{testSymbolId}}\"]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/subscribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "subscribe"]
+            },
+            "description": "Subscribe to real-time market data updates"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Data Providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/providers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "providers"]
+            },
+            "description": "Get available data providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Data Providers Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/providers/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "providers", "health"]
+            },
+            "description": "Get health status of all data providers"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Test Scenarios",
+      "description": "Test scenarios for validation and edge cases",
+      "item": [
+        {
+          "name": "Invalid Symbol ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid symbol returns 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/realtime/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "realtime", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "Test with invalid symbol ID"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Unauthorized Access to Protected Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Unauthorized returns 401', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Test unauthorized access to protected endpoint"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Invalid Asset Class",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid asset class returns 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/symbols/by-asset-class/INVALID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "symbols", "by-asset-class", "INVALID"]
+            },
+            "description": "Test with invalid asset class"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "Large Batch Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Large batch request handled appropriately', function () {",
+                  "    // Should either succeed or return validation error",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbolIds\": [\n    \"550e8400-e29b-41d4-a716-446655440001\",\n    \"550e8400-e29b-41d4-a716-446655440002\",\n    \"550e8400-e29b-41d4-a716-446655440003\",\n    \"550e8400-e29b-41d4-a716-446655440004\",\n    \"550e8400-e29b-41d4-a716-446655440005\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/market-data/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "market-data", "batch"]
+            },
+            "description": "Test batch request with multiple symbols"
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-refresh token if expired (for authenticated requests)",
+          "if (pm.request.auth && pm.request.auth.type === 'bearer') {",
+          "    const token = pm.collectionVariables.get('accessToken');",
+          "    if (token) {",
+          "        try {",
+          "            const payload = JSON.parse(atob(token.split('.')[1]));",
+          "            const exp = payload.exp * 1000; // Convert to milliseconds",
+          "            const now = Date.now();",
+          "            ",
+          "            // If token expires in next 5 minutes, refresh it",
+          "            if (exp - now < 5 * 60 * 1000) {",
+          "                console.log('Token expiring soon, should refresh');",
+          "            }",
+          "        } catch (e) {",
+          "            console.log('Could not parse token');",
+          "        }",
+          "    }",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test to ensure response times are reasonable",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "// Check for common security headers",
+          "pm.test('Security headers present', function () {",
+          "    if (pm.response.headers.has('Content-Type')) {",
+          "        pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "    }",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MyTrader SignalR Integration Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <div>
+        <h1>MyTrader SignalR Integration Test</h1>
+        <div id="status">Connecting...</div>
+        <div>
+            <h3>Market Data Hub Test</h3>
+            <div id="market-data-status">Not connected</div>
+            <div id="market-data-messages"></div>
+        </div>
+        <div>
+            <h3>Trading Hub Test</h3>
+            <div id="trading-status">Not connected</div>
+            <div id="trading-messages"></div>
+        </div>
+        <button onclick="testConnections()">Test All Connections</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <script>
+        let marketDataConnection = null;
+        let tradingConnection = null;
+
+        function log(elementId, message) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            element.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        }
+
+        function updateStatus(elementId, status) {
+            document.getElementById(elementId).textContent = status;
+        }
+
+        async function testMarketDataHub() {
+            try {
+                marketDataConnection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/market-data", {
+                        withCredentials: false
+                    })
+                    .build();
+
+                marketDataConnection.on("PriceUpdate", (data) => {
+                    log("market-data-messages", `Price Update: ${JSON.stringify(data)}`);
+                });
+
+                marketDataConnection.on("MarketDataUpdate", (data) => {
+                    log("market-data-messages", `Market Data Update: ${JSON.stringify(data)}`);
+                });
+
+                marketDataConnection.on("ConnectionStatus", (data) => {
+                    log("market-data-messages", `Connection Status: ${JSON.stringify(data)}`);
+                });
+
+                marketDataConnection.onclose((error) => {
+                    updateStatus("market-data-status", "Connection closed");
+                    if (error) {
+                        log("market-data-messages", `Connection error: ${error}`);
+                    }
+                });
+
+                await marketDataConnection.start();
+                updateStatus("market-data-status", "Connected successfully");
+                log("market-data-messages", "Market Data Hub connected successfully");
+
+                // Test ping
+                try {
+                    await marketDataConnection.invoke("Ping");
+                    log("market-data-messages", "Ping successful");
+                } catch (err) {
+                    log("market-data-messages", `Ping failed: ${err.message}`);
+                }
+
+            } catch (err) {
+                updateStatus("market-data-status", `Connection failed: ${err.message}`);
+                log("market-data-messages", `Connection error: ${err.message}`);
+            }
+        }
+
+        async function testTradingHub() {
+            try {
+                tradingConnection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/trading", {
+                        withCredentials: false
+                    })
+                    .build();
+
+                tradingConnection.on("ReceivePriceUpdate", (data) => {
+                    log("trading-messages", `Price Update: ${JSON.stringify(data)}`);
+                });
+
+                tradingConnection.on("ReceiveMarketData", (data) => {
+                    log("trading-messages", `Market Data: ${JSON.stringify(data)}`);
+                });
+
+                tradingConnection.onclose((error) => {
+                    updateStatus("trading-status", "Connection closed");
+                    if (error) {
+                        log("trading-messages", `Connection error: ${error}`);
+                    }
+                });
+
+                await tradingConnection.start();
+                updateStatus("trading-status", "Connected successfully");
+                log("trading-messages", "Trading Hub connected successfully");
+
+                // Test ping
+                try {
+                    await tradingConnection.invoke("Ping");
+                    log("trading-messages", "Ping successful");
+                } catch (err) {
+                    log("trading-messages", `Ping failed: ${err.message}`);
+                }
+
+            } catch (err) {
+                updateStatus("trading-status", `Connection failed: ${err.message}`);
+                log("trading-messages", `Connection error: ${err.message}`);
+            }
+        }
+
+        async function testConnections() {
+            updateStatus("status", "Testing connections...");
+
+            // Test both hubs
+            await Promise.all([
+                testMarketDataHub(),
+                testTradingHub()
+            ]);
+
+            updateStatus("status", "Connection tests completed");
+
+            // Wait a bit and then test data flow
+            setTimeout(() => {
+                testDataFlow();
+            }, 2000);
+        }
+
+        async function testDataFlow() {
+            log("market-data-messages", "Testing data flow...");
+
+            // Test market data subscription if available
+            if (marketDataConnection && marketDataConnection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await marketDataConnection.invoke("Subscribe", "BTCUSDT");
+                    log("market-data-messages", "Subscribed to BTCUSDT");
+                } catch (err) {
+                    log("market-data-messages", `Subscribe failed: ${err.message}`);
+                }
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById("market-data-messages").innerHTML = "";
+            document.getElementById("trading-messages").innerHTML = "";
+        }
+
+        // Auto-start test on page load
+        setTimeout(() => {
+            testConnections();
+        }, 1000);
+
+        // Mobile client simulation test
+        setTimeout(() => {
+            log("market-data-messages", "Testing mobile client headers...");
+
+            // Test with mobile headers
+            fetch("http://localhost:5002/api/market-data/top-by-volume", {
+                headers: {
+                    "X-Client-Type": "mobile",
+                    "User-Agent": "MyTrader-Mobile/1.0 React-Native"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                log("market-data-messages", `Mobile API test: ${JSON.stringify(data).substring(0, 100)}...`);
+            })
+            .catch(err => {
+                log("market-data-messages", `Mobile API test failed: ${err.message}`);
+            });
+
+            // Test with web headers
+            fetch("http://localhost:5002/api/market-data/top-by-volume")
+            .then(response => response.json())
+            .then(data => {
+                log("trading-messages", `Web API test: ${JSON.stringify(data).substring(0, 100)}...`);
+            })
+            .catch(err => {
+                log("trading-messages", `Web API test failed: ${err.message}`);
+            });
+        }, 3000);
+    </script>
+</body>
+</html>

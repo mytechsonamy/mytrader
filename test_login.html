@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTrader Web Frontend Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #5a6fd8; }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .price-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .price-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 MyTrader Web Frontend Connectivity Test</h1>
+
+    <div class="test-section">
+        <h2>📊 Market Data Test</h2>
+        <button onclick="testMarketData()">Test Market Data API</button>
+        <div id="marketStatus" class="status info">Click button to test market data...</div>
+        <div id="priceDisplay" class="price-display"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔐 Authentication Test</h2>
+        <input type="email" id="email" placeholder="Email" value="mustepe@gmail.com">
+        <input type="password" id="password" placeholder="Password" value="">
+        <button onclick="testLogin()">Test Login</button>
+        <button onclick="testRegister()">Test Register</button>
+        <div id="authStatus" class="status info">Enter credentials and test...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>⚡ WebSocket Test</h2>
+        <button onclick="testWebSocket()">Test SignalR Connection</button>
+        <button onclick="disconnectWebSocket()">Disconnect</button>
+        <div id="wsStatus" class="status info">Click button to test WebSocket connection...</div>
+        <div id="liveUpdates"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📱 Frontend Application</h2>
+        <p>Main application should be running at:</p>
+        <a href="http://localhost:3000" target="_blank" style="color: #667eea; font-weight: bold;">
+            🌐 http://localhost:3000
+        </a>
+        <div class="status info">Open the link above to access the main MyTrader web application</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5002';
+        let connection = null;
+        let authToken = null;
+
+        // Test Market Data
+        async function testMarketData() {
+            const status = document.getElementById('marketStatus');
+            const display = document.getElementById('priceDisplay');
+
+            status.textContent = 'Testing market data API...';
+            status.className = 'status info';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/prices/live`);
+                const data = await response.json();
+
+                if (data.success && data.symbols) {
+                    status.textContent = '✅ Market data API working! Live prices received.';
+                    status.className = 'status success';
+
+                    // Display prices
+                    display.innerHTML = '';
+                    Object.entries(data.symbols).forEach(([symbol, data]) => {
+                        const card = document.createElement('div');
+                        card.className = 'price-card';
+                        card.innerHTML = `
+                            <strong>${symbol}</strong><br>
+                            💰 $${data.price?.toLocaleString()}<br>
+                            📈 ${data.change?.toFixed(2)}%<br>
+                            🕒 ${new Date(data.timestamp).toLocaleTimeString()}
+                        `;
+                        display.appendChild(card);
+                    });
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                status.textContent = `❌ Market data API failed: ${error.message}`;
+                status.className = 'status error';
+                display.innerHTML = '';
+            }
+        }
+
+        // Test Authentication
+        async function testLogin() {
+            const status = document.getElementById('authStatus');
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                status.textContent = '⚠️ Please enter email and password';
+                status.className = 'status error';
+                return;
+            }
+
+            status.textContent = 'Testing login...';
+            status.className = 'status info';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    authToken = data.token;
+                    status.textContent = `✅ Login successful! Welcome ${data.user?.firstName || email}`;
+                    status.className = 'status success';
+                } else {
+                    status.textContent = `❌ Login failed: ${data.message || 'Unknown error'}`;
+                    status.className = 'status error';
+                }
+            } catch (error) {
+                status.textContent = `❌ Login request failed: ${error.message}`;
+                status.className = 'status error';
+            }
+        }
+
+        // Test Registration
+        async function testRegister() {
+            const status = document.getElementById('authStatus');
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                status.textContent = '⚠️ Please enter email and password';
+                status.className = 'status error';
+                return;
+            }
+
+            status.textContent = 'Testing registration...';
+            status.className = 'status info';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email,
+                        password,
+                        firstName: 'Test',
+                        lastName: 'User'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    status.textContent = '✅ Registration successful! You can now login.';
+                    status.className = 'status success';
+                } else {
+                    status.textContent = `❌ Registration failed: ${data.message || 'Unknown error'}`;
+                    status.className = 'status error';
+                }
+            } catch (error) {
+                status.textContent = `❌ Registration request failed: ${error.message}`;
+                status.className = 'status error';
+            }
+        }
+
+        // Test WebSocket
+        async function testWebSocket() {
+            const status = document.getElementById('wsStatus');
+            const updates = document.getElementById('liveUpdates');
+
+            status.textContent = 'Connecting to SignalR...';
+            status.className = 'status info';
+
+            try {
+                // Load SignalR from CDN
+                if (typeof signalR === 'undefined') {
+                    await loadSignalR();
+                }
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${API_BASE}/hubs/marketdata`)
+                    .withAutomaticReconnect()
+                    .build();
+
+                connection.on("PriceUpdate", function (data) {
+                    const updateDiv = document.createElement('div');
+                    updateDiv.style.padding = '5px';
+                    updateDiv.style.margin = '2px 0';
+                    updateDiv.style.backgroundColor = '#e7f3ff';
+                    updateDiv.style.borderRadius = '3px';
+                    updateDiv.innerHTML = `
+                        📊 <strong>${data.symbol}</strong>: $${data.price?.toLocaleString()}
+                        (${data.change > 0 ? '+' : ''}${data.change?.toFixed(2)}%)
+                        <small style="color: #666;">${new Date().toLocaleTimeString()}</small>
+                    `;
+                    updates.insertBefore(updateDiv, updates.firstChild);
+
+                    // Keep only last 10 updates
+                    while (updates.children.length > 10) {
+                        updates.removeChild(updates.lastChild);
+                    }
+                });
+
+                await connection.start();
+
+                // Subscribe to crypto updates
+                await connection.invoke("SubscribeToAssetClass", "CRYPTO");
+
+                status.textContent = '✅ SignalR connected! Subscribed to CRYPTO updates.';
+                status.className = 'status success';
+
+            } catch (error) {
+                status.textContent = `❌ SignalR connection failed: ${error.message}`;
+                status.className = 'status error';
+            }
+        }
+
+        async function disconnectWebSocket() {
+            const status = document.getElementById('wsStatus');
+            const updates = document.getElementById('liveUpdates');
+
+            if (connection) {
+                await connection.stop();
+                connection = null;
+                updates.innerHTML = '';
+                status.textContent = 'SignalR disconnected.';
+                status.className = 'status info';
+            }
+        }
+
+        // Load SignalR from CDN
+        function loadSignalR() {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // Auto test market data on load
+        window.onload = function() {
+            setTimeout(testMarketData, 1000);
+        };
+    </script>
+</body>
+</html>

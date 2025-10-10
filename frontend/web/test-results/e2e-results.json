@@ -1,0 +1,240 @@
+{
+  "config": {
+    "configFile": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/playwright.config.ts",
+    "rootDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/global-setup.ts",
+    "globalTeardown": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/global-teardown.ts",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/e2e-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/e2e-results.xml"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "Mobile Chrome",
+        "name": "Mobile Chrome",
+        "testDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "Mobile Safari",
+        "name": "Mobile Safari",
+        "testDir": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.1",
+    "workers": 4,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "market-data-flow.spec.ts",
+      "file": "market-data-flow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Market Data Flow",
+          "file": "market-data-flow.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [],
+          "suites": [
+            {
+              "title": "Responsive Design",
+              "file": "market-data-flow.spec.ts",
+              "line": 254,
+              "column": 8,
+              "specs": [
+                {
+                  "title": "should handle different screen sizes gracefully",
+                  "ok": false,
+                  "tags": [],
+                  "tests": [
+                    {
+                      "timeout": 30000,
+                      "annotations": [],
+                      "expectedStatus": "passed",
+                      "projectId": "Mobile Chrome",
+                      "projectName": "Mobile Chrome",
+                      "results": [
+                        {
+                          "workerIndex": 0,
+                          "parallelIndex": 0,
+                          "status": "failed",
+                          "duration": 6362,
+                          "error": {
+                            "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('.market-overview')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.market-overview')\u001b[22m\n",
+                            "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('.market-overview')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.market-overview')\u001b[22m\n\n    at /Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/market-data-flow.spec.ts:291:56",
+                            "location": {
+                              "file": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/market-data-flow.spec.ts",
+                              "column": 56,
+                              "line": 291
+                            },
+                            "snippet": "  289 |\n  290 |         // Market overview should remain functional\n> 291 |         await expect(page.locator('.market-overview')).toBeVisible();\n      |                                                        ^\n  292 |\n  293 |         // Content should not overflow\n  294 |         const body = page.locator('body');"
+                          },
+                          "errors": [
+                            {
+                              "location": {
+                                "file": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/market-data-flow.spec.ts",
+                                "column": 56,
+                                "line": 291
+                              },
+                              "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m()\u001b[22m failed\n\nLocator:  locator('.market-overview')\nExpected: visible\nReceived: <element(s) not found>\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('.market-overview')\u001b[22m\n\n\n  289 |\n  290 |         // Market overview should remain functional\n> 291 |         await expect(page.locator('.market-overview')).toBeVisible();\n      |                                                        ^\n  292 |\n  293 |         // Content should not overflow\n  294 |         const body = page.locator('body');\n    at /Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/market-data-flow.spec.ts:291:56"
+                            }
+                          ],
+                          "stdout": [],
+                          "stderr": [],
+                          "retry": 0,
+                          "startTime": "2025-09-23T21:09:27.582Z",
+                          "annotations": [],
+                          "attachments": [
+                            {
+                              "name": "screenshot",
+                              "contentType": "image/png",
+                              "path": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts/market-data-flow-Market-Da-e81b3-ent-screen-sizes-gracefully-Mobile-Chrome/test-failed-1.png"
+                            },
+                            {
+                              "name": "video",
+                              "contentType": "video/webm",
+                              "path": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts/market-data-flow-Market-Da-e81b3-ent-screen-sizes-gracefully-Mobile-Chrome/video.webm"
+                            },
+                            {
+                              "name": "error-context",
+                              "contentType": "text/markdown",
+                              "path": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/test-results/e2e-artifacts/market-data-flow-Market-Da-e81b3-ent-screen-sizes-gracefully-Mobile-Chrome/error-context.md"
+                            }
+                          ],
+                          "errorLocation": {
+                            "file": "/Users/mustafayildirim/Documents/Personal Documents/Projects/myTrader/frontend/web/e2e/market-data-flow.spec.ts",
+                            "column": 56,
+                            "line": 291
+                          }
+                        }
+                      ],
+                      "status": "unexpected"
+                    }
+                  ],
+                  "id": "37659e0bf01234e4554b-20e305d9d8a61dfeec23",
+                  "file": "market-data-flow.spec.ts",
+                  "line": 278,
+                  "column": 9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-09-23T21:09:25.830Z",
+    "duration": 8236.974,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

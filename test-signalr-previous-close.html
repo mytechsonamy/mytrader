@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previous Close Field Validation Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .connected { background: #22c55e; }
+        .disconnected { background: #ef4444; }
+        .connecting { background: #f59e0b; }
+
+        .validation-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stock-update {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #f9fafb;
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .symbol {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1f2937;
+        }
+
+        .timestamp {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
+        .field-check {
+            display: flex;
+            align-items: center;
+            padding: 5px 0;
+        }
+
+        .field-name {
+            width: 200px;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .field-value {
+            flex: 1;
+            color: #111827;
+        }
+
+        .field-status {
+            margin-left: 10px;
+            font-size: 18px;
+        }
+
+        .missing { color: #ef4444; }
+        .present { color: #22c55e; }
+
+        .summary-box {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .summary-title {
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .error-box {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .success-box {
+            background: #dcfce7;
+            border: 2px solid #22c55e;
+            color: #14532d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        #log {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Previous Close Field Validation Test</h1>
+        <p>Testing if PreviousClose field is transmitted and displayed correctly</p>
+        <span>Connection Status: <span id="status" class="status disconnected">Disconnected</span></span>
+    </div>
+
+    <div class="validation-section">
+        <h2>📊 Validation Results</h2>
+        <div id="validationResults"></div>
+
+        <div class="summary-box">
+            <div class="summary-title">📈 Test Summary</div>
+            <div class="summary-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalUpdates">0</div>
+                    <div class="stat-label">Total Updates</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="withPrevClose">0</div>
+                    <div class="stat-label">With Previous Close</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="missingPrevClose">0</div>
+                    <div class="stat-label">Missing Previous Close</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successRate">0%</div>
+                    <div class="stat-label">Success Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="verdict"></div>
+    </div>
+
+    <div class="validation-section">
+        <h3>Console Log</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5002';
+        const HUB_URL = `${API_BASE_URL}/hubs/trading`;
+
+        let connection = null;
+        let stats = {
+            total: 0,
+            withPrevClose: 0,
+            missingPrevClose: 0,
+            stockUpdates: {}
+        };
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ef4444' : type === 'success' ? '#22c55e' : '#10b981';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(status, className) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = status;
+            statusEl.className = 'status ' + className;
+        }
+
+        function updateStats() {
+            document.getElementById('totalUpdates').textContent = stats.total;
+            document.getElementById('withPrevClose').textContent = stats.withPrevClose;
+            document.getElementById('missingPrevClose').textContent = stats.missingPrevClose;
+
+            const successRate = stats.total > 0
+                ? Math.round((stats.withPrevClose / stats.total) * 100)
+                : 0;
+            document.getElementById('successRate').textContent = successRate + '%';
+
+            // Update verdict
+            const verdictDiv = document.getElementById('verdict');
+            if (stats.total >= 5) {
+                if (successRate === 100) {
+                    verdictDiv.innerHTML = `
+                        <div class="success-box">
+                            <strong>✅ TEST PASSED!</strong><br>
+                            All ${stats.total} stock updates included the previousClose field.
+                            The backend is correctly transmitting this data.
+                        </div>
+                    `;
+                } else if (successRate === 0) {
+                    verdictDiv.innerHTML = `
+                        <div class="error-box">
+                            <strong>❌ TEST FAILED!</strong><br>
+                            None of the ${stats.total} stock updates included the previousClose field.
+                            The backend is NOT transmitting this required data.
+                        </div>
+                    `;
+                } else {
+                    verdictDiv.innerHTML = `
+                        <div class="error-box">
+                            <strong>⚠️ PARTIAL FAILURE!</strong><br>
+                            Only ${stats.withPrevClose} of ${stats.total} stock updates (${successRate}%) included the previousClose field.
+                            The backend transmission is inconsistent.
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        function validateStockUpdate(data) {
+            stats.total++;
+
+            const symbol = data.symbol || data.Symbol;
+            const price = data.price || data.Price;
+
+            // Check all possible field names for previousClose
+            const prevCloseFields = {
+                'previousClose': data.previousClose,
+                'PreviousClose': data.PreviousClose,
+                'prevClose': data.prevClose,
+                'PrevClose': data.PrevClose,
+                'previous_close': data.previous_close
+            };
+
+            let foundPrevClose = null;
+            let foundFieldName = null;
+
+            for (const [field, value] of Object.entries(prevCloseFields)) {
+                if (value !== undefined && value !== null) {
+                    foundPrevClose = value;
+                    foundFieldName = field;
+                    break;
+                }
+            }
+
+            if (foundPrevClose !== null) {
+                stats.withPrevClose++;
+            } else {
+                stats.missingPrevClose++;
+            }
+
+            // Create validation result HTML
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'stock-update';
+            resultDiv.innerHTML = `
+                <div class="stock-header">
+                    <span class="symbol">${symbol}</span>
+                    <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+
+                <div class="field-check">
+                    <span class="field-name">Price:</span>
+                    <span class="field-value">$${price?.toFixed(2) || 'N/A'}</span>
+                    <span class="field-status ${price ? 'present' : 'missing'}">
+                        ${price ? '✅' : '❌'}
+                    </span>
+                </div>
+
+                <div class="field-check">
+                    <span class="field-name">Previous Close:</span>
+                    <span class="field-value">
+                        ${foundPrevClose !== null ? `$${foundPrevClose.toFixed(2)} (${foundFieldName})` : 'MISSING'}
+                    </span>
+                    <span class="field-status ${foundPrevClose !== null ? 'present' : 'missing'}">
+                        ${foundPrevClose !== null ? '✅' : '❌'}
+                    </span>
+                </div>
+
+                <div class="field-check">
+                    <span class="field-name">Change Percent:</span>
+                    <span class="field-value">
+                        ${data.changePercent !== undefined ? `${data.changePercent.toFixed(2)}%` : 'N/A'}
+                    </span>
+                    <span class="field-status ${data.changePercent !== undefined ? 'present' : 'missing'}">
+                        ${data.changePercent !== undefined ? '✅' : '❌'}
+                    </span>
+                </div>
+
+                <div class="field-check">
+                    <span class="field-name">All Fields:</span>
+                    <span class="field-value" style="font-size: 11px; color: #6b7280;">
+                        ${Object.keys(data).join(', ')}
+                    </span>
+                </div>
+            `;
+
+            const resultsContainer = document.getElementById('validationResults');
+            resultsContainer.insertBefore(resultDiv, resultsContainer.firstChild);
+
+            // Keep only last 10 updates visible
+            while (resultsContainer.children.length > 10) {
+                resultsContainer.removeChild(resultsContainer.lastChild);
+            }
+
+            updateStats();
+
+            // Log the result
+            if (foundPrevClose !== null) {
+                log(`✅ ${symbol}: previousClose=${foundPrevClose} (field: ${foundFieldName})`, 'success');
+            } else {
+                log(`❌ ${symbol}: previousClose MISSING! Available: ${Object.keys(data).join(', ')}`, 'error');
+            }
+        }
+
+        async function startConnection() {
+            try {
+                log('Initializing SignalR connection...');
+                updateStatus('Connecting...', 'connecting');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(HUB_URL, {
+                        transport: signalR.HttpTransportType.WebSockets,
+                        skipNegotiation: true
+                    })
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect([0, 2000, 5000, 10000])
+                    .build();
+
+                // Handle price updates
+                connection.on("ReceivePriceUpdate", (data) => {
+                    if (data.assetClass === 'STOCK' || data.AssetClass === 'STOCK') {
+                        validateStockUpdate(data);
+                    }
+                });
+
+                connection.on("ReceiveBatchUpdate", (updates) => {
+                    updates.forEach(data => {
+                        if (data.assetClass === 'STOCK' || data.AssetClass === 'STOCK') {
+                            validateStockUpdate(data);
+                        }
+                    });
+                });
+
+                connection.onreconnecting(() => {
+                    log('Reconnecting to SignalR...');
+                    updateStatus('Reconnecting...', 'connecting');
+                });
+
+                connection.onreconnected(() => {
+                    log('Reconnected to SignalR', 'success');
+                    updateStatus('Connected', 'connected');
+                    subscribeToStocks();
+                });
+
+                connection.onclose(() => {
+                    log('Disconnected from SignalR', 'error');
+                    updateStatus('Disconnected', 'disconnected');
+                });
+
+                await connection.start();
+                log('Connected to SignalR successfully', 'success');
+                updateStatus('Connected', 'connected');
+
+                // Subscribe to test stocks
+                subscribeToStocks();
+
+            } catch (error) {
+                log(`Failed to connect: ${error.message}`, 'error');
+                updateStatus('Error', 'disconnected');
+                setTimeout(startConnection, 5000);
+            }
+        }
+
+        async function subscribeToStocks() {
+            const testSymbols = ['AAPL', 'MSFT', 'GOOGL', 'GARAN', 'THYAO', 'SISE'];
+
+            try {
+                log(`Subscribing to stocks: ${testSymbols.join(', ')}`);
+                await connection.invoke("SubscribeToAssetClass", "STOCK", testSymbols);
+                log('Successfully subscribed to stock symbols', 'success');
+            } catch (error) {
+                log(`Subscription failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Start connection when page loads
+        startConnection();
+    </script>
+</body>
+</html>

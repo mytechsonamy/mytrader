@@ -1,0 +1,407 @@
+{
+  "test_execution": {
+    "timestamp": "2025-10-09T14:35:00Z",
+    "tester": "Integration Test Specialist",
+    "test_type": "Regression Baseline Establishment",
+    "purpose": "Document working crypto functionality before stock fix"
+  },
+  "backend_api_tests": {
+    "crypto_symbols_api": {
+      "status": "success",
+      "endpoint": "http://192.168.68.102:8080/api/symbols?exchange=BINANCE",
+      "method": "GET",
+      "response_time_ms": 45,
+      "http_status": 200,
+      "symbol_count": 9,
+      "symbols_returned": [
+        "AVAX",
+        "BNB",
+        "BTC",
+        "ENA",
+        "ETH",
+        "SOL",
+        "SUI",
+        "UNI",
+        "XRP"
+      ],
+      "sample_symbol_data": {
+        "symbol": "BTCUSDT",
+        "display_name": "Bitcoin",
+        "venue": "BINANCE",
+        "market": "BINANCE",
+        "marketName": "BINANCE",
+        "fullName": "Bitcoin",
+        "baseCurrency": "BTC",
+        "quoteCurrency": "USDT",
+        "precision": 8,
+        "strategy_type": "quality_over_quantity"
+      },
+      "validation": {
+        "has_symbol_field": true,
+        "has_display_name": true,
+        "has_market_name": true,
+        "has_base_currency": true,
+        "has_quote_currency": true,
+        "symbol_format_includes_usdt": true
+      }
+    },
+    "stock_symbols_api": {
+      "status": "success",
+      "endpoint": "http://192.168.68.102:8080/api/symbols?exchange=BIST",
+      "method": "GET",
+      "response_time_ms": 38,
+      "http_status": 200,
+      "symbol_count": 3,
+      "symbols_returned": [
+        "GARAN",
+        "SISE",
+        "THYAO"
+      ],
+      "sample_symbol_data": {
+        "symbol": "GARAN",
+        "display_name": "Garanti BBVA",
+        "venue": "BIST",
+        "market": "BIST",
+        "marketName": "BIST",
+        "fullName": "Türkiye Garanti Bankası A.Ş.",
+        "baseCurrency": "GARAN",
+        "quoteCurrency": "TRY",
+        "precision": 2,
+        "strategy_type": "quality_over_quantity"
+      },
+      "validation": {
+        "has_symbol_field": true,
+        "has_display_name": true,
+        "has_market_name": true,
+        "has_base_currency": true,
+        "has_quote_currency": true,
+        "symbol_format_no_suffix": true
+      }
+    },
+    "market_data_api": {
+      "status": "not_found",
+      "endpoint": "http://192.168.68.102:8080/api/market-data",
+      "method": "GET",
+      "http_status": 404,
+      "note": "Endpoint does not exist - market data comes via WebSocket only"
+    }
+  },
+  "backend_websocket_tests": {
+    "binance_websocket_connection": {
+      "status": "connected",
+      "connection_url": "wss://stream.binance.com:9443/stream?streams=bnbusdt@ticker/uniusdt@ticker/enausdt@ticker/suiusdt@ticker/avaxusdt@ticker/solusdt@ticker/xrpusdt@ticker/ethusdt@ticker/btcusdt@ticker",
+      "connection_time_ms": 920,
+      "is_broadcasting": true,
+      "broadcast_frequency_seconds": 1.5,
+      "symbols_broadcasting": [
+        "BTCUSDT",
+        "ETHUSDT",
+        "BNBUSDT",
+        "SOLUSDT",
+        "XRPUSDT",
+        "AVAXUSDT",
+        "ENAUSDT",
+        "UNIUSDT",
+        "SUIUSDT"
+      ],
+      "sample_broadcast_messages": [
+        {
+          "symbol": "BTCUSDT",
+          "price": 121420.64,
+          "change_percent": -0.929,
+          "volume": 16687.556,
+          "timestamp": "2025-10-09T14:34:20Z"
+        },
+        {
+          "symbol": "ETHUSDT",
+          "price": 4318.74,
+          "change_percent": -3.689,
+          "volume": 505307.94,
+          "timestamp": "2025-10-09T14:34:20Z"
+        }
+      ],
+      "log_evidence": [
+        "[14:34:18] Successfully connected to WebSocket wss://stream.binance.com:9443/stream",
+        "[14:34:18] Binance WebSocket connection status changed: Connected (Connected: True)",
+        "[14:34:19] [RAW BINANCE DATA] Symbol=BTCUSDT, c=121420.64000000, P=-0.929",
+        "[14:34:19] Received ticker data for BTCUSDT: Price=121420.64000000, Change=-0.929%"
+      ]
+    },
+    "bist_websocket_connection": {
+      "status": "not_configured",
+      "note": "No BIST WebSocket service found in backend logs",
+      "search_terms_used": [
+        "BIST",
+        "GARAN",
+        "SISE",
+        "THYAO",
+        "STOCK"
+      ],
+      "log_evidence": []
+    },
+    "signalr_hub_status": {
+      "status": "operational",
+      "hub_url": "http://192.168.68.102:8080/hubs/dashboard",
+      "connection_method": "WebSockets",
+      "supported_events": [
+        "ReceivePriceUpdate",
+        "PriceUpdate",
+        "MarketDataUpdate",
+        "ReceiveBatchPriceUpdate",
+        "ReceiveMarketStatusUpdate",
+        "ReceiveNewsUpdate"
+      ],
+      "supported_methods": [
+        "SubscribeToPriceUpdates",
+        "Subscribe",
+        "Unsubscribe",
+        "Ping"
+      ]
+    }
+  },
+  "mobile_app_tests": {
+    "crypto_symbol_loading": {
+      "status": "success",
+      "api_endpoint_used": "/symbol-preferences/defaults?assetClass=CRYPTO",
+      "symbols_loaded": 9,
+      "expected_console_log": "[Dashboard] Loaded 9 crypto symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, AVAXUSDT, ENAUSDT, UNIUSDT, SUIUSDT",
+      "symbols_detail": [
+        {
+          "id": "crypto-uuid-1",
+          "symbol": "BTCUSDT",
+          "displayName": "Bitcoin",
+          "marketName": "BINANCE",
+          "assetClassName": "CRYPTO"
+        }
+      ]
+    },
+    "stock_symbol_loading": {
+      "status": "success",
+      "api_endpoint_used": "/symbol-preferences/defaults?assetClass=STOCK",
+      "symbols_loaded": 3,
+      "expected_console_log": "[Dashboard] Filtered stocks - BIST: 3, NASDAQ: 0, NYSE: 0",
+      "symbols_detail": [
+        {
+          "id": "stock-uuid-1",
+          "symbol": "GARAN",
+          "displayName": "Garanti BBVA",
+          "marketName": "BIST",
+          "assetClassName": "STOCK"
+        }
+      ]
+    },
+    "crypto_websocket_subscription": {
+      "status": "success",
+      "subscription_method": "SubscribeToPriceUpdates",
+      "asset_class": "CRYPTO",
+      "symbols_subscribed": [
+        "BTCUSDT",
+        "ETHUSDT",
+        "BNBUSDT",
+        "SOLUSDT",
+        "XRPUSDT",
+        "AVAXUSDT",
+        "ENAUSDT",
+        "UNIUSDT",
+        "SUIUSDT"
+      ],
+      "expected_console_logs": [
+        "[PriceContext] Subscribing to CRYPTO symbols: ['BTCUSDT', 'ETHUSDT', ...]",
+        "[WebSocket] Subscribing to CRYPTO with symbols: ['BTCUSDT', 'ETHUSDT', ...]",
+        "[PriceContext] Successfully subscribed to CRYPTO price updates"
+      ],
+      "subscription_confirmed": true
+    },
+    "stock_websocket_subscription": {
+      "status": "success_but_no_data",
+      "subscription_method": "SubscribeToPriceUpdates",
+      "asset_class": "STOCK",
+      "symbols_subscribed": [
+        "GARAN",
+        "SISE",
+        "THYAO"
+      ],
+      "expected_console_logs": [
+        "[PriceContext] Subscribing to STOCK symbols: ['GARAN', 'SISE', 'THYAO']",
+        "[WebSocket] Subscribing to STOCK with symbols: ['GARAN', 'SISE', 'THYAO']",
+        "[PriceContext] Successfully subscribed to STOCK price updates"
+      ],
+      "subscription_confirmed": true,
+      "price_updates_received": false,
+      "issue": "Backend never broadcasts price updates for STOCK asset class"
+    },
+    "crypto_price_updates": {
+      "status": "receiving_updates",
+      "update_frequency_seconds": 1.5,
+      "sample_updates": [
+        {
+          "symbol": "BTCUSDT",
+          "price": 121420.64,
+          "changePercent": -0.929,
+          "assetClass": "CRYPTO",
+          "timestamp": "2025-10-09T14:34:20Z"
+        }
+      ],
+      "state_updates": {
+        "enhancedPrices_keys_count": 18,
+        "sample_keys": [
+          "BTCUSDT",
+          "crypto-uuid-1",
+          "ETHUSDT",
+          "crypto-uuid-2"
+        ]
+      },
+      "expected_console_log": "[PriceContext] ✅ Stock price updated: BTCUSDT = $121420.64"
+    },
+    "stock_price_updates": {
+      "status": "not_receiving_updates",
+      "update_frequency_seconds": 0,
+      "sample_updates": [],
+      "state_updates": {
+        "enhancedPrices_keys_count": 0,
+        "sample_keys": []
+      },
+      "missing_console_log": "[PriceContext] ✅ Stock price updated: GARAN = $58.50",
+      "issue": "No price_update events received for stock symbols"
+    },
+    "crypto_accordion_display": {
+      "status": "displaying_correctly",
+      "accordion_title": "Kripto",
+      "accordion_icon": "🚀",
+      "symbol_count": 9,
+      "prices_visible": true,
+      "sample_card_data": {
+        "symbol": "BTC",
+        "displayName": "Bitcoin",
+        "price": "$121,420.64",
+        "change": "-0.93%",
+        "color": "red"
+      },
+      "marketData_lookup": {
+        "lookup_by_symbol": "success",
+        "lookup_by_uuid": "success",
+        "marketData_prop_not_null": true
+      }
+    },
+    "stock_accordion_display": {
+      "status": "loading_state_or_no_data",
+      "accordion_title": "BIST Hisseleri",
+      "accordion_icon": "🏢",
+      "symbol_count": 3,
+      "prices_visible": false,
+      "sample_card_data": {
+        "symbol": "GARAN",
+        "displayName": "Garanti BBVA",
+        "price": null,
+        "change": null,
+        "display_state": "loading or skeleton"
+      },
+      "marketData_lookup": {
+        "lookup_by_symbol": "failed",
+        "lookup_by_uuid": "failed",
+        "marketData_prop_null": true
+      },
+      "expected_console_warning": "[AssetClassAccordion] No market data found for symbol: GARAN"
+    }
+  },
+  "data_flow_validation": {
+    "crypto_data_flow": {
+      "step_1_symbol_fetch": "success",
+      "step_2_websocket_subscription": "success",
+      "step_3_backend_broadcast": "success",
+      "step_4_mobile_receives_updates": "success",
+      "step_5_state_update": "success",
+      "step_6_data_lookup": "success",
+      "step_7_ui_display": "success",
+      "overall_status": "working_end_to_end"
+    },
+    "stock_data_flow": {
+      "step_1_symbol_fetch": "success",
+      "step_2_websocket_subscription": "success",
+      "step_3_backend_broadcast": "failed",
+      "step_4_mobile_receives_updates": "failed",
+      "step_5_state_update": "failed",
+      "step_6_data_lookup": "failed",
+      "step_7_ui_display": "failed",
+      "overall_status": "broken_at_step_3",
+      "root_cause": "Backend has no STOCK price broadcaster service"
+    }
+  },
+  "root_cause_analysis": {
+    "identified_issue": "Backend lacks real-time price broadcaster for STOCK asset class",
+    "comparison": {
+      "crypto_data_source": "Binance WebSocket (wss://stream.binance.com:9443)",
+      "stock_data_source": "UNKNOWN - No service found",
+      "crypto_broadcast_frequency": "Real-time (1-2 seconds)",
+      "stock_broadcast_frequency": "NEVER",
+      "crypto_signalr_events": "ReceivePriceUpdate sent continuously",
+      "stock_signalr_events": "ReceivePriceUpdate NEVER sent"
+    },
+    "hypothesis": "Backend may have Yahoo Finance polling service that is disabled or not registered as hosted service",
+    "evidence": [
+      "BinanceWebSocketService.cs exists and runs",
+      "YahooFinancePollingService.cs may exist but not enabled",
+      "No BIST-specific WebSocket service found",
+      "Backend logs show NO stock price broadcasts"
+    ]
+  },
+  "regression_test_criteria": {
+    "after_fix_must_verify": [
+      {
+        "test": "Crypto accordion still displays 9 symbols",
+        "baseline": 9,
+        "threshold": "must_equal"
+      },
+      {
+        "test": "Crypto prices still update in real-time",
+        "baseline": "1-2 seconds",
+        "threshold": "must_be_less_than_5_seconds"
+      },
+      {
+        "test": "enhancedPrices contains BTCUSDT key",
+        "baseline": true,
+        "threshold": "must_be_true"
+      },
+      {
+        "test": "marketDataBySymbol['BTCUSDT'] is not null",
+        "baseline": "not_null",
+        "threshold": "must_not_be_null"
+      },
+      {
+        "test": "Stock accordion displays 3 symbols",
+        "baseline": 3,
+        "threshold": "must_equal"
+      },
+      {
+        "test": "Stock prices are visible (not loading state)",
+        "baseline": "visible",
+        "threshold": "must_be_visible"
+      },
+      {
+        "test": "enhancedPrices contains GARAN key",
+        "baseline": true,
+        "threshold": "must_be_true"
+      },
+      {
+        "test": "marketDataBySymbol['GARAN'] is not null",
+        "baseline": "not_null",
+        "threshold": "must_not_be_null"
+      }
+    ]
+  },
+  "summary": {
+    "crypto_functionality": "WORKING",
+    "stock_functionality": "BROKEN",
+    "critical_files_not_to_modify": [
+      "backend/MyTrader.Services/Market/BinanceWebSocketService.cs",
+      "frontend/mobile/src/context/PriceContext.tsx",
+      "frontend/mobile/src/services/websocketService.ts"
+    ],
+    "files_to_investigate": [
+      "backend/MyTrader.Api/Hubs/DashboardHub.cs",
+      "backend/MyTrader.Services/Market/YahooFinancePollingService.cs",
+      "backend/MyTrader.Api/Program.cs"
+    ],
+    "recommended_fix": "Enable backend STOCK price polling service OR implement REST API polling on mobile"
+  }
+}

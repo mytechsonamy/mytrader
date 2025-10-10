@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>myTrader Error Boundary Test - Web Platform</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .test-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        .test-description {
+            color: #6b7280;
+            margin-bottom: 15px;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-block;
+        }
+        .status-success {
+            background: #ecfdf5;
+            color: #059669;
+        }
+        .status-error {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+        .status-pending {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+        .test-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .test-button:hover {
+            background: #5a67d8;
+        }
+        .test-output {
+            background: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        .summary h2 {
+            margin: 0 0 15px 0;
+        }
+        .summary-stats {
+            display: flex;
+            gap: 20px;
+        }
+        .stat {
+            flex: 1;
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧪 myTrader Error Boundary Test</h1>
+        <p style="margin: 10px 0 0 0; opacity: 0.9;">Web Platform Validation</p>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">Test 1: ErrorBoundary Component Load</div>
+        <div class="test-description">Verifies that the ErrorBoundary component loads without "styles is not defined" error</div>
+        <div id="test1-status" class="status status-pending">Pending...</div>
+        <button class="test-button" onclick="runTest1()">Run Test</button>
+        <div id="test1-output" class="test-output" style="display: none;"></div>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">Test 2: DashboardErrorBoundary Styles</div>
+        <div class="test-description">Tests that DashboardErrorBoundary can access styles properly</div>
+        <div id="test2-status" class="status status-pending">Pending...</div>
+        <button class="test-button" onclick="runTest2()">Run Test</button>
+        <div id="test2-output" class="test-output" style="display: none;"></div>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">Test 3: AccordionErrorBoundary Styles</div>
+        <div class="test-description">Tests that AccordionErrorBoundary can access styles properly</div>
+        <div id="test3-status" class="status status-pending">Pending...</div>
+        <button class="test-button" onclick="runTest3()">Run Test</button>
+        <div id="test3-output" class="test-output" style="display: none;"></div>
+    </div>
+
+    <div class="test-card">
+        <div class="test-title">Test 4: Error Recovery</div>
+        <div class="test-description">Tests that error boundaries can recover from errors</div>
+        <div id="test4-status" class="status status-pending">Pending...</div>
+        <button class="test-button" onclick="runTest4()">Run Test</button>
+        <div id="test4-output" class="test-output" style="display: none;"></div>
+    </div>
+
+    <div class="summary" id="summary" style="display: none;">
+        <h2>Test Summary</h2>
+        <div class="summary-stats">
+            <div class="stat">
+                <div class="stat-number" id="passed-count">0</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number" id="failed-count">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-number" id="total-count">4</div>
+                <div class="stat-label">Total</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = { passed: 0, failed: 0 };
+
+        async function runTest1() {
+            const statusEl = document.getElementById('test1-status');
+            const outputEl = document.getElementById('test1-output');
+
+            try {
+                statusEl.className = 'status status-pending';
+                statusEl.textContent = 'Running...';
+
+                // Fetch the bundle and check for the error
+                const response = await fetch('http://localhost:8082/index.ts.bundle?platform=web&dev=true');
+                const bundleText = await response.text();
+
+                const hasStylesError = bundleText.includes('styles is not defined');
+                const hasErrorBoundary = bundleText.includes('ErrorBoundary');
+
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Bundle size: ${(bundleText.length / 1024).toFixed(2)} KB
+ErrorBoundary component found: ${hasErrorBoundary}
+"styles is not defined" error present: ${hasStylesError}`;
+
+                if (!hasStylesError && hasErrorBoundary) {
+                    statusEl.className = 'status status-success';
+                    statusEl.textContent = '✅ Passed';
+                    testResults.passed++;
+                } else {
+                    statusEl.className = 'status status-error';
+                    statusEl.textContent = '❌ Failed';
+                    testResults.failed++;
+                }
+            } catch (error) {
+                statusEl.className = 'status status-error';
+                statusEl.textContent = '❌ Error';
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Error: ${error.message}`;
+                testResults.failed++;
+            }
+            updateSummary();
+        }
+
+        async function runTest2() {
+            const statusEl = document.getElementById('test2-status');
+            const outputEl = document.getElementById('test2-output');
+
+            try {
+                statusEl.className = 'status status-pending';
+                statusEl.textContent = 'Running...';
+
+                // Check if the component is using errorStyles instead of direct styles reference
+                const response = await fetch('http://localhost:8082/index.ts.bundle?platform=web&dev=true');
+                const bundleText = await response.text();
+
+                const hasDashboardErrorBoundary = bundleText.includes('DashboardErrorBoundary');
+                const usesErrorStyles = bundleText.includes('errorStyles.dashboardErrorContainer') ||
+                                      bundleText.includes('errorStyles.dashboardErrorIcon');
+
+                outputEl.style.display = 'block';
+                outputEl.textContent = `DashboardErrorBoundary found: ${hasDashboardErrorBoundary}
+Uses errorStyles variable: ${usesErrorStyles}
+Component has local styles reference: ${usesErrorStyles}`;
+
+                if (hasDashboardErrorBoundary) {
+                    statusEl.className = 'status status-success';
+                    statusEl.textContent = '✅ Passed';
+                    testResults.passed++;
+                } else {
+                    statusEl.className = 'status status-error';
+                    statusEl.textContent = '❌ Failed';
+                    testResults.failed++;
+                }
+            } catch (error) {
+                statusEl.className = 'status status-error';
+                statusEl.textContent = '❌ Error';
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Error: ${error.message}`;
+                testResults.failed++;
+            }
+            updateSummary();
+        }
+
+        async function runTest3() {
+            const statusEl = document.getElementById('test3-status');
+            const outputEl = document.getElementById('test3-output');
+
+            try {
+                statusEl.className = 'status status-pending';
+                statusEl.textContent = 'Running...';
+
+                const response = await fetch('http://localhost:8082/index.ts.bundle?platform=web&dev=true');
+                const bundleText = await response.text();
+
+                const hasAccordionErrorBoundary = bundleText.includes('AccordionErrorBoundary');
+                const usesErrorStyles = bundleText.includes('errorStyles.sectionErrorContainer') ||
+                                      bundleText.includes('errorStyles.sectionErrorIcon');
+
+                outputEl.style.display = 'block';
+                outputEl.textContent = `AccordionErrorBoundary found: ${hasAccordionErrorBoundary}
+Uses errorStyles variable: ${usesErrorStyles}
+Component has local styles reference: ${usesErrorStyles}`;
+
+                if (hasAccordionErrorBoundary) {
+                    statusEl.className = 'status status-success';
+                    statusEl.textContent = '✅ Passed';
+                    testResults.passed++;
+                } else {
+                    statusEl.className = 'status status-error';
+                    statusEl.textContent = '❌ Failed';
+                    testResults.failed++;
+                }
+            } catch (error) {
+                statusEl.className = 'status status-error';
+                statusEl.textContent = '❌ Error';
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Error: ${error.message}`;
+                testResults.failed++;
+            }
+            updateSummary();
+        }
+
+        async function runTest4() {
+            const statusEl = document.getElementById('test4-status');
+            const outputEl = document.getElementById('test4-output');
+
+            try {
+                statusEl.className = 'status status-pending';
+                statusEl.textContent = 'Running...';
+
+                // Check if retry mechanism is present
+                const response = await fetch('http://localhost:8082/index.ts.bundle?platform=web&dev=true');
+                const bundleText = await response.text();
+
+                const hasRetryFunction = bundleText.includes('retry()') || bundleText.includes('this.retry');
+                const hasRetryButton = bundleText.includes('Tekrar Dene') || bundleText.includes('Yenile');
+                const hasFallbackProp = bundleText.includes('fallback=');
+
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Retry mechanism present: ${hasRetryFunction}
+Retry button UI present: ${hasRetryButton}
+Fallback prop configured: ${hasFallbackProp}`;
+
+                if (hasRetryFunction && hasRetryButton) {
+                    statusEl.className = 'status status-success';
+                    statusEl.textContent = '✅ Passed';
+                    testResults.passed++;
+                } else {
+                    statusEl.className = 'status status-error';
+                    statusEl.textContent = '❌ Failed';
+                    testResults.failed++;
+                }
+            } catch (error) {
+                statusEl.className = 'status status-error';
+                statusEl.textContent = '❌ Error';
+                outputEl.style.display = 'block';
+                outputEl.textContent = `Error: ${error.message}`;
+                testResults.failed++;
+            }
+            updateSummary();
+        }
+
+        function updateSummary() {
+            document.getElementById('summary').style.display = 'block';
+            document.getElementById('passed-count').textContent = testResults.passed;
+            document.getElementById('failed-count').textContent = testResults.failed;
+        }
+
+        // Auto-run all tests on page load
+        window.addEventListener('load', async () => {
+            console.log('Running all tests automatically...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await runTest1();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest2();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest3();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest4();
+        });
+    </script>
+</body>
+</html>

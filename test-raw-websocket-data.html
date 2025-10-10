@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Raw WebSocket Data Test - myTrader</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #4CAF50; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .status.connected { background: #2e7d32; }
+        .status.disconnected { background: #c62828; }
+        .status.connecting { background: #f57c00; }
+        .message {
+            background: #2d2d2d;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #4CAF50;
+            border-radius: 3px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .raw-data { color: #ffd700; }
+        .parsed-data { color: #00ff00; }
+        .error { color: #ff5252; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover { background: #45a049; }
+        .price-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .price-card {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #4CAF50;
+        }
+        .price-card h3 { margin-top: 0; color: #4CAF50; }
+        .price-value { font-size: 24px; font-weight: bold; }
+        .price-raw { color: #ff9800; }
+        .price-formatted { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Raw WebSocket Data Inspector - myTrader</h1>
+        <div id="status" class="status disconnected">Bağlantı Bekleniyor...</div>
+
+        <button onclick="connect()">Bağlan</button>
+        <button onclick="disconnect()">Bağlantıyı Kes</button>
+        <button onclick="clearLogs()">Logları Temizle</button>
+
+        <h2>📡 Raw WebSocket Messages</h2>
+        <div id="rawMessages" style="max-height: 400px; overflow-y: auto;"></div>
+
+        <h2>💰 Price Comparison (Raw vs Formatted)</h2>
+        <div id="priceComparison" class="price-comparison"></div>
+
+        <h2>🔧 Debug Info</h2>
+        <div id="debugInfo" style="background: #2d2d2d; padding: 15px; border-radius: 5px; font-family: monospace;"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script>
+        let connection = null;
+        const prices = {};
+
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + className;
+        }
+
+        function addRawMessage(data) {
+            const messagesDiv = document.getElementById('rawMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+
+            const timestamp = new Date().toLocaleTimeString('tr-TR');
+            messageDiv.innerHTML = `
+                <strong>[${timestamp}]</strong><br>
+                <span class="raw-data">RAW: ${JSON.stringify(data, null, 2)}</span>
+            `;
+
+            messagesDiv.insertBefore(messageDiv, messagesDiv.firstChild);
+
+            // Keep only last 20 messages
+            while (messagesDiv.children.length > 20) {
+                messagesDiv.removeChild(messagesDiv.lastChild);
+            }
+        }
+
+        function updatePriceCard(symbol, rawPrice, rawChange, rawVolume) {
+            if (!prices[symbol]) {
+                prices[symbol] = {};
+            }
+
+            prices[symbol] = {
+                raw: rawPrice,
+                rawChange: rawChange,
+                rawVolume: rawVolume,
+                timestamp: new Date().toLocaleTimeString('tr-TR')
+            };
+
+            renderPriceCards();
+        }
+
+        function renderPriceCards() {
+            const container = document.getElementById('priceComparison');
+            container.innerHTML = '';
+
+            Object.entries(prices).forEach(([symbol, data]) => {
+                const card = document.createElement('div');
+                card.className = 'price-card';
+
+                // Try to detect the correct format
+                let detectedFormat = 'UNKNOWN';
+                let correctedPrice = data.raw;
+
+                if (data.raw > 100000000) {
+                    detectedFormat = 'Satoshi (÷ 10^8)';
+                    correctedPrice = data.raw / 100000000;
+                } else if (data.raw > 1000000) {
+                    detectedFormat = 'Micro-units (÷ 10^6)';
+                    correctedPrice = data.raw / 1000000;
+                } else if (data.raw > 10000) {
+                    detectedFormat = 'Cents (÷ 100)';
+                    correctedPrice = data.raw / 100;
+                } else {
+                    detectedFormat = 'Decimal (OK)';
+                    correctedPrice = data.raw;
+                }
+
+                card.innerHTML = `
+                    <h3>${symbol}</h3>
+                    <div style="margin-bottom: 10px;">
+                        <div class="price-raw">
+                            <strong>RAW:</strong> ${data.raw}<br>
+                            <strong>Change:</strong> ${data.rawChange}%<br>
+                            <strong>Volume:</strong> ${data.rawVolume}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="price-formatted">
+                            <strong>Detected Format:</strong> ${detectedFormat}<br>
+                            <strong>Corrected Price:</strong> $${correctedPrice.toFixed(8)}
+                        </div>
+                    </div>
+                    <div style="font-size: 10px; color: #888; margin-top: 10px;">
+                        Last update: ${data.timestamp}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        async function connect() {
+            try {
+                updateStatus('Bağlanıyor...', 'connecting');
+
+                // Use localhost:5002 for backend
+                const hubUrl = 'http://localhost:5002/hubs/trading';
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(hubUrl)
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Debug)
+                    .build();
+
+                // Log all incoming messages
+                connection.on('PriceUpdate', (data) => {
+                    console.log('PriceUpdate received:', data);
+                    addRawMessage({ type: 'PriceUpdate', data });
+
+                    if (data.symbol && data.price !== undefined) {
+                        updatePriceCard(
+                            data.symbol,
+                            data.price,
+                            data.change || 0,
+                            data.volume || 0
+                        );
+                    }
+                });
+
+                connection.on('MarketDataUpdate', (data) => {
+                    console.log('MarketDataUpdate received:', data);
+                    addRawMessage({ type: 'MarketDataUpdate', data });
+
+                    if (data.Symbol && data.Price !== undefined) {
+                        updatePriceCard(
+                            data.Symbol,
+                            data.Price,
+                            data.PriceChange || 0,
+                            data.Volume || 0
+                        );
+                    }
+                });
+
+                connection.onreconnecting(() => {
+                    updateStatus('Yeniden bağlanıyor...', 'connecting');
+                });
+
+                connection.onreconnected(() => {
+                    updateStatus('Bağlandı ve yeniden abone olundu', 'connected');
+                    subscribeToSymbols();
+                });
+
+                connection.onclose(() => {
+                    updateStatus('Bağlantı kesildi', 'disconnected');
+                });
+
+                await connection.start();
+                updateStatus('Bağlantı başarılı!', 'connected');
+
+                // Subscribe to crypto markets
+                await subscribeToSymbols();
+
+                updateDebugInfo();
+            } catch (err) {
+                console.error('Connection error:', err);
+                updateStatus('Bağlantı hatası: ' + err.message, 'disconnected');
+            }
+        }
+
+        async function subscribeToSymbols() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                console.warn('Cannot subscribe: Not connected');
+                return;
+            }
+
+            try {
+                // Subscribe to CRYPTO market
+                await connection.invoke('SubscribeToMarket', 'CRYPTO');
+                console.log('Subscribed to CRYPTO market');
+
+                // Also try subscribing to specific asset class
+                await connection.invoke('SubscribeToAssetClass', 'CRYPTO');
+                console.log('Subscribed to CRYPTO asset class');
+            } catch (err) {
+                console.error('Subscription error:', err);
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                updateStatus('Bağlantı kesildi', 'disconnected');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('rawMessages').innerHTML = '';
+            document.getElementById('priceComparison').innerHTML = '';
+        }
+
+        function updateDebugInfo() {
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.innerHTML = `
+                <strong>Connection State:</strong> ${connection ? connection.state : 'null'}<br>
+                <strong>Hub URL:</strong> http://localhost:5002/hubs/trading<br>
+                <strong>Subscribed Symbols:</strong> CRYPTO market + asset class<br>
+                <strong>Active Prices:</strong> ${Object.keys(prices).length}<br>
+                <strong>Backend Expected Format:</strong> Checking...<br>
+                <br>
+                <strong>Test:</strong> This tool shows the EXACT raw data sent from backend.<br>
+                If XRP shows as 286400000, then backend is sending it that way.<br>
+                If XRP shows as 2.86, then backend is correct and frontend has a bug.
+            `;
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                connect();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

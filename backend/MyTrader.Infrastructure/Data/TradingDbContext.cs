@@ -41,6 +41,7 @@ public class TradingDbContext : DbContext, ITradingDbContext
     public DbSet<Market> Markets { get; set; }
     public DbSet<TradingSession> TradingSessions { get; set; }
     public DbSet<DataProvider> DataProviders { get; set; }
+    public DbSet<UserDashboardPreferences> UserDashboardPreferences { get; set; }
 
     // Historical market data entities
     public DbSet<HistoricalMarketData> HistoricalMarketData { get; set; }
@@ -360,7 +361,7 @@ public class TradingDbContext : DbContext, ITradingDbContext
             entity.Property(e => e.Token).HasMaxLength(255).IsRequired();
             entity.Property(e => e.Code).HasMaxLength(6).IsRequired();
             entity.Property(e => e.IpAddress).HasMaxLength(45);
-            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.UserAgent).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
             
             entity.HasOne(e => e.User)

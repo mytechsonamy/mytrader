@@ -1,0 +1,1019 @@
+{
+  "info": {
+    "name": "MyTrader Unified API v1.1",
+    "description": "Comprehensive test collection for MyTrader's unified API specification. Addresses critical port configuration fixes, WebSocket event standardization, and API versioning consistency.\n\n**Priority Implementation:**\n- Phase 1: WebSocket Port Fix (RICE 576)\n- Phase 1: Event Naming Standardization (RICE 432)\n- Phase 2: API Versioning Consistency (RICE 288)\n- Phase 2: Volume Leaders Endpoint (RICE 216)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "550e8400-e29b-41d4-a716-446655440001",
+    "version": {
+      "major": 1,
+      "minor": 1,
+      "patch": 0
+    }
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5002/api/v1",
+      "description": "CORRECTED PORT: Now uses 5002 instead of 8080"
+    },
+    {
+      "key": "ws_url",
+      "value": "ws://localhost:5002/hubs/market-data",
+      "description": "WebSocket URL for real-time data"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "description": "JWT access token for authenticated requests"
+    },
+    {
+      "key": "test_symbol_id",
+      "value": "550e8400-e29b-41d4-a716-446655440001",
+      "description": "Test UUID for symbol operations"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set dynamic timestamps and request IDs",
+          "pm.globals.set('timestamp', new Date().toISOString());",
+          "pm.globals.set('request_id', pm.variables.replaceIn('{{$randomUUID}}'));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global response validation",
+          "pm.test('Response time is acceptable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});",
+          "",
+          "pm.test('Content-Type is JSON', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "});",
+          "",
+          "if (pm.response.code === 200) {",
+          "    pm.test('Response has timestamp', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData.timestamp).to.exist;",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "System Health & Info",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check API health status and service availability"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health check returns 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Health status is healthy', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('healthy');",
+                  "});",
+                  "",
+                  "pm.test('Response time under 50ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(50);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/info",
+              "host": ["{{base_url}}"],
+              "path": ["info"]
+            },
+            "description": "Get API version, capabilities, and endpoint discovery"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API info returns correct version', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.version).to.match(/^\\d+\\.\\d+\\.\\d+$/);",
+                  "});",
+                  "",
+                  "pm.test('Capabilities include real-time-data', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.capabilities).to.include('real-time-data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "System health and information endpoints"
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"acceptTerms\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Registration successful', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"rememberMe\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate user and get JWT tokens"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Login successful', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.accessToken).to.exist;",
+                  "    });",
+                  "",
+                  "    // Store access token for subsequent requests",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.accessToken) {",
+                  "        pm.collectionVariables.set('access_token', jsonData.accessToken);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Get current user's profile information"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Profile contains user data', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.data.id).to.exist;",
+                  "        pm.expect(jsonData.data.email).to.exist;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout and invalidate current session"
+          },
+          "response": []
+        }
+      ],
+      "description": "User authentication and profile management"
+    },
+    {
+      "name": "Symbol Management",
+      "item": [
+        {
+          "name": "Get Tracked Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["symbols"]
+            },
+            "description": "Get list of symbols being tracked"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns symbols data', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.symbols).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Has interval information', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.interval).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Symbols by Asset Class - CRYPTO",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols/by-asset-class/CRYPTO?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["symbols", "by-asset-class", "CRYPTO"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get cryptocurrency symbols"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns crypto symbols', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.expect(jsonData[0].assetClassName).to.eql('CRYPTO');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Symbols by Asset Class - STOCK_BIST",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols/by-asset-class/STOCK_BIST?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["symbols", "by-asset-class", "STOCK_BIST"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get BIST stock symbols"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols/search?q=BTC&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["symbols", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "BTC"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Search symbols by ticker or name"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Popular Symbols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols/popular?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["symbols", "popular"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get most popular symbols across all asset classes"
+          },
+          "response": []
+        }
+      ],
+      "description": "Symbol management and discovery endpoints"
+    },
+    {
+      "name": "Market Data",
+      "item": [
+        {
+          "name": "Market Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/overview",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "overview"]
+            },
+            "description": "Get comprehensive market overview for dashboard"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Market overview structure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.summary).to.exist;",
+                  "    pm.expect(jsonData.data.timestamp).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Real-time Market Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/realtime/{{test_symbol_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "realtime", "{{test_symbol_id}}"]
+            },
+            "description": "Get real-time market data for a specific symbol"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Real-time data structure', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.data.symbolId).to.exist;",
+                  "        pm.expect(jsonData.data.ticker).to.exist;",
+                  "        pm.expect(jsonData.data.price).to.be.a('number');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Batch Market Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbolIds\": [\n    \"{{test_symbol_id}}\",\n    \"550e8400-e29b-41d4-a716-446655440002\"\n  ],\n  \"includeOrderBook\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/market-data/batch",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "batch"]
+            },
+            "description": "Get market data for multiple symbols"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch response structure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.marketData).to.be.an('array');",
+                  "    pm.expect(jsonData.data.summary).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historical Market Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/historical/{{test_symbol_id}}?interval=1d&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "historical", "{{test_symbol_id}}"],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "1d"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get historical candlestick data"
+          },
+          "response": []
+        },
+        {
+          "name": "Top Movers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/top-movers?assetClass=CRYPTO&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "top-movers"],
+              "query": [
+                {
+                  "key": "assetClass",
+                  "value": "CRYPTO"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get top gaining and losing symbols"
+          },
+          "response": []
+        },
+        {
+          "name": "🆕 Top Volume Leaders (NEW ENDPOINT)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/top-by-volume?perClass=8&timeframe=24h",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "top-by-volume"],
+              "query": [
+                {
+                  "key": "perClass",
+                  "value": "8",
+                  "description": "Number of top volume symbols per asset class"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "24h",
+                  "description": "Volume calculation timeframe"
+                }
+              ]
+            },
+            "description": "**NEW ENDPOINT - PRIORITY IMPLEMENTATION**\n\nRICE Score: 216 - Phase 2\n\nGet highest volume assets per asset class for dashboard widgets. This endpoint supports the \"Volume Leaders\" dashboard widget requirements."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Volume leaders response time <100ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(100);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Volume leaders structure', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.data.assetClasses).to.exist;",
+                  "        pm.expect(jsonData.data.timestamp).to.exist;",
+                  "    });",
+                  "",
+                  "    pm.test('Each asset class has volume leaders', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        const assetClasses = jsonData.data.assetClasses;",
+                  "        Object.keys(assetClasses).forEach(assetClass => {",
+                  "            pm.expect(assetClasses[assetClass]).to.be.an('array');",
+                  "            if (assetClasses[assetClass].length > 0) {",
+                  "                pm.expect(assetClasses[assetClass][0].volume).to.be.a('number');",
+                  "                pm.expect(assetClasses[assetClass][0].rank).to.be.a('number');",
+                  "            }",
+                  "        });",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Market Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/statistics/{{test_symbol_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "statistics", "{{test_symbol_id}}"]
+            },
+            "description": "Get detailed market statistics for a symbol"
+          },
+          "response": []
+        }
+      ],
+      "description": "Real-time and historical market data endpoints"
+    },
+    {
+      "name": "Asset-Specific Endpoints",
+      "item": [
+        {
+          "name": "Cryptocurrency Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/crypto?symbols=BTC,ETH,ADA&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "crypto"],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "BTC,ETH,ADA"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get cryptocurrency market data"
+          },
+          "response": []
+        },
+        {
+          "name": "BIST Market Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/bist?symbols=THYAO,AKBNK,ISCTR&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "bist"],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "THYAO,AKBNK,ISCTR"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get BIST (Turkish stocks) market data"
+          },
+          "response": []
+        },
+        {
+          "name": "NASDAQ Market Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/nasdaq?symbols=AAPL,MSFT,GOOGL&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "nasdaq"],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "AAPL,MSFT,GOOGL"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get NASDAQ stock market data"
+          },
+          "response": []
+        }
+      ],
+      "description": "Asset class specific market data endpoints"
+    },
+    {
+      "name": "Legacy Endpoints (Deprecated)",
+      "item": [
+        {
+          "name": "⚠️ Legacy Live Prices (DEPRECATED)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/prices/live",
+              "host": ["{{base_url}}"],
+              "path": ["prices", "live"]
+            },
+            "description": "**DEPRECATED ENDPOINT**\n\nThis endpoint is deprecated and will be removed in v2.0.0\n\n**Migration**: Use `/api/v1/market-data/batch` instead\n**Deprecation Timeline**: 90 days from 2024-09-24"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Deprecation header present', function () {",
+                  "    pm.expect(pm.response.headers.get('Deprecation')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Successor link header present', function () {",
+                  "    const linkHeader = pm.response.headers.get('Link');",
+                  "    if (linkHeader) {",
+                  "        pm.expect(linkHeader).to.include('successor-version');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Legacy endpoints maintained for backward compatibility"
+    },
+    {
+      "name": "Performance & Load Tests",
+      "item": [
+        {
+          "name": "Volume Leaders Performance Test",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/top-by-volume?perClass=8",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "top-by-volume"],
+              "query": [
+                {
+                  "key": "perClass",
+                  "value": "8"
+                }
+              ]
+            },
+            "description": "Performance test for volume leaders endpoint - must respond <100ms"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CRITICAL: Volume leaders <100ms response time', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(100);",
+                  "});",
+                  "",
+                  "pm.test('Response size reasonable', function () {",
+                  "    const responseSize = pm.response.responseSize;",
+                  "    pm.expect(responseSize).to.be.below(100000); // <100KB",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health Check Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Health check performance - should respond <10ms"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health check <10ms response time', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(10);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Batch Market Data Performance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbolIds\": [\n    \"{{test_symbol_id}}\",\n    \"550e8400-e29b-41d4-a716-446655440002\",\n    \"550e8400-e29b-41d4-a716-446655440003\",\n    \"550e8400-e29b-41d4-a716-446655440004\",\n    \"550e8400-e29b-41d4-a716-446655440005\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/market-data/batch",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "batch"]
+            },
+            "description": "Batch market data performance test - should respond <200ms"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Batch market data <200ms response time', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Performance and load testing requests"
+    },
+    {
+      "name": "WebSocket Connection Tests",
+      "item": [
+        {
+          "name": "WebSocket Connection Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/info",
+              "host": ["{{base_url}}"],
+              "path": ["info"]
+            },
+            "description": "Get WebSocket connection information"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('WebSocket endpoint information available', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.endpoints.websockets).to.include('/hubs/market-data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "WebSocket connection validation tests"
+    },
+    {
+      "name": "Contract Validation Tests",
+      "item": [
+        {
+          "name": "API Versioning Consistency Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market-data/overview",
+              "host": ["{{base_url}}"],
+              "path": ["market-data", "overview"]
+            },
+            "description": "Verify API follows v1 versioning pattern"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('URL follows v1 versioning pattern', function () {",
+                  "    const url = pm.request.url.toString();",
+                  "    pm.expect(url).to.include('/api/v1/');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Response Schema Validation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["symbols"]
+            },
+            "description": "Validate response follows unified schema"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Response has BaseResponse structure', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.a('boolean');",
+                  "    pm.expect(jsonData.timestamp).to.exist;",
+                  "    pm.expect(jsonData.data).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Error Response Validation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/symbols/invalid-uuid",
+              "host": ["{{base_url}}"],
+              "path": ["symbols", "invalid-uuid"]
+            },
+            "description": "Test error response structure"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Error response has standard structure', function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.success).to.eql(false);",
+                  "        pm.expect(jsonData.error).to.exist;",
+                  "        pm.expect(jsonData.error.code).to.exist;",
+                  "        pm.expect(jsonData.error.message).to.exist;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "API contract validation tests"
+    }
+  ],
+  "protocolProfileBehavior": {
+    "disableBodyPruning": true
+  }
+}

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 4: E2E WebSocket Validation Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            color: white;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background-color: #161b22;
+        }
+        .test-title {
+            color: #58a6ff;
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #30363d;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-disconnected {
+            background-color: #f85149;
+            color: white;
+        }
+        .status-connecting {
+            background-color: #f0883e;
+            color: white;
+        }
+        .status-connected {
+            background-color: #3fb950;
+            color: white;
+        }
+        .success {
+            color: #3fb950;
+        }
+        .error {
+            color: #f85149;
+        }
+        .warning {
+            color: #f0883e;
+        }
+        .info {
+            color: #58a6ff;
+        }
+        button {
+            background-color: #21262d;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        button:hover {
+            background-color: #30363d;
+            border-color: #58a6ff;
+        }
+        button.primary {
+            background-color: #238636;
+            border-color: #238636;
+            color: white;
+        }
+        button.primary:hover {
+            background-color: #2ea043;
+        }
+        button.danger {
+            background-color: #da3633;
+            border-color: #da3633;
+            color: white;
+        }
+        button.danger:hover {
+            background-color: #f85149;
+        }
+        input[type="text"] {
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 8px;
+            border-radius: 6px;
+            width: 400px;
+        }
+        #log {
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            padding: 15px;
+            height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+        .metric-card {
+            display: inline-block;
+            padding: 15px;
+            margin: 10px;
+            background-color: #21262d;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            min-width: 150px;
+        }
+        .metric-label {
+            color: #8b949e;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            color: #58a6ff;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .test-result {
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 6px;
+            border-left: 4px solid;
+        }
+        .test-result.pass {
+            background-color: #1b4332;
+            border-left-color: #3fb950;
+        }
+        .test-result.fail {
+            background-color: #5a1e1e;
+            border-left-color: #f85149;
+        }
+        .test-result.pending {
+            background-color: #2d3748;
+            border-left-color: #f0883e;
+        }
+        .price-update {
+            padding: 5px 10px;
+            margin: 2px 0;
+            background-color: #1f2937;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Phase 4: End-to-End WebSocket Validation</h1>
+        <p>Testing object[] array handling fix in MarketDataHub.cs</p>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">
+            Connection Settings
+            <span id="statusBadge" class="status-badge status-disconnected">DISCONNECTED</span>
+        </div>
+        <input type="text" id="hubUrl" value="http://192.168.68.102:8080/hubs/market-data" />
+        <button class="primary" onclick="connect()">🔌 Connect</button>
+        <button class="danger" onclick="disconnect()">⏹️ Disconnect</button>
+        <button onclick="testConnection()">🔍 Test Connection</button>
+        <div style="margin-top: 10px;">
+            <strong>Connection ID:</strong> <span id="connectionId" class="info">N/A</span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">📊 Real-time Metrics</div>
+        <div class="metric-card">
+            <div class="metric-label">Price Updates</div>
+            <div class="metric-value" id="priceUpdateCount">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Subscriptions</div>
+            <div class="metric-value" id="subscriptionCount">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Errors</div>
+            <div class="metric-value" id="errorCount">0</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Test Duration</div>
+            <div class="metric-value" id="testDuration">0s</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">🧪 Test Execution</div>
+        <button class="primary" onclick="runValidationSuite()">▶️ Run Full Validation Suite</button>
+        <button onclick="testArraySubscription()">Test 1: Array Subscription</button>
+        <button onclick="testSingleSymbol()">Test 2: Single Symbol</button>
+        <button onclick="testEmptyArray()">Test 3: Empty Array</button>
+        <button onclick="testNullValue()">Test 4: Null Value</button>
+        <button onclick="testMultipleAssetClasses()">Test 5: Multi-Asset</button>
+        <button onclick="clearResults()">🗑️ Clear Results</button>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">✅ Test Results Summary</div>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">📈 Recent Price Updates (Last 10)</div>
+        <div id="recentPrices"></div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">📝 Activity Log</div>
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="exportLog()">Export Log</button>
+        <div id="log"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.js"></script>
+    <script>
+        let connection;
+        const logElement = document.getElementById('log');
+        const testResultsElement = document.getElementById('testResults');
+        const recentPricesElement = document.getElementById('recentPrices');
+
+        let metrics = {
+            priceUpdates: 0,
+            subscriptions: 0,
+            errors: 0,
+            testStartTime: null
+        };
+
+        let testResults = [];
+        let recentPrices = [];
+        const maxRecentPrices = 10;
+
+        function updateMetrics() {
+            document.getElementById('priceUpdateCount').textContent = metrics.priceUpdates;
+            document.getElementById('subscriptionCount').textContent = metrics.subscriptions;
+            document.getElementById('errorCount').textContent = metrics.errors;
+
+            if (metrics.testStartTime) {
+                const duration = Math.floor((Date.now() - metrics.testStartTime) / 1000);
+                document.getElementById('testDuration').textContent = duration + 's';
+            }
+        }
+
+        function updateStatusBadge(status) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = 'status-badge status-' + status;
+            badge.textContent = status.toUpperCase();
+        }
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+            const prefix = {
+                'error': '❌ [ERROR]',
+                'success': '✅ [SUCCESS]',
+                'warning': '⚠️  [WARNING]',
+                'info': 'ℹ️  [INFO]'
+            }[type] || 'ℹ️  [INFO]';
+
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `${timestamp} ${prefix} ${message}`;
+            logElement.appendChild(logEntry);
+            logElement.scrollTop = logElement.scrollHeight;
+
+            if (type === 'error') {
+                metrics.errors++;
+                updateMetrics();
+            }
+        }
+
+        function addTestResult(testName, status, details) {
+            const result = { testName, status, details, timestamp: new Date().toISOString() };
+            testResults.push(result);
+
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${status}`;
+
+            const icon = status === 'pass' ? '✅' : status === 'fail' ? '❌' : '⏳';
+            resultDiv.innerHTML = `
+                <strong>${icon} ${testName}</strong>
+                <div style="margin-top: 5px; font-size: 12px; color: #8b949e;">${details}</div>
+            `;
+
+            testResultsElement.appendChild(resultDiv);
+        }
+
+        function addPriceUpdate(symbol, price, change) {
+            recentPrices.unshift({ symbol, price, change, timestamp: new Date().toISOString() });
+            if (recentPrices.length > maxRecentPrices) {
+                recentPrices.pop();
+            }
+
+            recentPricesElement.innerHTML = '';
+            recentPrices.forEach(update => {
+                const priceDiv = document.createElement('div');
+                priceDiv.className = 'price-update';
+                const changeColor = update.change >= 0 ? '#3fb950' : '#f85149';
+                const changeSign = update.change >= 0 ? '+' : '';
+                priceDiv.innerHTML = `
+                    <strong>${update.symbol}</strong>: $${update.price.toFixed(2)}
+                    <span style="color: ${changeColor}">${changeSign}${update.change.toFixed(2)}%</span>
+                    <span style="color: #8b949e; margin-left: 10px;">${new Date(update.timestamp).toLocaleTimeString()}</span>
+                `;
+                recentPricesElement.appendChild(priceDiv);
+            });
+        }
+
+        async function connect() {
+            try {
+                const hubUrl = document.getElementById('hubUrl').value;
+                log(`Connecting to ${hubUrl}...`);
+                updateStatusBadge('connecting');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(hubUrl)
+                    .configureLogging(signalR.LogLevel.Debug)
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Connection lifecycle handlers
+                connection.on('ConnectionStatus', (data) => {
+                    log(`Connection status update: ${JSON.stringify(data)}`, 'info');
+                    if (data.connectionId) {
+                        document.getElementById('connectionId').textContent = data.connectionId;
+                    }
+                });
+
+                connection.on('Heartbeat', (data) => {
+                    log(`💓 Heartbeat received: ${data.timestamp}`, 'info');
+                });
+
+                // Subscription handlers
+                connection.on('SubscriptionConfirmed', (data) => {
+                    metrics.subscriptions++;
+                    updateMetrics();
+
+                    log(`✅ Subscription Confirmed!`, 'success');
+                    log(`   Asset Class: ${data.assetClass}`, 'success');
+                    log(`   Symbols: ${data.symbols?.join(', ') || 'none'}`, 'success');
+                    log(`   Timestamp: ${data.timestamp}`, 'success');
+
+                    addTestResult(
+                        `Subscribe to ${data.symbols?.length || 0} ${data.assetClass} symbols`,
+                        'pass',
+                        `Successfully subscribed to: ${data.symbols?.join(', ') || 'N/A'}`
+                    );
+                });
+
+                connection.on('SubscriptionError', (data) => {
+                    log(`❌ Subscription Error!`, 'error');
+                    log(`   Error Code: ${data.error}`, 'error');
+                    log(`   Message: ${data.message}`, 'error');
+                    if (data.receivedData) {
+                        log(`   Received Data: ${JSON.stringify(data.receivedData)}`, 'error');
+                    }
+
+                    addTestResult(
+                        `Subscription Error: ${data.error}`,
+                        'fail',
+                        data.message
+                    );
+                });
+
+                // Price update handlers
+                connection.on('PriceUpdate', (data) => {
+                    metrics.priceUpdates++;
+                    updateMetrics();
+
+                    log(`📊 Price Update: ${data.symbol} = $${data.price} (${data.change24h >= 0 ? '+' : ''}${data.change24h}%)`, 'info');
+                    addPriceUpdate(data.symbol, data.price, data.change24h);
+                });
+
+                connection.on('ReceivePriceUpdate', (data) => {
+                    metrics.priceUpdates++;
+                    updateMetrics();
+
+                    log(`📊 Receive Price Update: ${data.symbol} = $${data.price}`, 'info');
+                    addPriceUpdate(data.symbol, data.price, data.change24h || 0);
+                });
+
+                connection.on('MarketDataUpdate', (data) => {
+                    metrics.priceUpdates++;
+                    updateMetrics();
+
+                    log(`📈 Market Data Update: ${data.symbol}`, 'info');
+                });
+
+                connection.onclose((error) => {
+                    updateStatusBadge('disconnected');
+                    document.getElementById('connectionId').textContent = 'N/A';
+                    if (error) {
+                        log(`Connection closed with error: ${error}`, 'error');
+                    } else {
+                        log('Connection closed', 'warning');
+                    }
+                });
+
+                connection.onreconnecting((error) => {
+                    updateStatusBadge('connecting');
+                    log(`Reconnecting... ${error?.message || ''}`, 'warning');
+                });
+
+                connection.onreconnected((connectionId) => {
+                    updateStatusBadge('connected');
+                    document.getElementById('connectionId').textContent = connectionId || 'N/A';
+                    log(`Reconnected! Connection ID: ${connectionId}`, 'success');
+                });
+
+                await connection.start();
+                updateStatusBadge('connected');
+                document.getElementById('connectionId').textContent = connection.connectionId || 'N/A';
+                log('✅ Connected successfully!', 'success');
+                log(`Connection ID: ${connection.connectionId}`, 'info');
+
+            } catch (error) {
+                log(`❌ Connection failed: ${error}`, 'error');
+                updateStatusBadge('disconnected');
+                addTestResult('Connection Test', 'fail', error.toString());
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                updateStatusBadge('disconnected');
+                document.getElementById('connectionId').textContent = 'N/A';
+                log('Disconnected', 'info');
+            }
+        }
+
+        async function testConnection() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected! Please connect first.', 'error');
+                return;
+            }
+
+            try {
+                log('Testing connection...', 'info');
+                await connection.invoke('TestConnection');
+                log('✅ Connection test completed', 'success');
+            } catch (error) {
+                log(`❌ Connection test failed: ${error}`, 'error');
+            }
+        }
+
+        async function testArraySubscription() {
+            log('\n🧪 Test 1: Array Subscription (object[] handling)', 'info');
+            log('This test validates the fix for object[] array parsing', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                addTestResult('Test 1: Array Subscription', 'fail', 'Not connected to server');
+                return;
+            }
+
+            try {
+                const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'AVAXUSDT'];
+                log(`Sending array of ${symbols.length} symbols: ${JSON.stringify(symbols)}`, 'info');
+                log('Expected: Backend should parse as object[] and return SubscriptionConfirmed', 'info');
+
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbols);
+                log('✅ Invoke completed - waiting for SubscriptionConfirmed event...', 'success');
+
+            } catch (error) {
+                log(`❌ Test 1 failed: ${error}`, 'error');
+                addTestResult('Test 1: Array Subscription', 'fail', error.toString());
+            }
+        }
+
+        async function testSingleSymbol() {
+            log('\n🧪 Test 2: Single Symbol (string handling)', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                addTestResult('Test 2: Single Symbol', 'fail', 'Not connected to server');
+                return;
+            }
+
+            try {
+                const symbol = 'BTCUSDT';
+                log(`Sending single symbol: "${symbol}"`, 'info');
+
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbol);
+                log('✅ Invoke completed - waiting for SubscriptionConfirmed event...', 'success');
+
+            } catch (error) {
+                log(`❌ Test 2 failed: ${error}`, 'error');
+                addTestResult('Test 2: Single Symbol', 'fail', error.toString());
+            }
+        }
+
+        async function testEmptyArray() {
+            log('\n🧪 Test 3: Empty Array (error handling)', 'info');
+            log('Expected: Should receive SubscriptionError with "NoSymbols" error code', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                addTestResult('Test 3: Empty Array', 'fail', 'Not connected to server');
+                return;
+            }
+
+            try {
+                const symbols = [];
+                log(`Sending empty array: ${JSON.stringify(symbols)}`, 'info');
+
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbols);
+                log('Invoke completed - should receive NoSymbols error', 'info');
+
+            } catch (error) {
+                log(`Invoke error (may be expected): ${error}`, 'warning');
+            }
+        }
+
+        async function testNullValue() {
+            log('\n🧪 Test 4: Null Value (error handling)', 'info');
+            log('Expected: Should receive SubscriptionError with "NoSymbols" error code', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                addTestResult('Test 4: Null Value', 'fail', 'Not connected to server');
+                return;
+            }
+
+            try {
+                log('Sending null value', 'info');
+
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', null);
+                log('Invoke completed - should receive NoSymbols error', 'info');
+
+            } catch (error) {
+                log(`Invoke error (may be expected): ${error}`, 'warning');
+            }
+        }
+
+        async function testMultipleAssetClasses() {
+            log('\n🧪 Test 5: Multiple Asset Classes', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                addTestResult('Test 5: Multi-Asset', 'fail', 'Not connected to server');
+                return;
+            }
+
+            try {
+                // Test CRYPTO
+                log('Testing CRYPTO with array...', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', ['BTCUSDT', 'ETHUSDT']);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Test STOCK_BIST (if available)
+                log('Testing STOCK_BIST with array...', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK_BIST', ['THYAO', 'GARAN']);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Test STOCK_NASDAQ (if available)
+                log('Testing STOCK_NASDAQ with array...', 'info');
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK_NASDAQ', ['AAPL', 'GOOGL']);
+
+                log('✅ Multi-asset test completed', 'success');
+
+            } catch (error) {
+                log(`❌ Test 5 failed: ${error}`, 'error');
+                addTestResult('Test 5: Multi-Asset', 'fail', error.toString());
+            }
+        }
+
+        async function runValidationSuite() {
+            log('\n🚀 ═══════════════════════════════════════════════', 'info');
+            log('🚀 STARTING PHASE 4 E2E VALIDATION SUITE', 'info');
+            log('🚀 ═══════════════════════════════════════════════', 'info');
+
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('❌ Cannot run tests - not connected!', 'error');
+                alert('Please connect to the server first!');
+                return;
+            }
+
+            // Reset metrics
+            metrics = {
+                priceUpdates: 0,
+                subscriptions: 0,
+                errors: 0,
+                testStartTime: Date.now()
+            };
+            updateMetrics();
+
+            // Run tests sequentially with delays
+            await testArraySubscription();
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            await testSingleSymbol();
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            await testEmptyArray();
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            await testNullValue();
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            await testMultipleAssetClasses();
+
+            log('\n✅ ═══════════════════════════════════════════════', 'success');
+            log('✅ VALIDATION SUITE COMPLETED!', 'success');
+            log('✅ ═══════════════════════════════════════════════', 'success');
+            log(`\nTotal Price Updates: ${metrics.priceUpdates}`, 'info');
+            log(`Total Subscriptions: ${metrics.subscriptions}`, 'info');
+            log(`Total Errors: ${metrics.errors}`, 'info');
+
+            // Generate summary
+            const duration = Math.floor((Date.now() - metrics.testStartTime) / 1000);
+            addTestResult(
+                'Validation Suite Complete',
+                metrics.errors === 0 && metrics.subscriptions > 0 ? 'pass' : 'fail',
+                `Duration: ${duration}s | Subscriptions: ${metrics.subscriptions} | Price Updates: ${metrics.priceUpdates} | Errors: ${metrics.errors}`
+            );
+        }
+
+        function clearLog() {
+            logElement.innerHTML = '';
+            log('Log cleared', 'info');
+        }
+
+        function clearResults() {
+            testResultsElement.innerHTML = '';
+            testResults = [];
+            recentPricesElement.innerHTML = '';
+            recentPrices = [];
+            metrics = { priceUpdates: 0, subscriptions: 0, errors: 0, testStartTime: null };
+            updateMetrics();
+            log('Results cleared', 'info');
+        }
+
+        function exportLog() {
+            const logText = logElement.innerText;
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `phase4-e2e-validation-${new Date().toISOString()}.log`;
+            a.click();
+            URL.revokeObjectURL(url);
+            log('Log exported', 'success');
+        }
+
+        // Auto-initialize
+        window.addEventListener('load', () => {
+            log('═══════════════════════════════════════════════════════', 'info');
+            log('Phase 4: End-to-End WebSocket Validation Test Ready', 'success');
+            log('═══════════════════════════════════════════════════════', 'info');
+            log('This test validates the object[] array handling fix', 'info');
+            log('', 'info');
+            log('Expected Results:', 'info');
+            log('✅ Arrays (object[]) should be properly parsed', 'info');
+            log('✅ Single strings should work', 'info');
+            log('✅ Empty arrays should return NoSymbols error', 'info');
+            log('✅ Null values should return NoSymbols error', 'info');
+            log('✅ Price updates should flow continuously', 'info');
+            log('', 'info');
+            log('Click "Connect" to begin testing...', 'info');
+        });
+
+        // Update duration every second
+        setInterval(updateMetrics, 1000);
+    </script>
+</body>
+</html>

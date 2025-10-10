@@ -1,0 +1,582 @@
+# MyTrader API Contract Validation Rules & Testing Strategies
+# Version: 1.1.0
+# Effective Date: 2024-09-24
+
+contract_governance:
+  authority: "API Contract Governor"
+  enforcement_level: "mandatory"
+  violation_action: "block_merge"
+  review_cycle: "weekly"
+
+# ====================================================================
+# BREAKING CHANGE DETECTION RULES
+# ====================================================================
+breaking_change_detection:
+  api_endpoints:
+    forbidden_changes:
+      - rule: "remove_endpoint"
+        description: "Removing any existing API endpoint"
+        severity: "critical"
+        action: "block_merge"
+        example: "DELETE /api/v1/symbols/{id} endpoint removed"
+
+      - rule: "change_http_method"
+        description: "Changing HTTP method for existing endpoint"
+        severity: "critical"
+        action: "block_merge"
+        example: "GET /api/v1/symbols changed to POST"
+
+      - rule: "remove_required_parameter"
+        description: "Removing required path or query parameters"
+        severity: "critical"
+        action: "block_merge"
+        example: "symbolId parameter removed from /api/v1/market-data/realtime/{symbolId}"
+
+      - rule: "change_parameter_type"
+        description: "Changing data type of existing parameters"
+        severity: "critical"
+        action: "block_merge"
+        example: "symbolId changed from UUID to string"
+
+      - rule: "remove_response_field"
+        description: "Removing fields from response schemas"
+        severity: "major"
+        action: "require_version_bump"
+        example: "price field removed from UnifiedMarketData"
+
+      - rule: "change_response_type"
+        description: "Changing response data types"
+        severity: "major"
+        action: "require_version_bump"
+        example: "price changed from decimal to integer"
+
+      - rule: "add_required_field"
+        description: "Adding required fields to request schemas"
+        severity: "major"
+        action: "require_version_bump"
+        example: "mandatory apiKey field added to request"
+
+      - rule: "change_enum_values"
+        description: "Removing or changing enum values"
+        severity: "major"
+        action: "require_version_bump"
+        example: "FOREX removed from assetClass enum"
+
+  websocket_events:
+    forbidden_changes:
+      - rule: "remove_event"
+        description: "Removing WebSocket event without deprecation period"
+        severity: "critical"
+        action: "block_merge"
+        example: "PriceUpdate event completely removed"
+
+      - rule: "change_event_name"
+        description: "Changing event names without backward compatibility"
+        severity: "critical"
+        action: "block_merge"
+        example: "PriceUpdate renamed to MarketUpdate without dual emission"
+
+      - rule: "change_payload_structure"
+        description: "Breaking changes to event payload structure"
+        severity: "major"
+        action: "require_dual_emission"
+        example: "symbolId changed from UUID to string in PriceUpdate"
+
+      - rule: "remove_payload_field"
+        description: "Removing fields from event payloads"
+        severity: "major"
+        action: "require_dual_emission"
+        example: "timestamp field removed from PriceUpdate"
+
+  allowed_changes:
+    non_breaking:
+      - "Adding new optional parameters"
+      - "Adding new response fields"
+      - "Adding new API endpoints"
+      - "Adding new WebSocket events"
+      - "Adding new enum values"
+      - "Improving error messages"
+      - "Adding optional headers"
+
+# ====================================================================
+# SCHEMA VALIDATION RULES
+# ====================================================================
+schema_validation:
+  openapi_compliance:
+    version: "3.1.0"
+    required_sections:
+      - "info"
+      - "servers"
+      - "paths"
+      - "components"
+      - "security"
+
+    info_requirements:
+      - field: "title"
+        required: true
+        pattern: "^MyTrader.*API$"
+      - field: "version"
+        required: true
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+      - field: "description"
+        required: true
+        min_length: 100
+
+    endpoint_requirements:
+      - rule: "versioned_paths"
+        pattern: "^/api/v\\d+/"
+        description: "All endpoints must follow versioning pattern"
+        exceptions: ["/health", "/info"]
+
+      - rule: "consistent_responses"
+        description: "All endpoints must use standardized response schemas"
+        required_responses: ["400", "401", "500"]
+
+      - rule: "proper_http_methods"
+        description: "Use appropriate HTTP methods"
+        validations:
+          - "GET for read operations"
+          - "POST for create operations"
+          - "PUT for full updates"
+          - "PATCH for partial updates"
+          - "DELETE for remove operations"
+
+  request_validation:
+    parameter_rules:
+      - rule: "uuid_format"
+        description: "All ID parameters must be valid UUIDs"
+        pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        applies_to: ["symbolId", "userId", "subscriptionId"]
+
+      - rule: "pagination_limits"
+        description: "Pagination parameters must have reasonable limits"
+        validations:
+          - name: "limit"
+            type: "integer"
+            minimum: 1
+            maximum: 500
+            default: 50
+          - name: "offset"
+            type: "integer"
+            minimum: 0
+
+      - rule: "enum_validation"
+        description: "Enum values must be predefined and uppercase"
+        enums:
+          assetClass: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+          marketStatus: ["OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS", "HOLIDAY"]
+          interval: ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+
+  response_validation:
+    structure_rules:
+      - rule: "consistent_wrapper"
+        description: "All responses must use BaseResponse wrapper"
+        required_fields: ["success", "timestamp"]
+        optional_fields: ["message", "data", "requestId"]
+
+      - rule: "error_standardization"
+        description: "All error responses must follow standard format"
+        error_schema:
+          type: "object"
+          required: ["success", "error", "timestamp"]
+          properties:
+            success:
+              type: "boolean"
+              enum: [false]
+            error:
+              type: "object"
+              required: ["code", "message"]
+
+      - rule: "timestamp_format"
+        description: "All timestamps must be ISO 8601 format"
+        pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$"
+        example: "2024-09-24T10:30:15.123Z"
+
+# ====================================================================
+# WEBSOCKET VALIDATION RULES
+# ====================================================================
+websocket_validation:
+  event_naming:
+    pattern: "^[A-Z][a-zA-Z]+$"
+    description: "PascalCase with no prefixes or suffixes"
+    forbidden_patterns:
+      - "^Receive.*"
+      - ".*Update$" # Prefer specific event names
+      - ".*Event$"
+
+    required_events:
+      - "ConnectionStatus"
+      - "PriceUpdate"
+      - "BatchPriceUpdate"
+      - "MarketStatusUpdate"
+      - "SubscriptionConfirmed"
+      - "SubscriptionError"
+      - "Heartbeat"
+
+  payload_validation:
+    required_fields:
+      - field: "timestamp"
+        type: "string"
+        format: "date-time"
+        description: "Must be present in all event payloads"
+
+    payload_size_limits:
+      single_event: "64KB"
+      batch_event: "1MB"
+      connection_limit: "10MB/minute"
+
+  client_method_validation:
+    naming_pattern: "^[A-Z][a-zA-Z]+$"
+    parameter_validation:
+      - method: "SubscribeToPriceUpdates"
+        required: ["assetClass", "symbols"]
+        types:
+          assetClass: "string"
+          symbols: "array[string]"
+        constraints:
+          symbols_max_length: 100
+
+      - method: "SubscribeToAssetClass"
+        required: ["assetClass"]
+        types:
+          assetClass: "string"
+
+# ====================================================================
+# PERFORMANCE VALIDATION RULES
+# ====================================================================
+performance_validation:
+  response_time_targets:
+    - endpoint: "/api/v1/health"
+      target: "10ms"
+      percentile: "95th"
+
+    - endpoint: "/api/v1/market-data/realtime/{symbolId}"
+      target: "50ms"
+      percentile: "95th"
+
+    - endpoint: "/api/v1/market-data/top-by-volume"
+      target: "100ms"
+      percentile: "95th"
+      critical: true  # RICE requirement
+
+    - endpoint: "/api/v1/market-data/batch"
+      target: "200ms"
+      percentile: "95th"
+
+  websocket_performance:
+    connection_establishment: "500ms max"
+    message_latency: "100ms max"
+    throughput: "1000 messages/second minimum"
+
+  resource_limits:
+    concurrent_connections: 10000
+    memory_usage: "1GB per 1000 connections"
+    cpu_usage: "80% max under load"
+
+# ====================================================================
+# SECURITY VALIDATION RULES
+# ====================================================================
+security_validation:
+  authentication:
+    public_endpoints:
+      - "/api/v1/health"
+      - "/api/v1/info"
+      - "/api/v1/auth/login"
+      - "/api/v1/auth/register"
+      - "/api/v1/market-data/**"
+      - "/api/v1/symbols/by-asset-class/**"
+
+    protected_endpoints:
+      - "/api/v1/auth/me"
+      - "/api/v1/symbols" # POST operations
+      - "/api/v1/market-data/subscribe"
+
+  jwt_validation:
+    algorithm: "HS256"
+    required_claims: ["sub", "exp", "iat"]
+    max_expiry: "24 hours"
+
+  rate_limiting:
+    public_endpoints: "1000 requests/hour per IP"
+    authenticated_endpoints: "5000 requests/hour per user"
+    websocket_subscriptions: "100 per connection"
+
+# ====================================================================
+# AUTOMATED TESTING STRATEGIES
+# ====================================================================
+testing_strategies:
+  contract_tests:
+    tools: ["Pact", "OpenAPI Generator", "Postman"]
+
+    api_contract_tests:
+      - name: "schema_validation"
+        description: "Validate all requests/responses against OpenAPI schema"
+        frequency: "on_every_commit"
+
+      - name: "breaking_change_detection"
+        description: "Detect breaking changes between API versions"
+        frequency: "on_pull_request"
+
+      - name: "backward_compatibility"
+        description: "Ensure legacy endpoints still function"
+        frequency: "daily"
+
+    websocket_contract_tests:
+      - name: "event_schema_validation"
+        description: "Validate WebSocket event payloads"
+        frequency: "on_every_commit"
+
+      - name: "connection_lifecycle"
+        description: "Test connection, subscription, and disconnection flow"
+        frequency: "on_pull_request"
+
+  integration_tests:
+    end_to_end_scenarios:
+      - name: "full_market_data_flow"
+        description: "API call → WebSocket subscription → Event reception"
+        duration: "5 minutes max"
+
+      - name: "multi_asset_class_subscription"
+        description: "Subscribe to CRYPTO, BIST, and NASDAQ simultaneously"
+
+      - name: "error_scenario_handling"
+        description: "Invalid parameters, network failures, auth errors"
+
+    client_compatibility_tests:
+      - name: "web_frontend_integration"
+        client: "React TypeScript"
+        test_endpoints: ["market-data", "symbols", "auth"]
+
+      - name: "mobile_app_integration"
+        client: "React Native"
+        test_websockets: true
+        test_offline_scenarios: true
+
+  performance_tests:
+    load_testing:
+      - scenario: "api_endpoint_load"
+        target_rps: 1000
+        duration: "10 minutes"
+        success_criteria: "95% requests < 200ms"
+
+      - scenario: "websocket_connection_load"
+        concurrent_connections: 5000
+        messages_per_second: 10000
+        success_criteria: "< 100ms message latency"
+
+    stress_testing:
+      - scenario: "peak_trading_simulation"
+        description: "Simulate market opening with high volume"
+        multiplier: "3x normal load"
+        duration: "30 minutes"
+
+  security_tests:
+    authentication_tests:
+      - "JWT token validation"
+      - "Expired token handling"
+      - "Invalid signature detection"
+      - "Rate limiting enforcement"
+
+    websocket_security_tests:
+      - "Unauthorized subscription attempts"
+      - "Message injection attacks"
+      - "Connection flooding protection"
+
+# ====================================================================
+# CONTINUOUS VALIDATION PIPELINE
+# ====================================================================
+validation_pipeline:
+  pre_commit_hooks:
+    - name: "openapi_lint"
+      command: "spectral lint openapi.yaml"
+
+    - name: "schema_validation"
+      command: "swagger-codegen validate -i openapi.yaml"
+
+    - name: "breaking_change_check"
+      command: "oasdiff diff old-spec.yaml new-spec.yaml --breaking-only"
+
+  pull_request_checks:
+    - name: "contract_compatibility"
+      description: "Validate backward compatibility"
+      required: true
+
+    - name: "integration_tests"
+      description: "Run end-to-end tests"
+      required: true
+
+    - name: "performance_regression"
+      description: "Check for performance degradation"
+      required: false
+      warning_threshold: "20% slower"
+
+  deployment_validation:
+    staging_tests:
+      - "Full contract test suite"
+      - "Client integration validation"
+      - "Performance benchmark comparison"
+
+    production_checks:
+      - "Health endpoint validation"
+      - "WebSocket connectivity test"
+      - "Sample API response validation"
+
+# ====================================================================
+# MONITORING AND ALERTING
+# ====================================================================
+contract_monitoring:
+  api_metrics:
+    - metric: "api_response_time_p95"
+      threshold: "200ms"
+      alert: "warning"
+
+    - metric: "api_error_rate"
+      threshold: "1%"
+      alert: "critical"
+
+    - metric: "api_availability"
+      threshold: "99.9%"
+      alert: "critical"
+
+  websocket_metrics:
+    - metric: "websocket_connection_success_rate"
+      threshold: "99%"
+      alert: "warning"
+
+    - metric: "websocket_message_latency_p95"
+      threshold: "100ms"
+      alert: "warning"
+
+    - metric: "websocket_reconnection_rate"
+      threshold: "5%"
+      alert: "warning"
+
+  contract_compliance_metrics:
+    - metric: "deprecated_endpoint_usage"
+      threshold: "10%"
+      alert: "info"
+      description: "Track usage of deprecated endpoints"
+
+    - metric: "legacy_event_usage"
+      threshold: "5%"
+      alert: "info"
+      description: "Track usage of legacy WebSocket events"
+
+# ====================================================================
+# QUALITY GATES
+# ====================================================================
+quality_gates:
+  development:
+    required_passing_tests:
+      - "Unit tests: 90% coverage"
+      - "Integration tests: 100% passing"
+      - "Contract tests: 100% passing"
+
+  staging:
+    required_validations:
+      - "Performance tests within targets"
+      - "Security scans clean"
+      - "Load tests successful"
+
+  production:
+    deployment_criteria:
+      - "All quality gates passed"
+      - "Backward compatibility verified"
+      - "Rollback plan prepared"
+      - "Monitoring dashboards updated"
+
+# ====================================================================
+# ERROR HANDLING VALIDATION
+# ====================================================================
+error_handling_validation:
+  http_status_codes:
+    standard_mapping:
+      200: "Successful operation"
+      201: "Resource created"
+      204: "No content (successful deletion)"
+      400: "Bad request (validation error)"
+      401: "Unauthorized (authentication required)"
+      403: "Forbidden (insufficient permissions)"
+      404: "Not found"
+      409: "Conflict (resource already exists)"
+      429: "Rate limit exceeded"
+      500: "Internal server error"
+      502: "Bad gateway (upstream error)"
+      503: "Service unavailable"
+
+  error_response_validation:
+    required_structure:
+      - field: "success"
+        type: "boolean"
+        value: false
+
+      - field: "error"
+        type: "object"
+        required_fields: ["code", "message"]
+
+      - field: "timestamp"
+        type: "string"
+        format: "date-time"
+
+    error_code_standards:
+      format: "UPPER_SNAKE_CASE"
+      examples:
+        - "SYMBOL_NOT_FOUND"
+        - "INVALID_ASSET_CLASS"
+        - "RATE_LIMIT_EXCEEDED"
+        - "AUTHENTICATION_REQUIRED"
+
+# ====================================================================
+# DOCUMENTATION VALIDATION
+# ====================================================================
+documentation_validation:
+  completeness_requirements:
+    - "All endpoints documented with examples"
+    - "All WebSocket events documented with payloads"
+    - "Migration guides for breaking changes"
+    - "Error code reference documentation"
+    - "Rate limiting documentation"
+
+  accuracy_validation:
+    - "Code examples compile and execute"
+    - "API examples match actual responses"
+    - "WebSocket examples work with real connections"
+    - "Migration scripts tested in staging"
+
+# ====================================================================
+# VERSIONING VALIDATION
+# ====================================================================
+versioning_validation:
+  semantic_versioning:
+    pattern: "MAJOR.MINOR.PATCH"
+    rules:
+      major_increment: "Breaking changes"
+      minor_increment: "New features (backward compatible)"
+      patch_increment: "Bug fixes (backward compatible)"
+
+  version_compatibility_matrix:
+    supported_versions: ["1.0.x", "1.1.x"]
+    deprecation_policy: "3 minor versions"
+    end_of_life_policy: "12 months after deprecation"
+
+# ====================================================================
+# IMPLEMENTATION CHECKLIST
+# ====================================================================
+implementation_checklist:
+  phase_1_validation:
+    - [ ] Port 5002 connectivity validated across environments
+    - [ ] WebSocket dual emission implemented for backward compatibility
+    - [ ] Event name mapping validated with frontend teams
+    - [ ] Legacy client compatibility confirmed
+
+  phase_2_validation:
+    - [ ] API versioning consistency across all endpoints
+    - [ ] Volume leaders endpoint performance meets <100ms target
+    - [ ] Frontend clients migrated to new event names
+    - [ ] Deprecation warnings implemented for legacy endpoints
+
+  phase_3_validation:
+    - [ ] Legacy endpoint removal completed
+    - [ ] Client migration completion verified
+    - [ ] Performance improvements measured and documented
+    - [ ] Contract compliance monitoring active

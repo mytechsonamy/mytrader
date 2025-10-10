@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Backend PreviousClose Field</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <h1>Backend PreviousClose Field Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="results"></div>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5002/hubs/dashboard")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        const results = document.getElementById('results');
+        const status = document.getElementById('status');
+
+        connection.on("ReceivePriceUpdate", (data) => {
+            console.log('[ReceivePriceUpdate] RAW DATA:', data);
+
+            const timestamp = new Date().toLocaleTimeString();
+            const hasPreviousClose = data.previousClose !== undefined && data.previousClose !== null;
+
+            const resultHtml = `
+                <div style="border: 1px solid ${hasPreviousClose ? 'green' : 'red'}; padding: 10px; margin: 5px;">
+                    <strong>${timestamp} - ${data.symbol || data.Symbol}</strong><br/>
+                    <strong>AssetClass:</strong> ${data.assetClass || data.AssetClass}<br/>
+                    <strong>Price:</strong> ${data.price || data.Price}<br/>
+                    <strong>PreviousClose:</strong> <span style="color: ${hasPreviousClose ? 'green' : 'red'}; font-weight: bold;">
+                        ${hasPreviousClose ? data.previousClose : 'MISSING ❌'}
+                    </span><br/>
+                    <strong>Change:</strong> ${data.change || data.Change24h}<br/>
+                    <strong>All Fields:</strong> ${Object.keys(data).join(', ')}
+                </div>
+            `;
+
+            results.innerHTML = resultHtml + results.innerHTML;
+        });
+
+        connection.on("PriceUpdate", (data) => {
+            console.log('[PriceUpdate] RAW DATA:', data);
+
+            const timestamp = new Date().toLocaleTimeString();
+            const hasPreviousClose = data.previousClose !== undefined && data.previousClose !== null;
+
+            const resultHtml = `
+                <div style="border: 1px solid ${hasPreviousClose ? 'green' : 'red'}; padding: 10px; margin: 5px;">
+                    <strong>${timestamp} - ${data.symbol || data.Symbol}</strong><br/>
+                    <strong>AssetClass:</strong> ${data.assetClass || data.AssetClass}<br/>
+                    <strong>Price:</strong> ${data.price || data.Price}<br/>
+                    <strong>PreviousClose:</strong> <span style="color: ${hasPreviousClose ? 'green' : 'red'}; font-weight: bold;">
+                        ${hasPreviousClose ? data.previousClose : 'MISSING ❌'}
+                    </span><br/>
+                    <strong>Change:</strong> ${data.change || data.Change24h}<br/>
+                    <strong>All Fields:</strong> ${Object.keys(data).join(', ')}
+                </div>
+            `;
+
+            results.innerHTML = resultHtml + results.innerHTML;
+        });
+
+        async function start() {
+            try {
+                await connection.start();
+                status.textContent = '✅ Connected to backend';
+                console.log('SignalR connected');
+
+                // Subscribe to STOCK price updates
+                await connection.invoke('SubscribeToPriceUpdates', 'STOCK', ['AAPL', 'JPM', 'MSFT']);
+                console.log('Subscribed to STOCK symbols');
+                status.textContent += ' - Subscribed to STOCK symbols (AAPL, JPM, MSFT)';
+            } catch (err) {
+                console.error('Connection error:', err);
+                status.textContent = `❌ Connection error: ${err.message}`;
+            }
+        }
+
+        start();
+    </script>
+</body>
+</html>

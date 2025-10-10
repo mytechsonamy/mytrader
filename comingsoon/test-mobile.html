@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Responsive Test - MyTrader Coming Soon</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+            background: #f0f0f0;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-item {
+            margin: 15px 0;
+            padding: 15px;
+            border-left: 4px solid #8b5cf6;
+            background: #f8f9fa;
+        }
+        .status {
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .success { color: #10b981; }
+        .warning { color: #f59e0b; }
+        .error { color: #ef4444; }
+        .device-info {
+            background: #e5e7eb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 MyTrader Coming Soon - Mobile Responsive Test</h1>
+
+        <div class="device-info">
+            <h3>Device Information:</h3>
+            <p>Screen Width: <span id="screenWidth"></span>px</p>
+            <p>Screen Height: <span id="screenHeight"></span>px</p>
+            <p>Viewport Width: <span id="viewportWidth"></span>px</p>
+            <p>User Agent: <span id="userAgent"></span></p>
+        </div>
+
+        <h2>✅ Completed Fixes:</h2>
+
+        <div class="test-item">
+            <strong>1. Removed Buttons:</strong>
+            <span class="status success">✓ COMPLETED</span>
+            <ul>
+                <li>Removed "Giriş Yap" (Login) button</li>
+                <li>Removed "Başlayın" (Get Started) button</li>
+                <li>Kept only "İletişim" (Contact) button</li>
+            </ul>
+        </div>
+
+        <div class="test-item">
+            <strong>2. Mobile App Redirect:</strong>
+            <span class="status success">✓ NO REDIRECT FOUND</span>
+            <ul>
+                <li>No mobile app banner detected</li>
+                <li>No automatic redirects to app stores</li>
+            </ul>
+        </div>
+
+        <div class="test-item">
+            <strong>3. Mobile Responsive Fixes:</strong>
+            <span class="status success">✓ IMPLEMENTED</span>
+            <ul>
+                <li>Added responsive breakpoints for 480px, 768px, 968px</li>
+                <li>Fixed hero section overflow</li>
+                <li>Adjusted font sizes for mobile</li>
+                <li>Fixed padding and margins</li>
+                <li>Removed 3D transforms on mobile for better performance</li>
+            </ul>
+        </div>
+
+        <div class="test-item">
+            <strong>4. Twitter/X Link:</strong>
+            <span class="status success">✓ ADDED</span>
+            <ul>
+                <li>Added @myTraderTech handle</li>
+                <li>Link opens in new tab</li>
+                <li>Added to both footer and contact section</li>
+            </ul>
+        </div>
+
+        <div class="test-item">
+            <strong>5. Contact Section:</strong>
+            <span class="status success">✓ CREATED</span>
+            <ul>
+                <li>Added dedicated contact section with ID "contact"</li>
+                <li>Includes email: info@mytrader.com.tr</li>
+                <li>Includes location: İstanbul, Türkiye</li>
+                <li>Includes Twitter handle</li>
+            </ul>
+        </div>
+
+        <div class="test-item">
+            <strong>6. Footer Links:</strong>
+            <span class="status success">✓ HANDLED</span>
+            <ul>
+                <li>Non-functional links now show "under construction" message</li>
+                <li>Links have reduced opacity and "not-allowed" cursor</li>
+                <li>Active links (Features, Mobile, Contact) work correctly</li>
+            </ul>
+        </div>
+
+        <h2>📱 Live Preview:</h2>
+        <p>Below is the actual coming soon page in an iframe. Test scrolling and interaction:</p>
+        <iframe src="index.html" title="Coming Soon Page Preview"></iframe>
+    </div>
+
+    <script>
+        // Display device information
+        document.getElementById('screenWidth').textContent = screen.width;
+        document.getElementById('screenHeight').textContent = screen.height;
+        document.getElementById('viewportWidth').textContent = window.innerWidth;
+        document.getElementById('userAgent').textContent = navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop';
+
+        // Update viewport width on resize
+        window.addEventListener('resize', () => {
+            document.getElementById('viewportWidth').textContent = window.innerWidth;
+        });
+    </script>
+</body>
+</html>

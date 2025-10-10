@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SignalR Stock Data Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .crypto-msg { color: #4caf50; }
+        .stock-msg { color: #ff9800; }
+        .error-msg { color: #f44336; }
+        .info-msg { color: #2196f3; }
+        #messages {
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .message {
+            padding: 5px;
+            margin: 2px 0;
+            border-left: 3px solid;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover { background: #1976d2; }
+    </style>
+</head>
+<body>
+    <h1>🔍 SignalR Stock Data Test</h1>
+
+    <div class="section">
+        <h2>Connection Status</h2>
+        <div id="status">Disconnected</div>
+    </div>
+
+    <div class="section">
+        <h2>Controls</h2>
+        <button onclick="connectHub()">Connect to Dashboard Hub</button>
+        <button onclick="subscribeToStocks()">Subscribe to Stocks</button>
+        <button onclick="subscribeToCrypto()">Subscribe to Crypto</button>
+        <button onclick="subscribeToAll()">Subscribe to All</button>
+        <button onclick="clearMessages()">Clear</button>
+    </div>
+
+    <div class="section">
+        <h2>Messages</h2>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let connection = null;
+
+        function log(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}-msg`;
+            msgDiv.style.borderLeftColor = getColorForType(type);
+            msgDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            messagesDiv.insertBefore(msgDiv, messagesDiv.firstChild);
+        }
+
+        function getColorForType(type) {
+            switch(type) {
+                case 'crypto': return '#4caf50';
+                case 'stock': return '#ff9800';
+                case 'error': return '#f44336';
+                default: return '#2196f3';
+            }
+        }
+
+        async function connectHub() {
+            try {
+                log('Connecting to SignalR Dashboard Hub...');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/dashboard")
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Set up event handlers
+                connection.on("ReceiveMarketData", (data) => {
+                    const assetClass = data.assetClass || (data.symbol?.includes('USD') ? 'CRYPTO' : 'STOCK');
+                    const type = assetClass === 'CRYPTO' ? 'crypto' : 'stock';
+                    log(`[${assetClass}] ${data.symbol}: $${data.price} (${data.changePercent}%)`, type);
+                });
+
+                connection.on("ReceiveBatchUpdate", (updates) => {
+                    log(`Batch update received: ${updates.length} items`);
+                    updates.forEach(data => {
+                        const assetClass = data.assetClass || (data.symbol?.includes('USD') ? 'CRYPTO' : 'STOCK');
+                        const type = assetClass === 'CRYPTO' ? 'crypto' : 'stock';
+                        log(`[BATCH][${assetClass}] ${data.symbol}: $${data.price}`, type);
+                    });
+                });
+
+                connection.on("MarketStatusUpdate", (status) => {
+                    log(`Market Status: ${JSON.stringify(status)}`, 'info');
+                });
+
+                connection.onreconnecting(() => {
+                    log('Reconnecting...', 'error');
+                    document.getElementById('status').textContent = 'Reconnecting...';
+                });
+
+                connection.onreconnected(() => {
+                    log('Reconnected!', 'info');
+                    document.getElementById('status').textContent = 'Connected';
+                });
+
+                connection.onclose(() => {
+                    log('Disconnected', 'error');
+                    document.getElementById('status').textContent = 'Disconnected';
+                });
+
+                await connection.start();
+                log('Connected successfully!', 'info');
+                document.getElementById('status').textContent = 'Connected';
+
+                // Request initial data
+                await connection.invoke("RequestInitialData");
+                log('Requested initial data', 'info');
+
+            } catch (err) {
+                log('Connection failed: ' + err, 'error');
+            }
+        }
+
+        async function subscribeToStocks() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                const stocks = ['AAPL', 'MSFT', 'GOOGL', 'THYAO', 'GARAN'];
+                await connection.invoke("SubscribeToSymbols", stocks);
+                log(`Subscribed to stocks: ${stocks.join(', ')}`, 'stock');
+            } catch (err) {
+                log('Failed to subscribe to stocks: ' + err, 'error');
+            }
+        }
+
+        async function subscribeToCrypto() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                const crypto = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT'];
+                await connection.invoke("SubscribeToSymbols", crypto);
+                log(`Subscribed to crypto: ${crypto.join(', ')}`, 'crypto');
+            } catch (err) {
+                log('Failed to subscribe to crypto: ' + err, 'error');
+            }
+        }
+
+        async function subscribeToAll() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected!', 'error');
+                return;
+            }
+
+            try {
+                await connection.invoke("SubscribeToAssetClass", "STOCK");
+                await connection.invoke("SubscribeToAssetClass", "CRYPTO");
+                log('Subscribed to all asset classes', 'info');
+            } catch (err) {
+                log('Failed to subscribe to all: ' + err, 'error');
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-connect on load
+        window.onload = () => {
+            log('Page loaded. Ready to connect.');
+        };
+    </script>
+</body>
+</html>

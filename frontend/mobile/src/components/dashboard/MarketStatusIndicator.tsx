@@ -1,31 +1,38 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { MarketStatusDto, AssetClassType } from '../../types';
+import { formatRelativeTime, formatNextOpenTime, formatSimpleTime } from '../../utils/timeFormatting';
 
 interface MarketStatusIndicatorProps {
   marketStatus: MarketStatusDto;
   compact?: boolean;
   showTime?: boolean;
+  lastUpdateTime?: string;
 }
 
 interface MarketStatusBadgeProps {
   assetClass: AssetClassType;
-  status: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+  status: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
   nextChangeTime?: string;
+  lastUpdateTime?: string;
   compact?: boolean;
+  size?: 'small' | 'medium';
 }
 
 export const MarketStatusIndicator: React.FC<MarketStatusIndicatorProps> = ({
   marketStatus,
   compact = false,
   showTime = true,
+  lastUpdateTime,
 }) => {
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'OPEN': return '#10b981';
       case 'PRE_MARKET':
-      case 'AFTER_MARKET': return '#f59e0b';
+      case 'AFTER_MARKET':
+      case 'POST_MARKET': return '#f59e0b';
       case 'CLOSED': return '#ef4444';
+      case 'HOLIDAY': return '#9ca3af';
       default: return '#6b7280';
     }
   };
@@ -34,30 +41,19 @@ export const MarketStatusIndicator: React.FC<MarketStatusIndicatorProps> = ({
     switch (status) {
       case 'OPEN': return 'Açık';
       case 'PRE_MARKET': return 'Açılış Öncesi';
-      case 'AFTER_MARKET': return 'Kapanış Sonrası';
+      case 'AFTER_MARKET':
+      case 'POST_MARKET': return 'Kapanış Sonrası';
       case 'CLOSED': return 'Kapalı';
+      case 'HOLIDAY': return 'Tatil';
       default: return 'Bilinmiyor';
-    }
-  };
-
-  const formatTime = (timeString: string): string => {
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString('tr-TR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: marketStatus.timeZone,
-      });
-    } catch {
-      return '';
     }
   };
 
   const getNextEventText = (): string => {
     if (marketStatus.status === 'OPEN' && marketStatus.nextClose) {
-      return `Kapanış: ${formatTime(marketStatus.nextClose)}`;
-    } else if (marketStatus.status === 'CLOSED' && marketStatus.nextOpen) {
-      return `Açılış: ${formatTime(marketStatus.nextOpen)}`;
+      return `Kapanış: ${formatSimpleTime(marketStatus.nextClose)}`;
+    } else if ((marketStatus.status === 'CLOSED' || marketStatus.status === 'HOLIDAY') && marketStatus.nextOpen) {
+      return `Açılış: ${formatNextOpenTime(marketStatus.nextOpen)}`;
     }
     return '';
   };
@@ -70,7 +66,8 @@ export const MarketStatusIndicator: React.FC<MarketStatusIndicatorProps> = ({
           { backgroundColor: getStatusColor(marketStatus.status) }
         ]} />
         <Text style={styles.compactText}>
-          {marketStatus.marketName}: {getStatusText(marketStatus.status)}
+          {getStatusText(marketStatus.status)}
+          {lastUpdateTime && ` | ${formatRelativeTime(lastUpdateTime)}`}
         </Text>
       </View>
     );
@@ -95,7 +92,7 @@ export const MarketStatusIndicator: React.FC<MarketStatusIndicatorProps> = ({
 
         {showTime && (
           <Text style={styles.currentTime}>
-            {formatTime(marketStatus.currentTime)}
+            {formatSimpleTime(marketStatus.currentTime)}
           </Text>
         )}
       </View>
@@ -111,7 +108,9 @@ export const MarketStatusBadge: React.FC<MarketStatusBadgeProps> = ({
   assetClass,
   status,
   nextChangeTime,
+  lastUpdateTime,
   compact = false,
+  size = 'medium',
 }) => {
   const getAssetClassIcon = (assetClass: AssetClassType): string => {
     switch (assetClass) {
@@ -139,18 +138,27 @@ export const MarketStatusBadge: React.FC<MarketStatusBadgeProps> = ({
     switch (status) {
       case 'OPEN': return '#10b981';
       case 'PRE_MARKET':
-      case 'AFTER_MARKET': return '#f59e0b';
+      case 'AFTER_MARKET':
+      case 'POST_MARKET': return '#f59e0b';
       case 'CLOSED': return '#ef4444';
+      case 'HOLIDAY': return '#9ca3af';
       default: return '#6b7280';
     }
   };
 
   const getStatusText = (status: string): string => {
+    if (size === 'small') {
+      // Ultra compact for small badges (just status)
+      return '';
+    }
+
     switch (status) {
       case 'OPEN': return compact ? 'Açık' : 'Açık';
       case 'PRE_MARKET': return compact ? 'Ön' : 'Açılış Öncesi';
-      case 'AFTER_MARKET': return compact ? 'Son' : 'Kapanış Sonrası';
+      case 'AFTER_MARKET':
+      case 'POST_MARKET': return compact ? 'Son' : 'Kapanış Sonrası';
       case 'CLOSED': return compact ? 'Kapalı' : 'Kapalı';
+      case 'HOLIDAY': return compact ? 'Tatil' : 'Tatil';
       default: return '?';
     }
   };
@@ -158,11 +166,15 @@ export const MarketStatusBadge: React.FC<MarketStatusBadgeProps> = ({
   if (compact) {
     return (
       <View style={styles.badgeCompact}>
-        <Text style={styles.badgeIcon}>{getAssetClassIcon(assetClass)}</Text>
         <View style={[
           styles.badgeStatusDot,
           { backgroundColor: getStatusColor(status) }
         ]} />
+        {size !== 'small' && lastUpdateTime && (
+          <Text style={styles.badgeCompactTime}>
+            {formatRelativeTime(lastUpdateTime)}
+          </Text>
+        )}
       </View>
     );
   }
@@ -346,6 +358,12 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     marginLeft: 4,
+  },
+  badgeCompactTime: {
+    fontSize: 9,
+    color: '#6b7280',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   horizontalContainer: {
     flexDirection: 'row',

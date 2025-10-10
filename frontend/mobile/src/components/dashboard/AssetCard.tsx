@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { UnifiedMarketDataDto, EnhancedSymbolDto, AssetClassType, SignalType } from '../../types';
+import DataSourceIndicator from './DataSourceIndicator';
+import { formatLastUpdateWithStatus, formatRelativeTime } from '../../utils/timeFormatting';
 
 interface AssetCardProps {
   symbol: EnhancedSymbolDto;
@@ -130,8 +132,10 @@ const AssetCard: React.FC<AssetCardProps> = ({
     switch (status) {
       case 'OPEN': return '#10b981';
       case 'PRE_MARKET':
+      case 'POST_MARKET':
       case 'AFTER_MARKET': return '#f59e0b';
       case 'CLOSED': return '#ef4444';
+      case 'HOLIDAY': return '#9ca3af';
       default: return '#6b7280';
     }
   };
@@ -140,8 +144,10 @@ const AssetCard: React.FC<AssetCardProps> = ({
     switch (status) {
       case 'OPEN': return 'AÇIK';
       case 'PRE_MARKET': return 'ÖN';
-      case 'AFTER_MARKET': return 'SON';
+      case 'POST_MARKET':
+      case 'AFTER_MARKET': return 'KAPALI';
       case 'CLOSED': return 'KAPALI';
+      case 'HOLIDAY': return 'TATİL';
       default: return '';
     }
   };
@@ -164,6 +170,19 @@ const AssetCard: React.FC<AssetCardProps> = ({
     onAddToWatchlist?.(symbol);
   };
 
+  // Debug logging for stocks to diagnose previousClose issue
+  if (__DEV__ && symbol.assetClassId === 'STOCK' && marketData) {
+    console.log(`[AssetCard] Rendering ${symbol.symbol}:`, {
+      hasMarketData: !!marketData,
+      price: marketData.price,
+      previousClose: marketData.previousClose,
+      previousCloseType: typeof marketData.previousClose,
+      previousCloseUndefined: marketData.previousClose === undefined,
+      previousCloseNull: marketData.previousClose === null,
+      willShowPreviousClose: marketData.previousClose !== undefined && marketData.previousClose !== null
+    });
+  }
+
   if (compact) {
     return (
       <TouchableOpacity
@@ -185,15 +204,30 @@ const AssetCard: React.FC<AssetCardProps> = ({
           <View style={styles.compactRight}>
             {marketData ? (
               <>
-                <Text style={styles.compactPrice}>
-                  {formatPrice(marketData.price, true)}
-                </Text>
+                <View style={styles.compactPriceRow}>
+                  <Text style={styles.compactPrice}>
+                    {formatPrice(marketData.price, true)}
+                  </Text>
+                  <DataSourceIndicator
+                    source={marketData.source}
+                    isRealtime={marketData.isRealtime}
+                    qualityScore={marketData.qualityScore}
+                    size="small"
+                    showLabel={false}
+                  />
+                </View>
                 <Text style={[
                   styles.compactChange,
                   { color: getChangeColor(marketData.changePercent || 0) }
                 ]}>
                   {`${marketData.changePercent >= 0 ? '+' : ''}${marketData.changePercent.toFixed(2)}%`}
                 </Text>
+                {/* Previous Close in compact view */}
+                {marketData.previousClose !== undefined && marketData.previousClose !== null && (
+                  <Text style={styles.compactPreviousClose}>
+                    Önc: {formatPrice(marketData.previousClose, true)}
+                  </Text>
+                )}
               </>
             ) : (
               <>
@@ -204,16 +238,29 @@ const AssetCard: React.FC<AssetCardProps> = ({
           </View>
         </View>
 
-        {marketData?.marketStatus && (
-          <View style={[
-            styles.compactStatusBadge,
-            { backgroundColor: getMarketStatusColor(marketData.marketStatus) }
-          ]}>
-            <Text style={styles.compactStatusText}>
-              {getMarketStatusText(marketData.marketStatus)}
+        {/* Market Status and Last Update Time Row */}
+        <View style={styles.compactFooter}>
+          {marketData?.marketStatus && (
+            <View style={styles.compactStatusRow}>
+              <View style={[
+                styles.compactStatusDot,
+                { backgroundColor: getMarketStatusColor(marketData.marketStatus) }
+              ]} />
+              <Text style={styles.compactStatusLabel}>
+                {getMarketStatusText(marketData.marketStatus)}
+              </Text>
+            </View>
+          )}
+
+          {marketData?.timestamp && (
+            <Text style={styles.compactLastUpdate}>
+              {marketData.marketStatus === 'CLOSED'
+                ? `Kapalı - ${formatRelativeTime(marketData.timestamp)}`
+                : formatRelativeTime(marketData.timestamp)
+              }
             </Text>
-          </View>
-        )}
+          )}
+        </View>
       </TouchableOpacity>
     );
   }
@@ -261,15 +308,34 @@ const AssetCard: React.FC<AssetCardProps> = ({
       <View style={styles.priceSection}>
         {marketData ? (
           <>
-            <Text style={styles.price}>
-              {formatPrice(marketData.price, true)}
-            </Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>
+                {formatPrice(marketData.price, true)}
+              </Text>
+              <DataSourceIndicator
+                source={marketData.source}
+                isRealtime={marketData.isRealtime}
+                qualityScore={marketData.qualityScore}
+                size="medium"
+                showLabel={true}
+              />
+            </View>
             <Text style={[
               styles.change,
               { color: getChangeColor(marketData.changePercent || 0) }
             ]}>
               {`${marketData.changePercent >= 0 ? '+' : ''}${marketData.changePercent.toFixed(2)}%`}
             </Text>
+
+            {/* Previous Close Information */}
+            {marketData.previousClose !== undefined && marketData.previousClose !== null && (
+              <View style={styles.previousCloseContainer}>
+                <Text style={styles.previousCloseLabel}>Önceki Kapanış:</Text>
+                <Text style={styles.previousCloseValue}>
+                  {formatPrice(marketData.previousClose, true)}
+                </Text>
+              </View>
+            )}
           </>
         ) : (
           <>
@@ -326,12 +392,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
 
       {marketData?.timestamp && (
         <Text style={styles.lastUpdate}>
-          {symbol.assetClassName === 'STOCK' ? '🕐 ' : ''}
-          Son güncelleme: {new Date(marketData.timestamp).toLocaleTimeString('tr-TR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          })}
+          {formatLastUpdateWithStatus(marketData.timestamp, marketData.marketStatus)}
         </Text>
       )}
     </TouchableOpacity>
@@ -360,6 +421,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    gap: 8,
   },
   header: {
     flexDirection: 'row',
@@ -415,15 +477,38 @@ const styles = StyleSheet.create({
   priceSection: {
     marginBottom: 12,
   },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   price: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#2563eb',
-    marginBottom: 4,
+    marginRight: 8,
   },
   change: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  previousCloseContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  previousCloseLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    marginRight: 6,
+  },
+  previousCloseValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
   },
   indicatorsGrid: {
     flexDirection: 'row',
@@ -486,7 +571,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
   },
   compactLeft: {
     flexDirection: 'row',
@@ -509,14 +593,24 @@ const styles = StyleSheet.create({
   compactRight: {
     alignItems: 'flex-end',
   },
+  compactPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   compactPrice: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#2563eb',
+    marginRight: 4,
   },
   compactChange: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  compactPreviousClose: {
+    fontSize: 9,
+    color: '#64748b',
+    marginTop: 2,
   },
   compactStatusBadge: {
     alignSelf: 'flex-start',
@@ -528,6 +622,34 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 8,
     fontWeight: '600',
+  },
+  compactFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  compactStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  compactStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  compactStatusLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  compactLastUpdate: {
+    fontSize: 9,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
   // Skeleton styles
   skeletonHeader: {

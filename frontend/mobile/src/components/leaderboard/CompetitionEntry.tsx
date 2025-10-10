@@ -152,11 +152,11 @@ const CompetitionEntry: React.FC<CompetitionEntryProps> = ({
       <View style={styles.highlightBox}>
         <Text style={styles.highlightIcon}>💰</Text>
         <Text style={styles.highlightTitle}>Bu Haftanın Ödülleri</Text>
-        {stats?.prizes.slice(0, 3).map((prize, index) => (
+        {Array.isArray(stats?.prizes) ? stats.prizes.slice(0, 3).map((prize, index) => (
           <Text key={index} style={styles.prizeText}>
             #{prize.rank}: {prize.amount.toLocaleString('tr-TR')} {prize.currency}
           </Text>
-        ))}
+        )) : null}
       </View>
     </View>
   );
@@ -167,12 +167,12 @@ const CompetitionEntry: React.FC<CompetitionEntryProps> = ({
       <Text style={styles.stepTitle}>Katılım Şartları</Text>
 
       <View style={styles.requirementsList}>
-        {stats?.eligibilityRequirements.map((requirement, index) => (
+        {Array.isArray(stats?.eligibilityRequirements) ? stats.eligibilityRequirements.map((requirement, index) => (
           <View key={index} style={styles.requirementItem}>
             <Text style={styles.requirementIcon}>✅</Text>
             <Text style={styles.requirementText}>{requirement}</Text>
           </View>
-        ))}
+        )) : null}
       </View>
 
       <View style={styles.warningBox}>

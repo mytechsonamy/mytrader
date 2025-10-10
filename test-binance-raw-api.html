@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Binance WebSocket RAW Data Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        h1 { color: #4CAF50; }
+        .message {
+            background: #2d2d2d;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #4CAF50;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .price { color: #00ff00; font-size: 24px; font-weight: bold; }
+        .raw { color: #ffd700; }
+        .analysis { background: #1e3a5f; padding: 15px; margin-top: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Direct Binance WebSocket Test</h1>
+    <p>Testing the ACTUAL data format from Binance API (no backend involved)</p>
+
+    <div id="status">Connecting to Binance...</div>
+    <div id="messages"></div>
+    <div id="analysis" class="analysis"></div>
+
+    <script>
+        const symbols = ['XRPUSDT', 'SUIUSDT', 'BTCUSDT', 'ETHUSDT', 'ENAUSDT'];
+        const streams = symbols.map(s => s.toLowerCase() + '@ticker').join('/');
+        const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+
+        const prices = {};
+
+        ws.onopen = () => {
+            document.getElementById('status').innerHTML = '<span style="color: #00ff00;">✅ Connected to Binance WebSocket</span>';
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.stream && data.data) {
+                const tickerData = data.data;
+                const symbol = tickerData.s;
+                const price = tickerData.c;  // last price
+                const change = tickerData.P; // price change percent
+                const volume = tickerData.v; // volume
+
+                // Store price
+                prices[symbol] = {
+                    raw_price: price,
+                    parsed_price: parseFloat(price),
+                    change: change,
+                    volume: volume,
+                    full_data: tickerData
+                };
+
+                // Display
+                const messagesDiv = document.getElementById('messages');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message';
+                msgDiv.innerHTML = `
+                    <strong>${symbol}</strong><br>
+                    <span class="raw">RAW "c" field: "${price}"</span><br>
+                    <span class="raw">RAW "P" field: "${change}"</span><br>
+                    <span class="raw">RAW "v" field: "${volume}"</span><br>
+                    <span class="price">Parsed as number: ${parseFloat(price)}</span>
+                `;
+
+                messagesDiv.insertBefore(msgDiv, messagesDiv.firstChild);
+
+                // Keep only last 10
+                while (messagesDiv.children.length > 10) {
+                    messagesDiv.removeChild(messagesDiv.lastChild);
+                }
+
+                updateAnalysis();
+            }
+        };
+
+        ws.onerror = (error) => {
+            document.getElementById('status').innerHTML = '<span style="color: #ff0000;">❌ Error</span>';
+            console.error('WebSocket error:', error);
+        };
+
+        function updateAnalysis() {
+            const analysisDiv = document.getElementById('analysis');
+            let html = '<h2>📊 Analysis of Binance Data Format</h2>';
+
+            Object.entries(prices).forEach(([symbol, data]) => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; background: #2d2d2d; border-radius: 5px;">
+                        <h3>${symbol}</h3>
+                        <p><strong>RAW string from Binance:</strong> <span style="color: #ffd700;">"${data.raw_price}"</span></p>
+                        <p><strong>Parsed as number:</strong> <span style="color: #00ff00;">${data.parsed_price}</span></p>
+                        <p><strong>Type:</strong> ${typeof data.raw_price}</p>
+                        <p><strong>Is this a large integer?</strong> ${data.parsed_price > 1000000 ? '❌ YES - Something is wrong!' : '✅ NO - Looks correct'}</p>
+                        <p><strong>Full ticker data (first 3 fields):</strong></p>
+                        <pre style="color: #888; font-size: 10px;">${JSON.stringify({
+                            s: data.full_data.s,
+                            c: data.full_data.c,
+                            P: data.full_data.P,
+                            v: data.full_data.v
+                        }, null, 2)}</pre>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div style="margin-top: 20px; padding: 15px; background: #3a1e1e; border-left: 4px solid #ff5252;">
+                    <h3>🎯 Expected Results:</h3>
+                    <p>• XRP should be around <strong>$2.86</strong> (not 286400000)</p>
+                    <p>• ENA should be around <strong>$0.55</strong> (not 550000)</p>
+                    <p>• BTC should be around <strong>$95,000</strong> (not 9500000000000)</p>
+                    <br>
+                    <p><strong>If Binance sends correct decimal strings:</strong> Backend should NOT multiply them</p>
+                    <p><strong>If Binance sends large integers:</strong> Backend MUST divide them</p>
+                </div>
+            `;
+
+            analysisDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

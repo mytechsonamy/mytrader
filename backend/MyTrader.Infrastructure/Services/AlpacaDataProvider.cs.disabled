@@ -1,0 +1,366 @@
+using Alpaca.Markets;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MyTrader.Core.DTOs;
+using MyTrader.Core.Interfaces;
+using MyTrader.Core.Models;
+
+namespace MyTrader.Infrastructure.Services;
+
+/// <summary>
+/// Alpaca data provider implementation implementing IDataProvider interface
+/// </summary>
+public class AlpacaDataProvider : IAlpacaDataProvider, IDisposable
+{
+    private readonly AlpacaConfiguration _config;
+    private readonly ILogger<AlpacaDataProvider> _logger;
+    private readonly IAlpacaMarketDataService _alpacaService;
+
+    private IAlpacaDataClient? _alpacaClient;
+    private IAlpacaCryptoDataClient? _cryptoClient;
+    private bool _disposed = false;
+
+    public string ProviderId => "ALPACA";
+    public string ProviderName => "Alpaca Markets";
+    public IEnumerable<string> SupportedAssetClasses => new[] { "CRYPTO", "STOCK" };
+    public IEnumerable<string> SupportedMarkets => new[] { "NASDAQ", "NYSE", "CRYPTO" };
+    public bool IsConnected { get; private set; } = false;
+
+    public AlpacaDataProvider(
+        IOptions<AlpacaConfiguration> config,
+        ILogger<AlpacaDataProvider> logger,
+        IAlpacaMarketDataService alpacaService)
+    {
+        _config = config.Value;
+        _logger = logger;
+        _alpacaService = alpacaService;
+    }
+
+    public async Task<bool> InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var apiKey = _config.UsePaperTrading ? _config.PaperApiKey : _config.LiveApiKey;
+            var secretKey = _config.UsePaperTrading ? _config.PaperSecretKey : _config.LiveSecretKey;
+
+            if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(secretKey))
+            {
+                _logger.LogWarning("Alpaca API keys not configured");
+                return false;
+            }
+
+            var environment = _config.UsePaperTrading ? Environments.Paper : Environments.Live;
+            var credentials = new SecretKey(apiKey, secretKey);
+
+            _alpacaClient = environment.GetAlpacaDataClient(credentials);
+            _cryptoClient = environment.GetAlpacaCryptoDataClient(credentials);
+
+            // Test connection
+            IsConnected = await _alpacaService.TestConnectionAsync(cancellationToken);
+
+            _logger.LogInformation("Alpaca data provider initialized. Connected: {IsConnected}", IsConnected);
+            return IsConnected;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize Alpaca data provider");
+            IsConnected = false;
+            return false;
+        }
+    }
+
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _alpacaClient?.Dispose();
+            _cryptoClient?.Dispose();
+            IsConnected = false;
+            _logger.LogInformation("Alpaca data provider disconnected");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disconnecting Alpaca data provider");
+        }
+    }
+
+    public async Task<UnifiedMarketDataDto?> GetMarketDataAsync(string ticker, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var unifiedData = await _alpacaService.GetUnifiedMarketDataAsync(new List<string> { ticker }, cancellationToken: cancellationToken);
+            return unifiedData.FirstOrDefault()?.ToUnifiedMarketDataDto();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting market data for {Ticker}", ticker);
+            return null;
+        }
+    }
+
+    public async Task<List<UnifiedMarketDataDto>> GetBatchMarketDataAsync(IEnumerable<string> tickers, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var unifiedData = await _alpacaService.GetUnifiedMarketDataAsync(tickers.ToList(), cancellationToken: cancellationToken);
+            return unifiedData.Select(d => d.ToUnifiedMarketDataDto()).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting batch market data");
+            return new List<UnifiedMarketDataDto>();
+        }
+    }
+
+    public async Task<HistoricalMarketDataDto?> GetHistoricalDataAsync(
+        string ticker,
+        string interval,
+        DateTime? startTime = null,
+        DateTime? endTime = null,
+        int? limit = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _alpacaService.GetHistoricalDataAsync(ticker, interval, startTime, endTime, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting historical data for {Ticker}", ticker);
+            return null;
+        }
+    }
+
+    public async Task<MarketStatisticsDto?> GetMarketStatisticsAsync(string ticker, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Alpaca doesn't provide comprehensive market statistics
+            // Return basic stats derived from market data
+            var marketData = await GetMarketDataAsync(ticker, cancellationToken);
+            if (marketData == null) return null;
+
+            return new MarketStatisticsDto
+            {
+                Ticker = ticker,
+                LastUpdated = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting market statistics for {Ticker}", ticker);
+            return null;
+        }
+    }
+
+    public async Task<List<Symbol>> GetAvailableSymbolsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var symbols = await _alpacaService.GetAvailableSymbolsAsync(cancellationToken: cancellationToken);
+            return symbols.Select(s => new Symbol
+            {
+                Id = Guid.NewGuid(),
+                Ticker = s,
+                Display = s,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting available symbols");
+            return new List<Symbol>();
+        }
+    }
+
+    public bool IsSymbolSupported(string ticker, string? assetClass = null, string? market = null)
+    {
+        if (string.IsNullOrEmpty(ticker)) return false;
+
+        // Check against configured symbols
+        if (assetClass?.ToUpper() == "CRYPTO")
+        {
+            return _config.DefaultSymbols.Crypto.Contains(ticker.ToUpper());
+        }
+
+        if (assetClass?.ToUpper() == "STOCK")
+        {
+            return _config.DefaultSymbols.Stocks.Contains(ticker.ToUpper());
+        }
+
+        // If no asset class specified, check both
+        return _config.DefaultSymbols.Crypto.Contains(ticker.ToUpper()) ||
+               _config.DefaultSymbols.Stocks.Contains(ticker.ToUpper());
+    }
+
+    public async Task<Dictionary<string, object>> GetProviderInfoAsync(CancellationToken cancellationToken = default)
+    {
+        return new Dictionary<string, object>
+        {
+            ["ProviderId"] = ProviderId,
+            ["ProviderName"] = ProviderName,
+            ["Environment"] = _config.UsePaperTrading ? "Paper" : "Live",
+            ["SupportedAssetClasses"] = SupportedAssetClasses.ToList(),
+            ["SupportedMarkets"] = SupportedMarkets.ToList(),
+            ["IsConnected"] = IsConnected,
+            ["RateLimitPerMinute"] = _config.RateLimitPerMinute,
+            ["CachingEnabled"] = _config.EnableCaching,
+            ["LastChecked"] = DateTime.UtcNow
+        };
+    }
+
+    public async Task<ComponentHealth> GetHealthAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var healthStatus = await _alpacaService.GetHealthStatusAsync(cancellationToken);
+            var rateLimitStatus = _alpacaService.GetRateLimitStatus();
+            var circuitBreakerStatus = _alpacaService.GetCircuitBreakerStatus();
+
+            var status = healthStatus.IsHealthy && !circuitBreakerStatus.IsOpen
+                ? "Healthy"
+                : "Unhealthy";
+
+            return new ComponentHealth
+            {
+                Name = ProviderName,
+                Status = status,
+                Details = new Dictionary<string, object>
+                {
+                    ["IsConnected"] = IsConnected,
+                    ["Environment"] = _config.UsePaperTrading ? "Paper" : "Live",
+                    ["RateLimitRemaining"] = rateLimitStatus.RequestsRemaining,
+                    ["CircuitBreakerOpen"] = circuitBreakerStatus.IsOpen,
+                    ["FailureCount"] = circuitBreakerStatus.FailureCount,
+                    ["LastChecked"] = DateTime.UtcNow
+                },
+                CheckedAt = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking Alpaca provider health");
+            return new ComponentHealth
+            {
+                Name = ProviderName,
+                Status = "Error",
+                Details = new Dictionary<string, object> { ["Error"] = ex.Message },
+                CheckedAt = DateTime.UtcNow
+            };
+        }
+    }
+
+    // IAlpacaDataProvider specific methods
+    public async Task<AlpacaCryptoDataDto?> GetCryptoQuoteAsync(string symbol, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cryptoData = await _alpacaService.GetCryptoMarketDataAsync(new List<string> { symbol }, cancellationToken);
+            return cryptoData.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting crypto quote for {Symbol}", symbol);
+            return null;
+        }
+    }
+
+    public async Task<AlpacaStockDataDto?> GetStockQuoteAsync(string symbol, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var stockData = await _alpacaService.GetNasdaqMarketDataAsync(new List<string> { symbol }, cancellationToken);
+            return stockData.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting stock quote for {Symbol}", symbol);
+            return null;
+        }
+    }
+
+    public async Task<List<TradeDto>> GetLatestTradesAsync(string symbol, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (_alpacaClient == null) return new List<TradeDto>();
+
+            var request = new LatestDataRequest(symbol);
+            var trades = await _alpacaClient.ListHistoricalTradesAsync(request, cancellationToken);
+
+            return trades.Items.Take(limit).Select(trade => new TradeDto
+            {
+                Ticker = symbol,
+                Price = trade.Price,
+                Quantity = trade.Size,
+                Timestamp = trade.TimestampUtc,
+                Side = "UNKNOWN" // Alpaca doesn't provide side information in latest trades
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting latest trades for {Symbol}", symbol);
+            return new List<TradeDto>();
+        }
+    }
+
+    public async Task<List<CandlestickDataDto>> GetBarsAsync(
+        string symbol,
+        string timeframe,
+        DateTime? start = null,
+        DateTime? end = null,
+        int? limit = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var historicalData = await GetHistoricalDataAsync(symbol, timeframe, start, end, limit, cancellationToken);
+            return historicalData?.Candles ?? new List<CandlestickDataDto>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting bars for {Symbol}", symbol);
+            return new List<CandlestickDataDto>();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _alpacaClient?.Dispose();
+            _cryptoClient?.Dispose();
+            _disposed = true;
+        }
+    }
+}
+
+/// <summary>
+/// Extension methods for converting between DTOs
+/// </summary>
+public static class AlpacaDataExtensions
+{
+    public static UnifiedMarketDataDto ToUnifiedMarketDataDto(this MarketDataDto marketData)
+    {
+        return new UnifiedMarketDataDto
+        {
+            Ticker = marketData.Symbol,
+            Price = marketData.Price,
+            PreviousClose = marketData.Price - marketData.Change,
+            PriceChange = marketData.Change,
+            PriceChangePercent = marketData.ChangePercent,
+            Volume = marketData.Volume,
+            HighPrice = marketData.High24h,
+            LowPrice = marketData.Low24h,
+            MarketCap = marketData.MarketCap,
+            DataTimestamp = marketData.LastUpdated,
+            ReceivedTimestamp = DateTime.UtcNow,
+            DataProvider = "Alpaca",
+            IsRealTime = true,
+            Currency = marketData.Currency,
+            PricePrecision = marketData.AssetClass == "CRYPTO" ? 8 : 2,
+            QuantityPrecision = marketData.AssetClass == "CRYPTO" ? 8 : 0
+        };
+    }
+}

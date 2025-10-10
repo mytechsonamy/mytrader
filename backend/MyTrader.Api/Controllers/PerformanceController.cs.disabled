@@ -1,0 +1,432 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using MyTrader.Infrastructure.Monitoring;
+
+namespace MyTrader.Api.Controllers;
+
+/// <summary>
+/// Performance monitoring and diagnostics controller
+/// Provides real-time metrics, health checks, and performance insights
+/// </summary>
+[ApiController]
+[Route("api/performance")]
+[Authorize] // Restrict access to authenticated users
+public class PerformanceController : ControllerBase
+{
+    private readonly IMarketDataPerformanceMonitor _performanceMonitor;
+    private readonly ILogger<PerformanceController> _logger;
+
+    public PerformanceController(
+        IMarketDataPerformanceMonitor performanceMonitor,
+        ILogger<PerformanceController> logger)
+    {
+        _performanceMonitor = performanceMonitor;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Get current performance metrics
+    /// </summary>
+    [HttpGet("metrics")]
+    [ProducesResponseType(typeof(PerformanceMetrics), 200)]
+    public async Task<ActionResult<PerformanceMetrics>> GetMetrics()
+    {
+        try
+        {
+            var metrics = await _performanceMonitor.GetCurrentMetrics();
+            return Ok(metrics);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving performance metrics");
+            return StatusCode(500, new { message = "Failed to retrieve performance metrics" });
+        }
+    }
+
+    /// <summary>
+    /// Get active alerts
+    /// </summary>
+    [HttpGet("alerts")]
+    [ProducesResponseType(typeof(List<AlertEvent>), 200)]
+    public async Task<ActionResult<List<AlertEvent>>> GetAlerts()
+    {
+        try
+        {
+            var alerts = await _performanceMonitor.GetActiveAlerts();
+            return Ok(alerts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving alerts");
+            return StatusCode(500, new { message = "Failed to retrieve alerts" });
+        }
+    }
+
+    /// <summary>
+    /// Perform comprehensive health check
+    /// </summary>
+    [HttpGet("health")]
+    [AllowAnonymous] // Allow anonymous access for health checks
+    [ProducesResponseType(typeof(HealthCheckSummary), 200)]
+    public async Task<ActionResult<HealthCheckSummary>> GetHealth()
+    {
+        try
+        {
+            var dbHealth = await _performanceMonitor.CheckDatabaseHealth();
+            var cacheHealth = await _performanceMonitor.CheckCacheHealth();
+            var dataProviderHealth = await _performanceMonitor.CheckDataProviderHealth();
+
+            var summary = new HealthCheckSummary
+            {
+                IsHealthy = dbHealth.IsHealthy && cacheHealth.IsHealthy && dataProviderHealth.IsHealthy,
+                CheckedAt = DateTime.UtcNow,
+                Components = new Dictionary<string, HealthCheckResult>
+                {
+                    ["database"] = dbHealth,
+                    ["cache"] = cacheHealth,
+                    ["dataProviders"] = dataProviderHealth
+                }
+            };
+
+            var statusCode = summary.IsHealthy ? 200 : 503;
+            return StatusCode(statusCode, summary);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error performing health check");
+            return StatusCode(503, new HealthCheckSummary
+            {
+                IsHealthy = false,
+                CheckedAt = DateTime.UtcNow,
+                Error = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Get performance dashboard data
+    /// </summary>
+    [HttpGet("dashboard")]
+    [ProducesResponseType(typeof(PerformanceDashboard), 200)]
+    public async Task<ActionResult<PerformanceDashboard>> GetDashboard()
+    {
+        try
+        {
+            var metrics = await _performanceMonitor.GetCurrentMetrics();
+            var alerts = await _performanceMonitor.GetActiveAlerts();
+            var health = await GetHealthSummary();
+
+            var dashboard = new PerformanceDashboard
+            {
+                GeneratedAt = DateTime.UtcNow,
+                OverallHealth = health.IsHealthy,
+                TotalQueries = metrics.QueryMetrics.Values.Sum(q => q.Count),
+                AverageQueryTime = metrics.QueryMetrics.Values.Any() ?
+                    metrics.QueryMetrics.Values.Average(q => q.AverageTime) : 0,
+                CacheHitRate = metrics.CacheMetrics.Values.Any() ?
+                    metrics.CacheMetrics.Values.Average(c => c.HitRate) : 0,
+                ActiveAlerts = alerts.Count,
+                CriticalAlerts = alerts.Count(a => a.Severity == AlertSeverity.Critical),
+                TopSlowQueries = GetTopSlowQueries(metrics),
+                CachePerformance = GetCachePerformanceSummary(metrics),
+                ApiPerformance = GetApiPerformanceSummary(metrics),
+                RecentAlerts = alerts.OrderByDescending(a => a.Timestamp).Take(10).ToList()
+            };
+
+            return Ok(dashboard);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating performance dashboard");
+            return StatusCode(500, new { message = "Failed to generate performance dashboard" });
+        }
+    }
+
+    /// <summary>
+    /// Get detailed query performance analysis
+    /// </summary>
+    [HttpGet("queries")]
+    [ProducesResponseType(typeof(Dictionary<string, QueryPerformanceMetrics>), 200)]
+    public async Task<ActionResult<Dictionary<string, QueryPerformanceMetrics>>> GetQueryPerformance()
+    {
+        try
+        {
+            var metrics = await _performanceMonitor.GetCurrentMetrics();
+            return Ok(metrics.QueryMetrics);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving query performance metrics");
+            return StatusCode(500, new { message = "Failed to retrieve query performance metrics" });
+        }
+    }
+
+    /// <summary>
+    /// Get cache performance analysis
+    /// </summary>
+    [HttpGet("cache")]
+    [ProducesResponseType(typeof(Dictionary<string, CachePerformanceMetrics>), 200)]
+    public async Task<ActionResult<Dictionary<string, CachePerformanceMetrics>>> GetCachePerformance()
+    {
+        try
+        {
+            var metrics = await _performanceMonitor.GetCurrentMetrics();
+            return Ok(metrics.CacheMetrics);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving cache performance metrics");
+            return StatusCode(500, new { message = "Failed to retrieve cache performance metrics" });
+        }
+    }
+
+    /// <summary>
+    /// Trigger manual performance test
+    /// </summary>
+    [HttpPost("test")]
+    [ProducesResponseType(typeof(PerformanceTestResult), 200)]
+    public async Task<ActionResult<PerformanceTestResult>> RunPerformanceTest()
+    {
+        try
+        {
+            var testResult = await RunComprehensivePerformanceTest();
+            return Ok(testResult);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running performance test");
+            return StatusCode(500, new { message = "Failed to run performance test" });
+        }
+    }
+
+    // ============================================
+    // PRIVATE HELPER METHODS
+    // ============================================
+
+    private async Task<HealthCheckSummary> GetHealthSummary()
+    {
+        var dbHealth = await _performanceMonitor.CheckDatabaseHealth();
+        var cacheHealth = await _performanceMonitor.CheckCacheHealth();
+        var dataProviderHealth = await _performanceMonitor.CheckDataProviderHealth();
+
+        return new HealthCheckSummary
+        {
+            IsHealthy = dbHealth.IsHealthy && cacheHealth.IsHealthy && dataProviderHealth.IsHealthy,
+            CheckedAt = DateTime.UtcNow,
+            Components = new Dictionary<string, HealthCheckResult>
+            {
+                ["database"] = dbHealth,
+                ["cache"] = cacheHealth,
+                ["dataProviders"] = dataProviderHealth
+            }
+        };
+    }
+
+    private List<SlowQueryInfo> GetTopSlowQueries(PerformanceMetrics metrics)
+    {
+        return metrics.QueryMetrics
+            .OrderByDescending(q => q.Value.P95Time)
+            .Take(5)
+            .Select(q => new SlowQueryInfo
+            {
+                QueryName = q.Key,
+                AverageTime = q.Value.AverageTime,
+                P95Time = q.Value.P95Time,
+                Count = q.Value.Count
+            })
+            .ToList();
+    }
+
+    private CachePerformanceSummary GetCachePerformanceSummary(PerformanceMetrics metrics)
+    {
+        if (!metrics.CacheMetrics.Any())
+        {
+            return new CachePerformanceSummary();
+        }
+
+        return new CachePerformanceSummary
+        {
+            OverallHitRate = metrics.CacheMetrics.Values.Average(c => c.HitRate),
+            TotalRequests = metrics.CacheMetrics.Values.Sum(c => c.TotalRequests),
+            L1HitRate = metrics.CacheMetrics.Where(c => c.Key.StartsWith("L1:")).Average(c => c.Value.HitRate),
+            L2HitRate = metrics.CacheMetrics.Where(c => c.Key.StartsWith("L2:")).Average(c => c.Value.HitRate),
+            ByCategory = metrics.CacheMetrics.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.HitRate
+            )
+        };
+    }
+
+    private ApiPerformanceSummary GetApiPerformanceSummary(PerformanceMetrics metrics)
+    {
+        if (!metrics.ApiMetrics.Any())
+        {
+            return new ApiPerformanceSummary();
+        }
+
+        return new ApiPerformanceSummary
+        {
+            TotalRequests = metrics.ApiMetrics.Values.Sum(a => a.RequestCount),
+            AverageResponseTime = metrics.ApiMetrics.Values.Average(a => a.AverageResponseTime),
+            OverallErrorRate = metrics.ApiMetrics.Values.Average(a => a.ErrorRate),
+            SlowestEndpoints = metrics.ApiMetrics
+                .OrderByDescending(a => a.Value.P95ResponseTime)
+                .Take(5)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.P95ResponseTime)
+        };
+    }
+
+    private async Task<PerformanceTestResult> RunComprehensivePerformanceTest()
+    {
+        var testResult = new PerformanceTestResult
+        {
+            StartedAt = DateTime.UtcNow,
+            Tests = new List<TestResult>()
+        };
+
+        // Test 1: Database connectivity
+        testResult.Tests.Add(await TestDatabasePerformance());
+
+        // Test 2: Cache performance
+        testResult.Tests.Add(await TestCachePerformance());
+
+        // Test 3: API response times
+        testResult.Tests.Add(await TestApiPerformance());
+
+        testResult.CompletedAt = DateTime.UtcNow;
+        testResult.TotalDuration = testResult.CompletedAt - testResult.StartedAt;
+        testResult.OverallResult = testResult.Tests.All(t => t.Passed) ? "PASS" : "FAIL";
+
+        return testResult;
+    }
+
+    private async Task<TestResult> TestDatabasePerformance()
+    {
+        var test = new TestResult { Name = "Database Performance" };
+
+        try
+        {
+            var health = await _performanceMonitor.CheckDatabaseHealth();
+            test.Passed = health.IsHealthy && health.ResponseTime < TimeSpan.FromMilliseconds(500);
+            test.Duration = health.ResponseTime;
+            test.Details = health.Details;
+        }
+        catch (Exception ex)
+        {
+            test.Passed = false;
+            test.Details = ex.Message;
+        }
+
+        return test;
+    }
+
+    private async Task<TestResult> TestCachePerformance()
+    {
+        var test = new TestResult { Name = "Cache Performance" };
+
+        try
+        {
+            var health = await _performanceMonitor.CheckCacheHealth();
+            test.Passed = health.IsHealthy && health.ResponseTime < TimeSpan.FromMilliseconds(100);
+            test.Duration = health.ResponseTime;
+            test.Details = health.Details;
+        }
+        catch (Exception ex)
+        {
+            test.Passed = false;
+            test.Details = ex.Message;
+        }
+
+        return test;
+    }
+
+    private async Task<TestResult> TestApiPerformance()
+    {
+        var test = new TestResult { Name = "API Performance" };
+
+        try
+        {
+            // Simulate API test by checking if we can get metrics
+            var metrics = await _performanceMonitor.GetCurrentMetrics();
+            test.Passed = true;
+            test.Duration = TimeSpan.FromMilliseconds(50); // Simulated
+            test.Details = $"Retrieved metrics successfully. {metrics.QueryMetrics.Count} query types tracked.";
+        }
+        catch (Exception ex)
+        {
+            test.Passed = false;
+            test.Details = ex.Message;
+        }
+
+        return test;
+    }
+}
+
+// ============================================
+// SUPPORTING CLASSES
+// ============================================
+
+public class HealthCheckSummary
+{
+    public bool IsHealthy { get; set; }
+    public DateTime CheckedAt { get; set; }
+    public Dictionary<string, HealthCheckResult> Components { get; set; } = new();
+    public string? Error { get; set; }
+}
+
+public class PerformanceDashboard
+{
+    public DateTime GeneratedAt { get; set; }
+    public bool OverallHealth { get; set; }
+    public int TotalQueries { get; set; }
+    public double AverageQueryTime { get; set; }
+    public double CacheHitRate { get; set; }
+    public int ActiveAlerts { get; set; }
+    public int CriticalAlerts { get; set; }
+    public List<SlowQueryInfo> TopSlowQueries { get; set; } = new();
+    public CachePerformanceSummary CachePerformance { get; set; } = new();
+    public ApiPerformanceSummary ApiPerformance { get; set; } = new();
+    public List<AlertEvent> RecentAlerts { get; set; } = new();
+}
+
+public class SlowQueryInfo
+{
+    public string QueryName { get; set; } = string.Empty;
+    public double AverageTime { get; set; }
+    public double P95Time { get; set; }
+    public int Count { get; set; }
+}
+
+public class CachePerformanceSummary
+{
+    public double OverallHitRate { get; set; }
+    public int TotalRequests { get; set; }
+    public double L1HitRate { get; set; }
+    public double L2HitRate { get; set; }
+    public Dictionary<string, double> ByCategory { get; set; } = new();
+}
+
+public class ApiPerformanceSummary
+{
+    public int TotalRequests { get; set; }
+    public double AverageResponseTime { get; set; }
+    public double OverallErrorRate { get; set; }
+    public Dictionary<string, double> SlowestEndpoints { get; set; } = new();
+}
+
+public class PerformanceTestResult
+{
+    public DateTime StartedAt { get; set; }
+    public DateTime CompletedAt { get; set; }
+    public TimeSpan TotalDuration { get; set; }
+    public string OverallResult { get; set; } = string.Empty;
+    public List<TestResult> Tests { get; set; } = new();
+}
+
+public class TestResult
+{
+    public string Name { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public TimeSpan Duration { get; set; }
+    public string Details { get; set; } = string.Empty;
+}

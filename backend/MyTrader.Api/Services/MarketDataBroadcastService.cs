@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using MyTrader.Api.Hubs;
 using MyTrader.Services.Market;
+using MyTrader.Core.Interfaces;
 
 namespace MyTrader.Api.Services;
 
@@ -8,15 +9,18 @@ public class MarketDataBroadcastService : IHostedService
 {
     private readonly IBinanceWebSocketService _binanceService;
     private readonly IHubContext<MarketDataHub> _hubContext;
+    private readonly IMarketDataRouter _marketDataRouter;
     private readonly ILogger<MarketDataBroadcastService> _logger;
 
     public MarketDataBroadcastService(
         IBinanceWebSocketService binanceService, 
-        IHubContext<MarketDataHub> hubContext, 
+        IHubContext<MarketDataHub> hubContext,
+        IMarketDataRouter marketDataRouter,
         ILogger<MarketDataBroadcastService> logger)
     {
         _binanceService = binanceService;
         _hubContext = hubContext;
+        _marketDataRouter = marketDataRouter;
         _logger = logger;
     }
 
@@ -45,24 +49,39 @@ public class MarketDataBroadcastService : IHostedService
         try
         {
             _logger.LogDebug($"Broadcasting price update: {priceData.Symbol} = {priceData.Price}");
-            
+
+            // Get all routing groups for this symbol (market-specific, asset class, etc.)
+            var routingGroups = _marketDataRouter.GetRoutingGroups(priceData.Symbol);
+
             // Calculate percentage change
             var changePercent = priceData.PriceChange;
-            
-            // Send to all clients subscribed to this symbol
-            await _hubContext.Clients.Group($"Symbol_{priceData.Symbol}")
-                .SendAsync("PriceUpdate", new
-                {
-                    symbol = priceData.Symbol,
-                    price = priceData.Price,
-                    change = changePercent,
-                    volume = priceData.Volume,
-                    timestamp = priceData.Timestamp
-                });
-            
-            // Also send individual price update
-            await _hubContext.Clients.Group($"Symbol_{priceData.Symbol}")
-                .SendAsync("MarketDataUpdate", priceData);
+
+            var updateData = new
+            {
+                symbol = priceData.Symbol,
+                price = priceData.Price,
+                change = changePercent,
+                volume = priceData.Volume,
+                timestamp = priceData.Timestamp,
+                market = _marketDataRouter.DetermineMarket(priceData.Symbol),
+                assetClass = _marketDataRouter.ClassifyAssetClass(priceData.Symbol)
+            };
+
+            // DEBUG: Log what we're sending to clients
+            _logger.LogWarning($"[PRICE DEBUG] Sending to clients: Symbol={updateData.symbol}, Price={updateData.price}, Volume={updateData.volume}, Change={updateData.change}%");
+
+            // Broadcast to all relevant groups
+            foreach (var groupName in routingGroups)
+            {
+                await _hubContext.Clients.Group(groupName)
+                    .SendAsync("PriceUpdate", updateData);
+
+                // Also send detailed market data update
+                await _hubContext.Clients.Group(groupName)
+                    .SendAsync("MarketDataUpdate", priceData);
+            }
+
+            _logger.LogDebug($"Broadcasted {priceData.Symbol} to groups: {string.Join(", ", routingGroups)}");
         }
         catch (Exception ex)
         {

@@ -1,0 +1,135 @@
+{
+  "YahooFinance": {
+    "MaxConcurrentRequests": 5,
+    "MinRequestIntervalMs": 200,
+    "RequestTimeoutSeconds": 30,
+    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "MaxRetryAttempts": 3,
+    "RetryDelayMs": 1000,
+
+    "DailySync": {
+      "BatchSize": 10,
+      "BatchDelayMs": 1000,
+      "MaxRetryAttempts": 3,
+      "RetryDelayMs": 2000,
+      "OverwriteExistingData": false,
+      "AutoFillGaps": true,
+      "MaxGapsToFill": 100,
+      "MinDataCompletenessPercent": 90.0
+    },
+
+    "IntradaySync": {
+      "BatchSize": 5,
+      "BatchDelayMs": 500,
+      "InterMarketDelayMs": 1000,
+      "MaxRetryAttempts": 2,
+      "RetryDelayMs": 1000,
+      "OverwriteExistingData": false,
+      "LookbackMinutes": 15,
+      "MaxSymbolsPerMarket": 1000,
+      "MinSuccessRatePercent": 70.0,
+      "EnableBistSync": true,
+      "EnableUSMarketsSync": true,
+      "EnableCryptoSync": true
+    },
+
+    "IntradaySchedule": {
+      "EnableIntradaySync": true,
+      "MaxExecutionDuration": "00:04:00",
+      "AlertAfterConsecutiveFailures": 3,
+      "LogDetailedResults": false,
+      "AlertWebhookUrl": null,
+      "EnableHealthChecks": true,
+      "EnableDuringPremarket": false,
+      "EnableDuringAfterHours": false,
+      "EnablePerformanceLogging": true,
+      "PerformanceLogThreshold": "00:00:30"
+    },
+
+    "MarketSchedule": {
+      "EnableBistSync": true,
+      "EnableUSMarketsSync": true,
+      "EnableCryptoSync": true,
+      "EnableGapMonitoring": true,
+      "BistSyncTime": "18:30",
+      "USMarketsSyncTime": "16:30",
+      "CryptoSyncTime": "00:01",
+      "SendNotifications": true,
+      "NotificationWebhookUrl": null,
+      "NotificationEmail": null,
+      "MaxSyncDuration": "02:00:00",
+      "HealthCheckIntervalMinutes": 5
+    },
+
+    "ErrorHandling": {
+      "CircuitBreakerFailureThreshold": 5,
+      "CircuitBreakerTimeoutMs": 60000,
+      "ExponentialBackoffBaseDelayMs": 1000,
+      "ExponentialBackoffMaxDelayMs": 30000,
+      "MaxRetryAttempts": 3,
+      "EnableCircuitBreaker": true,
+      "EnableRetryPolicy": true,
+      "EnableBulkhead": true,
+      "BulkheadMaxParallelization": 10
+    },
+
+    "DataQuality": {
+      "EnableValidation": true,
+      "MinCompletenessThreshold": 85.0,
+      "MaxAllowedGapDays": 5,
+      "RequiredFields": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "ValidationRules": {
+        "HighGreaterThanLow": true,
+        "OHLCWithinRange": true,
+        "VolumeNonNegative": true,
+        "PricePositive": true,
+        "TimestampValid": true
+      },
+      "AutoCorrection": {
+        "EnableAutoCorrection": false,
+        "MaxCorrectionPercentage": 5.0
+      }
+    },
+
+    "EnableMonitoring": true
+  },
+
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "MyTrader.Core.Services.YahooFinanceApiService": "Debug",
+      "MyTrader.Core.Services.YahooFinanceIntradayDataService": "Information",
+      "MyTrader.Infrastructure.Services.YahooFinanceIntradayScheduledService": "Information"
+    }
+  },
+
+  "HealthChecks": {
+    "UI": {
+      "HealthChecksUI": {
+        "HealthChecks": [
+          {
+            "Name": "Yahoo Finance Daily Sync",
+            "Uri": "/health/yahoo-finance"
+          },
+          {
+            "Name": "Yahoo Finance Intraday Sync",
+            "Uri": "/health/intraday"
+          },
+          {
+            "Name": "Database",
+            "Uri": "/health/database"
+          }
+        ],
+        "EvaluationTimeInSeconds": 60,
+        "MinimumSecondsBetweenFailureNotifications": 300
+      }
+    }
+  }
+}

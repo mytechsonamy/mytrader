@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Endpoint Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        pre { background: #f5f5f5; padding: 10px; }
+        button { padding: 10px 15px; margin: 5px; }
+        .status-indicator { font-size: 20px; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Health Endpoint Integration Test</h1>
+    <p>This page tests the fixed health endpoint integration for myTrader web frontend.</p>
+
+    <div class="test-section">
+        <h2>🔧 Backend Status</h2>
+        <p>The backend team has implemented <code>[AllowAnonymous]</code> on the health endpoint:</p>
+        <code>GET /api/market-data/alpaca/health</code>
+        <div id="backend-status">Checking backend...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>📡 Health Endpoint Test</h2>
+        <button onclick="testHealthEndpoint()">Test Health Endpoint</button>
+        <div id="health-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🎨 UI Display Test</h2>
+        <button onclick="testUIDisplays()">Test UI Status Displays</button>
+        <div id="ui-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Expected Behavior</h2>
+        <ul>
+            <li><span class="status-indicator">🟢</span> <strong>Connected:</strong> All services healthy</li>
+            <li><span class="status-indicator">🟡</span> <strong>Partial:</strong> Some services available</li>
+            <li><span class="status-indicator">🔴</span> <strong>Disconnected:</strong> Services unavailable</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test the health endpoint directly
+        async function testHealthEndpoint() {
+            const resultsDiv = document.getElementById('health-results');
+            resultsDiv.innerHTML = '<p class="info">Testing health endpoint...</p>';
+
+            try {
+                // Test the endpoint that should be anonymous after backend fix
+                const response = await fetch('/api/market-data/alpaca/health', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    resultsDiv.innerHTML = `
+                        <p class="success">✅ Health endpoint accessible!</p>
+                        <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                        <p><strong>Response:</strong></p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else if (response.status === 401) {
+                    resultsDiv.innerHTML = `
+                        <p class="warning">⏳ Backend fix not yet deployed</p>
+                        <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                        <p>The endpoint still requires authentication. Frontend is ready once backend fix is complete.</p>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <p class="error">❌ Unexpected response</p>
+                        <p><strong>Status:</strong> ${response.status} ${response.statusText}</p>
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <p class="error">❌ Request failed</p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>This could indicate network issues or that the backend is not running.</p>
+                `;
+            }
+
+            // Also check backend status
+            checkBackendStatus();
+        }
+
+        // Check if backend is running
+        async function checkBackendStatus() {
+            const statusDiv = document.getElementById('backend-status');
+
+            try {
+                const response = await fetch('/api/health');
+                if (response.ok || response.status >= 400) {
+                    statusDiv.innerHTML = '<p class="success">✅ Backend is running</p>';
+                } else {
+                    statusDiv.innerHTML = '<p class="warning">⚠️ Backend responding with errors</p>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<p class="error">❌ Backend not accessible</p>';
+            }
+        }
+
+        // Test UI display logic
+        function testUIDisplays() {
+            const resultsDiv = document.getElementById('ui-results');
+
+            const mockScenarios = [
+                {
+                    name: 'Healthy System',
+                    status: {
+                        alpaca: { crypto: true, nasdaq: true },
+                        bist: { connected: true },
+                        overall: 'connected'
+                    }
+                },
+                {
+                    name: 'Partial Connectivity',
+                    status: {
+                        alpaca: { crypto: true, nasdaq: false },
+                        bist: { connected: true },
+                        overall: 'partial'
+                    }
+                },
+                {
+                    name: 'System Offline',
+                    status: {
+                        alpaca: { crypto: false, nasdaq: false },
+                        bist: { connected: false },
+                        overall: 'disconnected'
+                    }
+                }
+            ];
+
+            let html = '<h3>UI Status Display Test</h3>';
+
+            mockScenarios.forEach(scenario => {
+                const indicator = scenario.status.overall === 'connected' ? '🟢' :
+                               scenario.status.overall === 'partial' ? '🟡' : '🔴';
+
+                const statusText = scenario.status.overall === 'connected' ? 'Connected' :
+                                 scenario.status.overall === 'partial' ? 'Partial' : 'Disconnected';
+
+                html += `
+                    <div style="border: 1px solid #ccc; margin: 10px 0; padding: 10px;">
+                        <h4>${scenario.name}</h4>
+                        <p><span class="status-indicator">${indicator}</span> <strong>${statusText}</strong></p>
+                        <p>Alpaca: Crypto ${scenario.status.alpaca.crypto ? '✅' : '❌'}, NASDAQ ${scenario.status.alpaca.nasdaq ? '✅' : '❌'}</p>
+                        <p>BIST: ${scenario.status.bist.connected ? '✅ Connected' : '❌ Disconnected'}</p>
+                    </div>
+                `;
+            });
+
+            resultsDiv.innerHTML = html;
+        }
+
+        // Check backend status on load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkBackendStatus();
+        });
+    </script>
+</body>
+</html>

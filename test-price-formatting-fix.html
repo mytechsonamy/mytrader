@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Formatting Fix - Validation Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status.disconnected { background: #fee; color: #c00; }
+        .status.connecting { background: #ffc; color: #880; }
+        .status.connected { background: #efe; color: #080; }
+        .status.error { background: #fee; color: #c00; }
+
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .price-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .price-card.correct {
+            border-left: 4px solid #28a745;
+            background: #f0fff4;
+        }
+        .price-card.incorrect {
+            border-left: 4px solid #dc3545;
+            background: #fff5f5;
+        }
+
+        .symbol {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        .change {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .change.positive { color: #28a745; }
+        .change.negative { color: #dc3545; }
+
+        .raw-data {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .raw-data .key { color: #66d9ef; }
+        .raw-data .string { color: #e6db74; }
+        .raw-data .number { color: #ae81ff; }
+
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .test-result.pass {
+            background: #d4edda;
+            color: #155724;
+        }
+        .test-result.fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        .log-entry.info { color: #4fc3f7; }
+        .log-entry.success { color: #66bb6a; }
+        .log-entry.warning { color: #ffa726; }
+        .log-entry.error { color: #ef5350; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>=' Price Formatting Fix Validation</h1>
+        <p>Testing the fix for incorrect price display (ENA showing as $550,000 instead of $0.55)</p>
+        <p><strong>Test Objectives:</strong></p>
+        <ul>
+            <li>Verify prices display correctly without heuristic normalization</li>
+            <li>Verify percentage changes display correctly (backend sends 'change' field)</li>
+            <li>Test with various price ranges (low, medium, high)</li>
+        </ul>
+    </div>
+
+    <div id="status" class="status disconnected">
+        « Disconnected from SignalR Hub
+    </div>
+
+    <div class="test-section">
+        <h2>Connection Control</h2>
+        <button id="connectBtn" onclick="connect()">Connect to Backend</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        <button id="clearLogsBtn" onclick="clearLogs()">Clear Logs</button>
+    </div>
+
+    <div class="test-section">
+        <h2>=Ê Live Price Updates</h2>
+        <p>Prices should display WITHOUT any normalization (Binance sends correct decimal values)</p>
+        <div id="priceUpdates"></div>
+    </div>
+
+    <div class="test-section">
+        <h2> Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>=Ë Event Log</h2>
+        <div id="logContainer" class="log-container"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        let connection = null;
+        let priceData = {};
+        let testResults = [];
+
+        const API_URL = 'http://localhost:5001';
+        const HUB_URL = `${API_URL}/hubs/marketdata`;
+
+        // Logging utilities
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+            log('Logs cleared', 'info');
+        }
+
+        // Price formatting (CORRECT VERSION - no normalization)
+        function formatPrice(value) {
+            if (value === null || value === undefined) return '$0.00';
+            const num = Number(value);
+            if (isNaN(num)) return '$0.00';
+
+            // NO NORMALIZATION - use value as-is
+            // Binance sends decimal strings like "0.55", "95000.00"
+
+            if (num < 0.01) {
+                return `$${num.toFixed(8)}`;
+            } else if (num < 1) {
+                return `$${num.toFixed(6)}`;
+            } else if (num < 100) {
+                return `$${num.toFixed(4)}`;
+            } else {
+                return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+        }
+
+        function formatPercentage(value) {
+            if (value === null || value === undefined || value === 0) return '0.00%';
+            const num = Number(value);
+            if (isNaN(num)) return '0.00%';
+
+            const sign = num > 0 ? '+' : '';
+            return `${sign}${num.toFixed(2)}%`;
+        }
+
+        // Validation functions
+        function validatePrice(symbol, rawValue, expectedRange) {
+            const price = Number(rawValue);
+            const isValid = price >= expectedRange.min && price <= expectedRange.max;
+
+            const result = {
+                symbol,
+                test: 'Price Range',
+                rawValue,
+                formattedValue: formatPrice(price),
+                expected: `${expectedRange.min} - ${expectedRange.max}`,
+                actual: price,
+                pass: isValid
+            };
+
+            testResults.push(result);
+            return isValid;
+        }
+
+        function validatePercentage(symbol, rawValue) {
+            const percent = Number(rawValue);
+            const isValid = percent !== 0 && !isNaN(percent);
+
+            const result = {
+                symbol,
+                test: 'Percentage Change',
+                rawValue,
+                formattedValue: formatPercentage(percent),
+                expected: 'Non-zero value',
+                actual: percent,
+                pass: isValid
+            };
+
+            testResults.push(result);
+            return isValid;
+        }
+
+        // Display functions
+        function displayPriceUpdate(data) {
+            const container = document.getElementById('priceUpdates');
+            const symbol = data.symbol || 'UNKNOWN';
+            const price = Number(data.price);
+            const change = Number(data.change); // Backend sends 'change' field
+
+            // Determine if price is in expected range
+            let expectedRange = { min: 0, max: Infinity };
+            let isCorrect = true;
+
+            if (symbol === 'ENAUSDT') {
+                expectedRange = { min: 0.3, max: 1.0 }; // ENA typically $0.50-$0.80
+                isCorrect = validatePrice(symbol, price, expectedRange);
+            } else if (symbol === 'BTCUSDT') {
+                expectedRange = { min: 50000, max: 150000 }; // BTC typically $60k-$100k
+                isCorrect = validatePrice(symbol, price, expectedRange);
+            } else if (symbol.includes('USDT')) {
+                expectedRange = { min: 0, max: 1000000 }; // Generic crypto range
+            }
+
+            // Validate percentage
+            const percentValid = validatePercentage(symbol, change);
+            isCorrect = isCorrect && percentValid;
+
+            const cardId = `price-${symbol}`;
+            let card = document.getElementById(cardId);
+
+            if (!card) {
+                card = document.createElement('div');
+                card.id = cardId;
+                card.className = 'price-card';
+                container.appendChild(card);
+            }
+
+            card.className = `price-card ${isCorrect ? 'correct' : 'incorrect'}`;
+
+            const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
+
+            card.innerHTML = `
+                <div class="symbol">${symbol}</div>
+                <div class="price">${formatPrice(price)}</div>
+                <div class="change ${changeClass}">${formatPercentage(change)}</div>
+                <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                    <strong>Raw Values:</strong><br>
+                    Price: ${price} (${typeof data.price})<br>
+                    Change: ${change} (${typeof data.change})<br>
+                    Volume: ${Number(data.volume).toLocaleString()}<br>
+                    Market: ${data.market || 'N/A'}<br>
+                    Asset Class: ${data.assetClass || 'N/A'}<br>
+                    Timestamp: ${new Date(data.timestamp).toLocaleTimeString()}
+                </div>
+                <div class="raw-data">
+                    ${JSON.stringify(data, null, 2)}
+                </div>
+            `;
+
+            updateTestResults();
+        }
+
+        function updateTestResults() {
+            const container = document.getElementById('testResults');
+            container.innerHTML = '';
+
+            testResults.forEach(result => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `test-result ${result.pass ? 'pass' : 'fail'}`;
+                resultDiv.innerHTML = `
+                    <strong>${result.symbol}</strong> - ${result.test}:
+                    ${result.pass ? ' PASS' : 'L FAIL'}<br>
+                    <small>Raw: ${result.rawValue} ’ Formatted: ${result.formattedValue}</small><br>
+                    <small>Expected: ${result.expected}, Actual: ${result.actual}</small>
+                `;
+                container.appendChild(resultDiv);
+            });
+        }
+
+        // SignalR connection
+        async function connect() {
+            try {
+                log('Attempting to connect to SignalR hub...', 'info');
+                updateStatus('connecting', 'Connecting to SignalR Hub...');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(HUB_URL)
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Event handlers
+                connection.on("ConnectionStatus", (data) => {
+                    log(`Connection status: ${JSON.stringify(data)}`, 'success');
+                });
+
+                connection.on("PriceUpdate", (data) => {
+                    log(`Price update received for ${data.symbol}: ${data.price}`, 'info');
+                    displayPriceUpdate(data);
+                    priceData[data.symbol] = data;
+                });
+
+                connection.on("SubscriptionConfirmed", (data) => {
+                    log(`Subscription confirmed: ${JSON.stringify(data)}`, 'success');
+                });
+
+                connection.on("SubscriptionError", (error) => {
+                    log(`Subscription error: ${JSON.stringify(error)}`, 'error');
+                });
+
+                // Connection events
+                connection.onreconnecting(() => {
+                    log('Reconnecting to hub...', 'warning');
+                    updateStatus('connecting', 'Reconnecting...');
+                });
+
+                connection.onreconnected(() => {
+                    log('Reconnected to hub', 'success');
+                    updateStatus('connected', 'Connected to SignalR Hub');
+                    subscribeToSymbols();
+                });
+
+                connection.onclose(() => {
+                    log('Connection closed', 'error');
+                    updateStatus('disconnected', 'Disconnected from SignalR Hub');
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                });
+
+                await connection.start();
+                log('Successfully connected to SignalR hub', 'success');
+                updateStatus('connected', 'Connected to SignalR Hub');
+
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+
+                // Subscribe to crypto symbols
+                await subscribeToSymbols();
+
+            } catch (err) {
+                log(`Connection error: ${err.message}`, 'error');
+                updateStatus('error', `Connection Error: ${err.message}`);
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        async function subscribeToSymbols() {
+            try {
+                const symbols = ['BTCUSDT', 'ETHUSDT', 'ENAUSDT', 'SOLUSDT', 'AVAXUSDT'];
+                log(`Subscribing to symbols: ${symbols.join(', ')}`, 'info');
+
+                await connection.invoke("SubscribeToPriceUpdates", "CRYPTO", symbols);
+                log('Subscription request sent', 'success');
+
+            } catch (err) {
+                log(`Subscription error: ${err.message}`, 'error');
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                try {
+                    await connection.stop();
+                    log('Disconnected from hub', 'info');
+                } catch (err) {
+                    log(`Disconnect error: ${err.message}`, 'error');
+                }
+            }
+        }
+
+        function updateStatus(state, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${state}`;
+
+            const icons = {
+                disconnected: '«',
+                connecting: '=',
+                connected: '=â',
+                error: '=4'
+            };
+
+            statusDiv.textContent = `${icons[state] || '«'} ${message}`;
+        }
+
+        // Auto-connect on load (optional)
+        // window.addEventListener('load', () => {
+        //     setTimeout(connect, 1000);
+        // });
+
+        log('Test page loaded. Click "Connect to Backend" to start testing.', 'info');
+    </script>
+</body>
+</html>

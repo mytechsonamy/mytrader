@@ -1,0 +1,560 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using MyTrader.Core.DTOs;
+using MyTrader.Core.Interfaces;
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
+
+namespace MyTrader.Api.Controllers;
+
+/// <summary>
+/// Optimized market data controller with caching, compression, and pagination
+/// Designed for high-performance frontend consumption
+/// </summary>
+[ApiController]
+[Route("api/v2/market-data")]
+public class OptimizedMarketDataController : ControllerBase
+{
+    private readonly IMultiAssetDataService _multiAssetDataService;
+    private readonly IMemoryCache _cache;
+    private readonly ILogger<OptimizedMarketDataController> _logger;
+
+    // Cache keys
+    private const string CACHE_KEY_OVERVIEW = "market_overview";
+    private const string CACHE_KEY_TOP_MOVERS = "top_movers_{0}"; // {asset_class}
+    private const string CACHE_KEY_POPULAR_SYMBOLS = "popular_symbols_{0}"; // {limit}
+    private const string CACHE_KEY_SYMBOLS_PAGE = "symbols_page_{0}"; // {query_hash}
+
+    public OptimizedMarketDataController(
+        IMultiAssetDataService multiAssetDataService,
+        IMemoryCache cache,
+        ILogger<OptimizedMarketDataController> logger)
+    {
+        _multiAssetDataService = multiAssetDataService;
+        _cache = cache;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Get optimized market overview for dashboard
+    /// Cached for 60 seconds, includes ETags for client-side caching
+    /// </summary>
+    [HttpGet("overview")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any, VaryByHeader = "Accept-Encoding")]
+    [ProducesResponseType(typeof(ApiResponse<OptimizedMarketOverviewDto>), 200)]
+    public async Task<ActionResult<ApiResponse<OptimizedMarketOverviewDto>>> GetOptimizedOverview()
+    {
+        try
+        {
+            var cacheKey = CACHE_KEY_OVERVIEW;
+
+            if (_cache.TryGetValue(cacheKey, out OptimizedMarketOverviewDto? cachedOverview))
+            {
+                SetCacheHeaders(60, cachedOverview?.LastUpdate);
+                return Ok(ApiResponse<OptimizedMarketOverviewDto>.SuccessResult(
+                    cachedOverview!, "Market overview retrieved from cache"));
+            }
+
+            _logger.LogInformation("Fetching market overview from database");
+
+            // Get data from materialized view or service
+            var overview = await GetMarketOverviewFromService();
+
+            // Cache for 60 seconds
+            _cache.Set(cacheKey, overview, TimeSpan.FromSeconds(60));
+
+            SetCacheHeaders(60, overview.LastUpdate);
+            return Ok(ApiResponse<OptimizedMarketOverviewDto>.SuccessResult(
+                overview, "Market overview retrieved successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting optimized market overview");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve market overview", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get paginated symbols with search and filtering
+    /// Supports caching based on query parameters
+    /// </summary>
+    [HttpGet("symbols")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<PaginatedSymbolsResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<PaginatedSymbolsResponse>>> GetPaginatedSymbols(
+        [FromQuery] SymbolQueryRequest request)
+    {
+        try
+        {
+            // Create cache key based on request parameters
+            var queryHash = CreateQueryHash(request);
+            var cacheKey = string.Format(CACHE_KEY_SYMBOLS_PAGE, queryHash);
+            var cacheTimeout = request.IncludeMarketData ? 30 : 300; // 30s with market data, 5m without
+
+            if (_cache.TryGetValue(cacheKey, out PaginatedSymbolsResponse? cachedResponse))
+            {
+                SetCacheHeaders(cacheTimeout, cachedResponse?.CachedAt);
+                return Ok(ApiResponse<PaginatedSymbolsResponse>.SuccessResult(
+                    cachedResponse!, "Symbols retrieved from cache"));
+            }
+
+            _logger.LogInformation("Fetching symbols page: {Page}, size: {PageSize}, search: {Search}",
+                request.Page, request.PageSize, request.Search);
+
+            var response = await GetSymbolsFromService(request);
+            response.CachedAt = DateTime.UtcNow;
+            response.CacheValidSeconds = cacheTimeout;
+
+            // Cache the response
+            _cache.Set(cacheKey, response, TimeSpan.FromSeconds(cacheTimeout));
+
+            SetCacheHeaders(cacheTimeout, response.CachedAt);
+            return Ok(ApiResponse<PaginatedSymbolsResponse>.SuccessResult(
+                response, $"Retrieved {response.Symbols.Count} symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting paginated symbols");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve symbols", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get popular symbols for dropdowns - highly cached
+    /// </summary>
+    [HttpGet("symbols/popular")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "limit", "asset_class" })]
+    [ProducesResponseType(typeof(ApiResponse<List<CompactSymbolDto>>), 200)]
+    public async Task<ActionResult<ApiResponse<List<CompactSymbolDto>>>> GetPopularSymbols(
+        [FromQuery] int limit = 20,
+        [FromQuery] string? assetClass = null)
+    {
+        try
+        {
+            var cacheKey = string.Format(CACHE_KEY_POPULAR_SYMBOLS, $"{limit}_{assetClass}");
+
+            if (_cache.TryGetValue(cacheKey, out List<CompactSymbolDto>? cachedSymbols))
+            {
+                SetCacheHeaders(300);
+                return Ok(ApiResponse<List<CompactSymbolDto>>.SuccessResult(
+                    cachedSymbols!, "Popular symbols retrieved from cache"));
+            }
+
+            _logger.LogInformation("Fetching popular symbols: limit={Limit}, assetClass={AssetClass}",
+                limit, assetClass);
+
+            var symbols = await GetPopularSymbolsFromService(limit, assetClass);
+
+            // Cache for 5 minutes
+            _cache.Set(cacheKey, symbols, TimeSpan.FromMinutes(5));
+
+            SetCacheHeaders(300);
+            return Ok(ApiResponse<List<CompactSymbolDto>>.SuccessResult(
+                symbols, $"Retrieved {symbols.Count} popular symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting popular symbols");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve popular symbols", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get optimized batch market data
+    /// Short cache for real-time data
+    /// </summary>
+    [HttpPost("batch")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<OptimizedBatchMarketDataDto>), 200)]
+    public async Task<ActionResult<ApiResponse<OptimizedBatchMarketDataDto>>> GetOptimizedBatchData(
+        [FromBody, Required] List<Guid> symbolIds,
+        [FromQuery] bool includeExtended = false)
+    {
+        try
+        {
+            if (symbolIds.Count > 100)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResult(
+                    "Maximum 100 symbols allowed per batch request", 400));
+            }
+
+            var startTime = DateTime.UtcNow;
+            var response = await GetBatchMarketDataFromService(symbolIds, includeExtended);
+            var endTime = DateTime.UtcNow;
+
+            response.Metadata.ProcessingTime = endTime - startTime;
+            response.Metadata.RequestTimestamp = startTime;
+            response.Metadata.ResponseTimestamp = endTime;
+            response.CachedAt = endTime;
+
+            // Short cache for real-time data
+            SetCacheHeaders(30);
+
+            return Ok(ApiResponse<OptimizedBatchMarketDataDto>.SuccessResult(
+                response, $"Retrieved data for {response.Metadata.SuccessfulSymbols}/{response.Metadata.RequestedSymbols} symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting optimized batch market data");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve batch market data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get top movers with caching by asset class
+    /// </summary>
+    [HttpGet("top-movers")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "asset_class", "limit" })]
+    [ProducesResponseType(typeof(ApiResponse<OptimizedTopMoversDto>), 200)]
+    public async Task<ActionResult<ApiResponse<OptimizedTopMoversDto>>> GetOptimizedTopMovers(
+        [FromQuery] string? assetClass = null,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            var cacheKey = string.Format(CACHE_KEY_TOP_MOVERS, assetClass ?? "all");
+
+            if (_cache.TryGetValue(cacheKey, out OptimizedTopMoversDto? cachedMovers))
+            {
+                SetCacheHeaders(300, cachedMovers?.LastUpdate);
+                return Ok(ApiResponse<OptimizedTopMoversDto>.SuccessResult(
+                    cachedMovers!, "Top movers retrieved from cache"));
+            }
+
+            _logger.LogInformation("Fetching top movers for asset class: {AssetClass}", assetClass);
+
+            var movers = await GetTopMoversFromService(assetClass, limit);
+
+            // Cache for 5 minutes
+            _cache.Set(cacheKey, movers, TimeSpan.FromMinutes(5));
+
+            SetCacheHeaders(300, movers.LastUpdate);
+            return Ok(ApiResponse<OptimizedTopMoversDto>.SuccessResult(
+                movers, "Top movers retrieved successfully"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting optimized top movers");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve top movers", 500));
+        }
+    }
+
+    /// <summary>
+    /// Symbol search with relevance ranking
+    /// </summary>
+    [HttpGet("symbols/search")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<SymbolSearchResponse>), 200)]
+    public async Task<ActionResult<ApiResponse<SymbolSearchResponse>>> SearchSymbols(
+        [FromQuery, Required] string query,
+        [FromQuery] string? assetClass = null,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResult(
+                    "Search query must be at least 2 characters", 400));
+            }
+
+            var searchStart = DateTime.UtcNow;
+            var response = await SearchSymbolsInService(query, assetClass, limit);
+            var searchEnd = DateTime.UtcNow;
+
+            response.Metadata.SearchTime = searchEnd - searchStart;
+
+            // Cache search results for 2 minutes
+            SetCacheHeaders(120);
+
+            return Ok(ApiResponse<SymbolSearchResponse>.SuccessResult(
+                response, $"Found {response.Results.Count} symbols matching '{query}'"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching symbols for query: {Query}", query);
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to search symbols", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get optimized news feed
+    /// </summary>
+    [HttpGet("news")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 180, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "category", "limit" })]
+    [ProducesResponseType(typeof(ApiResponse<List<OptimizedNewsDto>>), 200)]
+    public async Task<ActionResult<ApiResponse<List<OptimizedNewsDto>>>> GetOptimizedNews(
+        [FromQuery] string? category = null,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            var news = await GetNewsFromService(category, limit);
+
+            SetCacheHeaders(180);
+            return Ok(ApiResponse<List<OptimizedNewsDto>>.SuccessResult(
+                news, $"Retrieved {news.Count} news items"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting optimized news");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve news", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get optimized leaderboard
+    /// </summary>
+    [HttpGet("leaderboard")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any, VaryByQueryKeys = new[] { "period" })]
+    [ProducesResponseType(typeof(ApiResponse<OptimizedLeaderboardDto>), 200)]
+    public async Task<ActionResult<ApiResponse<OptimizedLeaderboardDto>>> GetOptimizedLeaderboard(
+        [FromQuery] string period = "monthly")
+    {
+        try
+        {
+            var leaderboard = await GetLeaderboardFromService(period);
+
+            SetCacheHeaders(3600, leaderboard.LastUpdate);
+            return Ok(ApiResponse<OptimizedLeaderboardDto>.SuccessResult(
+                leaderboard, $"Retrieved leaderboard with {leaderboard.Entries.Count} entries"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting optimized leaderboard");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve leaderboard", 500));
+        }
+    }
+
+    /// <summary>
+    /// Health check endpoint
+    /// </summary>
+    [HttpGet("health")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(object), 200)]
+    public ActionResult GetHealth()
+    {
+        return Ok(new
+        {
+            status = "healthy",
+            timestamp = DateTime.UtcNow,
+            cache_enabled = true,
+            compression_enabled = true
+        });
+    }
+
+    // ============================================
+    // PRIVATE HELPER METHODS
+    // ============================================
+
+    private void SetCacheHeaders(int maxAgeSeconds, DateTime? lastModified = null)
+    {
+        Response.Headers.Add("Cache-Control", $"public, max-age={maxAgeSeconds}");
+
+        if (lastModified.HasValue)
+        {
+            Response.Headers.Add("Last-Modified", lastModified.Value.ToString("R"));
+        }
+
+        // Enable compression
+        Response.Headers.Add("Vary", "Accept-Encoding");
+    }
+
+    private string CreateQueryHash(SymbolQueryRequest request)
+    {
+        var json = JsonSerializer.Serialize(request);
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json))[..16];
+    }
+
+    // ============================================
+    // SERVICE INTEGRATION METHODS
+    // ============================================
+
+    private async Task<OptimizedMarketOverviewDto> GetMarketOverviewFromService()
+    {
+        // This would integrate with your existing service layer
+        // For now, return a placeholder structure
+        return new OptimizedMarketOverviewDto
+        {
+            TotalSymbols = 150,
+            ActiveMarkets = 5,
+            TotalMarketCap = 2500000000m,
+            TotalVolume24h = 150000000m,
+            TopGainer = new TopMoverDto
+            {
+                Ticker = "BTC",
+                DisplayName = "Bitcoin",
+                Price = 45000m,
+                ChangePercent = 5.2m,
+                Volume = 2500000m
+            },
+            TopLoser = new TopMoverDto
+            {
+                Ticker = "ETH",
+                DisplayName = "Ethereum",
+                Price = 3200m,
+                ChangePercent = -2.1m,
+                Volume = 1800000m
+            },
+            MarketStatus = "OPEN",
+            LastUpdate = DateTime.UtcNow,
+            AssetClasses = new List<AssetClassSummaryDto>
+            {
+                new AssetClassSummaryDto
+                {
+                    Code = "CRYPTO",
+                    Name = "Cryptocurrency",
+                    SymbolCount = 50,
+                    AvgChangePercent = 2.1m,
+                    TotalVolume = 80000000m,
+                    GainersCount = 32,
+                    LosersCount = 18
+                }
+            }
+        };
+    }
+
+    private async Task<PaginatedSymbolsResponse> GetSymbolsFromService(SymbolQueryRequest request)
+    {
+        // Integrate with your existing symbol service
+        // This is a placeholder implementation
+        var symbols = new List<CompactSymbolDto>();
+
+        // Add sample data based on request
+        for (int i = 0; i < Math.Min(request.PageSize, 20); i++)
+        {
+            symbols.Add(new CompactSymbolDto
+            {
+                Id = Guid.NewGuid(),
+                Ticker = $"SYM{i + 1}",
+                DisplayName = $"Symbol {i + 1}",
+                AssetClass = request.AssetClass ?? "CRYPTO",
+                Price = 100m + i * 10,
+                ChangePercent = (decimal)(i % 2 == 0 ? 2.5 : -1.2),
+                Volume24h = 1000000m + i * 100000,
+                IsActive = true,
+                IsPopular = i < 10,
+                PricePrecision = 2,
+                Currency = "USD"
+            });
+        }
+
+        return new PaginatedSymbolsResponse
+        {
+            Symbols = symbols,
+            Pagination = new PaginationMetadata
+            {
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalItems = 100,
+                TotalPages = (100 + request.PageSize - 1) / request.PageSize,
+                HasNext = request.Page * request.PageSize < 100,
+                HasPrevious = request.Page > 1
+            }
+        };
+    }
+
+    private async Task<List<CompactSymbolDto>> GetPopularSymbolsFromService(int limit, string? assetClass)
+    {
+        // Placeholder implementation
+        var symbols = new List<CompactSymbolDto>();
+
+        for (int i = 0; i < Math.Min(limit, 20); i++)
+        {
+            symbols.Add(new CompactSymbolDto
+            {
+                Id = Guid.NewGuid(),
+                Ticker = assetClass == "CRYPTO" ? $"BTC{i}" : $"AAPL{i}",
+                DisplayName = assetClass == "CRYPTO" ? $"Bitcoin {i}" : $"Apple {i}",
+                AssetClass = assetClass ?? "CRYPTO",
+                Price = 100m + i * 10,
+                IsPopular = true,
+                IsActive = true
+            });
+        }
+
+        return symbols;
+    }
+
+    private async Task<OptimizedBatchMarketDataDto> GetBatchMarketDataFromService(List<Guid> symbolIds, bool includeExtended)
+    {
+        var marketData = symbolIds.Select(id => new CompactMarketDataDto
+        {
+            SymbolId = id,
+            Ticker = $"SYM{id.ToString()[..4]}",
+            Price = 100m + new Random().Next(1, 1000),
+            PriceChangePercent = (decimal)(new Random().NextDouble() * 10 - 5),
+            Volume = 1000000m + new Random().Next(1, 1000000),
+            LastUpdate = DateTime.UtcNow,
+            IsRealTime = true,
+            DataProvider = "MOCK"
+        }).ToList();
+
+        return new OptimizedBatchMarketDataDto
+        {
+            MarketData = marketData,
+            Metadata = new BatchMetadata
+            {
+                RequestedSymbols = symbolIds.Count,
+                SuccessfulSymbols = marketData.Count,
+                FailedSymbols = 0
+            }
+        };
+    }
+
+    private async Task<OptimizedTopMoversDto> GetTopMoversFromService(string? assetClass, int limit)
+    {
+        // Placeholder implementation
+        return new OptimizedTopMoversDto
+        {
+            Gainers = new List<CompactMarketDataDto>(),
+            Losers = new List<CompactMarketDataDto>(),
+            MostActive = new List<CompactMarketDataDto>(),
+            LastUpdate = DateTime.UtcNow
+        };
+    }
+
+    private async Task<SymbolSearchResponse> SearchSymbolsInService(string query, string? assetClass, int limit)
+    {
+        // Placeholder implementation
+        return new SymbolSearchResponse
+        {
+            Results = new List<SearchResultDto>(),
+            Metadata = new SearchMetadata
+            {
+                Query = query,
+                ResultCount = 0
+            }
+        };
+    }
+
+    private async Task<List<OptimizedNewsDto>> GetNewsFromService(string? category, int limit)
+    {
+        // Placeholder implementation
+        return new List<OptimizedNewsDto>();
+    }
+
+    private async Task<OptimizedLeaderboardDto> GetLeaderboardFromService(string period)
+    {
+        // Placeholder implementation
+        return new OptimizedLeaderboardDto
+        {
+            Entries = new List<LeaderboardEntryDto>(),
+            LastUpdate = DateTime.UtcNow
+        };
+    }
+}

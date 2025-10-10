@@ -2,7 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import ErrorBoundary from '../components/dashboard/ErrorBoundary';
 
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList, AuthStackParamList, MainTabsParamList } from '../types';
@@ -18,6 +19,7 @@ import StrategiesScreen from '../screens/StrategiesScreen';
 import StrategyTestScreen from '../screens/StrategyTestScreen';
 import EnhancedLeaderboardScreen from '../screens/EnhancedLeaderboardScreen';
 import EnhancedProfileScreen from '../screens/EnhancedProfileScreen';
+import TestErrorBoundaryScreen from '../screens/TestErrorBoundary';
 
 const RootStack = createStackNavigator<RootStackParamList>();
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -70,71 +72,127 @@ const AuthNavigator = () => (
   </AuthStack.Navigator>
 );
 
+// Safe component wrapper for tab screens
+const SafeScreen = ({
+  Component,
+  screenName
+}: {
+  Component: React.ComponentType<any>;
+  screenName: string;
+}) => (props: any) => (
+  <ErrorBoundary
+    isolate={true}
+    onError={(error, errorInfo) => {
+      console.error(`${screenName} Screen Error:`, { error, errorInfo });
+      // Log to crash reporting in production
+      if (!__DEV__) {
+        // Add crash reporting here
+      }
+    }}
+    fallback={(error, errorInfo, retry) => (
+      <View style={profileStyles.screenErrorContainer}>
+        <Text style={profileStyles.screenErrorIcon}>📱</Text>
+        <Text style={profileStyles.screenErrorTitle}>{screenName} Hatası</Text>
+        <Text style={profileStyles.screenErrorMessage}>
+          {screenName} ekranı yüklenirken bir sorun oluştu.
+        </Text>
+        <TouchableOpacity
+          style={profileStyles.screenErrorButton}
+          onPress={() => {
+            retry();
+            // Also try to refresh the navigation state
+            props.navigation?.reset({
+              index: 0,
+              routes: [{ name: props.route?.name || 'Dashboard' }],
+            });
+          }}
+        >
+          <Text style={profileStyles.screenErrorButtonText}>🔄 Yeniden Yükle</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  >
+    <Component {...props} />
+  </ErrorBoundary>
+);
+
 const MainTabsNavigator = () => (
-  <MainTabs.Navigator
-    screenOptions={{
-      headerShown: false,
-      tabBarStyle: {
-        backgroundColor: '#667eea',
-        borderTopWidth: 0,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        paddingBottom: 5,
-        height: 60,
-      },
-      tabBarActiveTintColor: 'white',
-      tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
-      tabBarLabelStyle: {
-        fontSize: 12,
-        fontWeight: '600',
-        marginBottom: 3,
-      },
+  <ErrorBoundary
+    onError={(error, errorInfo) => {
+      console.error('Tab Navigation Error:', { error, errorInfo });
+      Alert.alert(
+        'Navigasyon Hatası',
+        'Sekme geçişlerinde bir sorun oluştu. Uygulama yeniden başlatılıyor.',
+        [{ text: 'Tamam' }]
+      );
     }}
   >
-    <MainTabs.Screen
-      name="Dashboard"
-      component={DashboardScreen}
-      options={{
-        tabBarLabel: 'Ana Sayfa',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text>,
+    <MainTabs.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#667eea',
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          paddingBottom: 5,
+          height: 60,
+        },
+        tabBarActiveTintColor: 'white',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginBottom: 3,
+        },
       }}
-    />
-    <MainTabs.Screen
-      name="Portfolio"
-      component={PortfolioScreen}
-      options={{
-        tabBarLabel: 'Portföy',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💼</Text>,
-      }}
-    />
-    <MainTabs.Screen
-      name="Strategies"
-      component={StrategiesScreen}
-      options={{
-        tabBarLabel: 'Stratejiler',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>⚡</Text>,
-      }}
-    />
-    <MainTabs.Screen
-      name="Gamification"
-      component={EnhancedLeaderboardScreen}
-      options={{
-        tabBarLabel: 'Strategist',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
-      }}
-    />
-    <MainTabs.Screen
-      name="Profile"
-      component={EnhancedProfileScreen}
-      options={{
-        tabBarLabel: 'Profil',
-        tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
-      }}
-    />
-  </MainTabs.Navigator>
+    >
+      <MainTabs.Screen
+        name="Dashboard"
+        component={SafeScreen({ Component: DashboardScreen, screenName: 'Ana Sayfa' })}
+        options={{
+          tabBarLabel: 'Ana Sayfa',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text>,
+        }}
+      />
+      <MainTabs.Screen
+        name="Portfolio"
+        component={SafeScreen({ Component: PortfolioScreen, screenName: 'Portföy' })}
+        options={{
+          tabBarLabel: 'Portföy',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💼</Text>,
+        }}
+      />
+      <MainTabs.Screen
+        name="Strategies"
+        component={SafeScreen({ Component: StrategiesScreen, screenName: 'Stratejiler' })}
+        options={{
+          tabBarLabel: 'Stratejiler',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>⚡</Text>,
+        }}
+      />
+      <MainTabs.Screen
+        name="Gamification"
+        component={SafeScreen({ Component: EnhancedLeaderboardScreen, screenName: 'Strategist' })}
+        options={{
+          tabBarLabel: 'Strategist',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
+        }}
+      />
+      <MainTabs.Screen
+        name="Profile"
+        component={SafeScreen({ Component: EnhancedProfileScreen, screenName: 'Profil' })}
+        options={{
+          tabBarLabel: 'Profil',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
+        }}
+      />
+
+    </MainTabs.Navigator>
+  </ErrorBoundary>
 );
 
 const AppNavigation = () => {
@@ -257,6 +315,43 @@ const profileStyles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
     textAlignVertical: 'center',
+  },
+  // Screen Error Styles
+  screenErrorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 30,
+  },
+  screenErrorIcon: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
+  screenErrorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  screenErrorMessage: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  screenErrorButton: {
+    backgroundColor: '#667eea',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  screenErrorButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

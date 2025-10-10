@@ -150,7 +150,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BacktestConfiguration", (string)null);
+                    b.ToTable("BacktestConfiguration");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.BacktestQueue", b =>
@@ -601,6 +601,281 @@ namespace MyTrader.Infrastructure.Migrations
                     b.ToTable("email_verifications", (string)null);
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.HistoricalMarketData", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateOnly>("TradeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("trade_date");
+
+                    b.Property<decimal?>("AdjustedClosePrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("adjusted_close_price");
+
+                    b.Property<string>("BistCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bist_code");
+
+                    b.Property<decimal?>("BollingerLower")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("bollinger_lower");
+
+                    b.Property<decimal?>("BollingerUpper")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("bollinger_upper");
+
+                    b.Property<decimal?>("ClosePrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("close_price");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasDefaultValue("USD")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime>("DataCollectedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_collected_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("DataFlags")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("data_flags");
+
+                    b.Property<int?>("DataQualityScore")
+                        .HasColumnType("integer")
+                        .HasColumnName("data_quality_score");
+
+                    b.Property<string>("DataSource")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("data_source");
+
+                    b.Property<decimal?>("EurTryRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("eur_try_rate");
+
+                    b.Property<JsonDocument>("ExtendedData")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("extended_data");
+
+                    b.Property<decimal?>("FreeFloatMarketCap")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("free_float_market_cap");
+
+                    b.Property<decimal?>("FreeFloatShares")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("free_float_shares");
+
+                    b.Property<decimal?>("HighPrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("high_price");
+
+                    b.Property<decimal?>("IndexChangePercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("index_change_percent");
+
+                    b.Property<decimal?>("IndexValue")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("index_value");
+
+                    b.Property<decimal?>("LowPrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("low_price");
+
+                    b.Property<decimal?>("MACD")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("macd");
+
+                    b.Property<decimal?>("MACDSignal")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("macd_signal");
+
+                    b.Property<decimal?>("MarketCap")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("market_cap");
+
+                    b.Property<string>("MarketCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("market_code");
+
+                    b.Property<decimal?>("OpenPrice")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("open_price");
+
+                    b.Property<decimal?>("PreviousClose")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("previous_close");
+
+                    b.Property<decimal?>("PriceChange")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("price_change");
+
+                    b.Property<decimal?>("PriceChangePercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("price_change_percent");
+
+                    b.Property<decimal?>("RSI")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("rsi");
+
+                    b.Property<decimal?>("SMA20")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("sma_20");
+
+                    b.Property<decimal?>("SMA200")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("sma_200");
+
+                    b.Property<decimal?>("SMA50")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("sma_50");
+
+                    b.Property<decimal?>("SharesOutstanding")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("shares_outstanding");
+
+                    b.Property<JsonDocument>("SourceMetadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("source_metadata");
+
+                    b.Property<int>("SourcePriority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10)
+                        .HasColumnName("source_priority");
+
+                    b.Property<Guid>("SymbolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("symbol_id");
+
+                    b.Property<string>("SymbolTicker")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("symbol_ticker");
+
+                    b.Property<string>("Timeframe")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("DAILY")
+                        .HasColumnName("timeframe");
+
+                    b.Property<DateTime?>("Timestamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.Property<decimal?>("TradingValue")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("trading_value");
+
+                    b.Property<long?>("TransactionCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("transaction_count");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<decimal?>("UsdTryRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("usd_try_rate");
+
+                    b.Property<decimal?>("VWAP")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("vwap");
+
+                    b.Property<decimal?>("Volume")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("volume");
+
+                    b.HasKey("Id", "TradeDate");
+
+                    b.HasIndex("BistCode", "TradeDate")
+                        .HasDatabaseName("idx_historical_market_data_bist")
+                        .HasFilter("bist_code IS NOT NULL");
+
+                    b.HasIndex("SymbolTicker", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("idx_historical_market_data_intraday")
+                        .HasFilter("timestamp IS NOT NULL");
+
+                    b.HasIndex("TradeDate", "Volume")
+                        .IsDescending()
+                        .HasDatabaseName("idx_historical_market_data_volume")
+                        .HasFilter("volume IS NOT NULL");
+
+                    b.HasIndex("SymbolId", "TradeDate", "Timeframe")
+                        .HasDatabaseName("idx_historical_market_data_symbol_date");
+
+                    b.HasIndex("SymbolTicker", "Timeframe", "TradeDate")
+                        .IsUnique()
+                        .HasDatabaseName("idx_historical_market_data_primary");
+
+                    b.HasIndex("TradeDate", "DataSource", "SourcePriority")
+                        .HasDatabaseName("idx_historical_market_data_date_source");
+
+                    b.HasIndex("TradeDate", "RSI", "MACD")
+                        .HasDatabaseName("idx_historical_market_data_technical")
+                        .HasFilter("rsi IS NOT NULL OR macd IS NOT NULL");
+
+                    b.HasIndex("SymbolTicker", "TradeDate", "Timeframe", "DataSource", "SourcePriority")
+                        .HasDatabaseName("idx_historical_market_data_dedup");
+
+                    b.ToTable("historical_market_data", (string)null);
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.IndicatorConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1029,6 +1304,9 @@ namespace MyTrader.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AssetClass")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Close")
                         .HasPrecision(18, 8)
                         .HasColumnType("numeric(18,8)");
@@ -1068,6 +1346,237 @@ namespace MyTrader.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("market_data", (string)null);
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.MarketDataSummary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
+
+                    b.Property<decimal?>("AnnualizedVolatility")
+                        .HasPrecision(10, 6)
+                        .HasColumnType("decimal(10,6)")
+                        .HasColumnName("annualized_volatility");
+
+                    b.Property<decimal?>("AvgDailyReturnPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("avg_daily_return_percent");
+
+                    b.Property<decimal?>("AvgDailyTradingValue")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("avg_daily_trading_value");
+
+                    b.Property<long?>("AvgDailyTransactions")
+                        .HasColumnType("bigint")
+                        .HasColumnName("avg_daily_transactions");
+
+                    b.Property<decimal?>("AvgDailyVolume")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("avg_daily_volume");
+
+                    b.Property<decimal?>("AvgMACD")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("avg_macd");
+
+                    b.Property<decimal?>("AvgRSI")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("avg_rsi");
+
+                    b.Property<decimal?>("Beta")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("beta");
+
+                    b.Property<DateTime>("CalculatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("calculated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<decimal?>("DaysAboveSMA20Percent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("days_above_sma20_percent");
+
+                    b.Property<decimal?>("DaysAboveSMA50Percent")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)")
+                        .HasColumnName("days_above_sma50_percent");
+
+                    b.Property<decimal?>("MarketCorrelation")
+                        .HasPrecision(10, 6)
+                        .HasColumnType("decimal(10,6)")
+                        .HasColumnName("market_correlation");
+
+                    b.Property<decimal?>("MaxDrawdownPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("max_drawdown_percent");
+
+                    b.Property<int?>("PerformancePercentile")
+                        .HasColumnType("integer")
+                        .HasColumnName("performance_percentile");
+
+                    b.Property<decimal?>("PeriodClose")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("period_close");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("period_end");
+
+                    b.Property<decimal?>("PeriodHigh")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("period_high");
+
+                    b.Property<decimal?>("PeriodLow")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("period_low");
+
+                    b.Property<decimal?>("PeriodOpen")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("period_open");
+
+                    b.Property<string>("PeriodType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("period_type");
+
+                    b.Property<decimal?>("PeriodVWAP")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("period_vwap");
+
+                    b.Property<int>("QualityScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(100)
+                        .HasColumnName("quality_score");
+
+                    b.Property<decimal?>("ResistanceLevel")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("resistance_level");
+
+                    b.Property<decimal?>("SharpeRatio")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("sharpe_ratio");
+
+                    b.Property<decimal?>("SupportLevel")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("support_level");
+
+                    b.Property<Guid>("SymbolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("symbol_id");
+
+                    b.Property<string>("SymbolTicker")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("symbol_ticker");
+
+                    b.Property<decimal?>("TotalReturnPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("total_return_percent");
+
+                    b.Property<decimal?>("TotalTradingValue")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("total_trading_value");
+
+                    b.Property<long?>("TotalTransactions")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_transactions");
+
+                    b.Property<decimal?>("TotalVolume")
+                        .HasPrecision(38, 18)
+                        .HasColumnType("decimal(38,18)")
+                        .HasColumnName("total_volume");
+
+                    b.Property<int>("TradingDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("trading_days");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<decimal?>("Volatility")
+                        .HasPrecision(10, 6)
+                        .HasColumnType("decimal(10,6)")
+                        .HasColumnName("volatility");
+
+                    b.Property<int?>("VolumePercentile")
+                        .HasColumnType("integer")
+                        .HasColumnName("volume_percentile");
+
+                    b.Property<decimal?>("VsMarketPercent")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("vs_market_percent");
+
+                    b.Property<decimal?>("Week52High")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("week_52_high");
+
+                    b.Property<decimal?>("Week52Low")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("week_52_low");
+
+                    b.HasKey("Id", "PeriodStart");
+
+                    b.HasIndex("SymbolId");
+
+                    b.HasIndex("PeriodType", "PeriodStart", "AvgDailyVolume")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("idx_market_data_summaries_volume");
+
+                    b.HasIndex("PeriodType", "PeriodStart", "TotalReturnPercent")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("idx_market_data_summaries_performance");
+
+                    b.HasIndex("PeriodType", "QualityScore", "PeriodStart")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("idx_market_data_summaries_quality")
+                        .HasFilter("quality_score >= 80");
+
+                    b.HasIndex("SymbolTicker", "PeriodType", "PeriodStart")
+                        .IsUnique()
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("idx_market_data_summaries_primary");
+
+                    b.ToTable("market_data_summaries", (string)null);
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.NotificationHistory", b =>
@@ -1153,7 +1662,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("notification_history", (string)null);
+                    b.ToTable("notification_history");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.PasswordReset", b =>
@@ -1191,8 +1700,8 @@ namespace MyTrader.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserAgent")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -1351,7 +1860,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("price_alerts", (string)null);
+                    b.ToTable("price_alerts");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.Signal", b =>
@@ -1577,7 +2086,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("strategy_performance", (string)null);
+                    b.ToTable("strategy_performance");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.Symbol", b =>
@@ -1752,7 +2261,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("AssetClass", "IsActive", "IsPopular");
 
-                    b.ToTable("symbols", (string)null);
+                    b.ToTable("symbols");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.TempRegistration", b =>
@@ -2272,7 +2781,75 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("user_achievements", (string)null);
+                    b.ToTable("user_achievements");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.UserDashboardPreferences", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CustomAlias")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("custom_alias");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_pinned");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_visible");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("SymbolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("symbol_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("WidgetConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("widget_config");
+
+                    b.Property<string>("WidgetType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("widget_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SymbolId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("user_dashboard_preferences");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.UserDevice", b =>
@@ -2326,7 +2903,7 @@ namespace MyTrader.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserDevice", (string)null);
+                    b.ToTable("UserDevice");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.UserNotificationPreferences", b =>
@@ -2807,6 +3384,17 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("Market");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.HistoricalMarketData", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.Symbol", "Symbol")
+                        .WithMany()
+                        .HasForeignKey("SymbolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Symbol");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.IndicatorConfig", b =>
                 {
                     b.HasOne("MyTrader.Core.Models.User", "User")
@@ -2838,6 +3426,17 @@ namespace MyTrader.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AssetClass");
+                });
+
+            modelBuilder.Entity("MyTrader.Core.Models.MarketDataSummary", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.Symbol", "Symbol")
+                        .WithMany()
+                        .HasForeignKey("SymbolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Symbol");
                 });
 
             modelBuilder.Entity("MyTrader.Core.Models.NotificationHistory", b =>
@@ -3045,6 +3644,25 @@ namespace MyTrader.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MyTrader.Core.Models.UserDashboardPreferences", b =>
+                {
+                    b.HasOne("MyTrader.Core.Models.Symbol", "Symbol")
+                        .WithMany()
+                        .HasForeignKey("SymbolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyTrader.Core.Models.User", "User")
+                        .WithMany("DashboardPreferences")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Symbol");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MyTrader.Core.Models.UserDevice", b =>
                 {
                     b.HasOne("MyTrader.Core.Models.User", "User")
@@ -3129,6 +3747,8 @@ namespace MyTrader.Infrastructure.Migrations
             modelBuilder.Entity("MyTrader.Core.Models.User", b =>
                 {
                     b.Navigation("BacktestResults");
+
+                    b.Navigation("DashboardPreferences");
 
                     b.Navigation("IndicatorConfigs");
 

@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Market Data Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 3px; border-left: 4px solid; }
+        .success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0; }
+        .metric-card { background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        .metric-label { font-size: 14px; color: #6c757d; margin-top: 5px; }
+        .data-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .data-table th, .data-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .data-table th { background: #f8f9fa; font-weight: bold; }
+        .price-positive { color: #28a745; font-weight: bold; }
+        .price-negative { color: #dc3545; font-weight: bold; }
+        .price-neutral { color: #6c757d; }
+        .live-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+        .live-indicator.active { background: #28a745; animation: pulse 2s infinite; }
+        .live-indicator.inactive { background: #dc3545; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        button { margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .connection-status { padding: 10px; border-radius: 4px; margin: 10px 0; font-weight: bold; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .connecting { background: #fff3cd; color: #856404; }
+        pre { background: #f1f3f4; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        .control-panel { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .asset-filter { display: inline-block; margin: 5px; }
+        .asset-filter input[type="checkbox"] { margin-right: 5px; }
+        .update-frequency { background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .latency-indicator { font-size: 12px; color: #6c757d; }
+        .latency-good { color: #28a745; }
+        .latency-warning { color: #ffc107; }
+        .latency-bad { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 Real-time Market Data Integration Test</h1>
+        <p>Comprehensive testing of live market data streams, API integration, and data accuracy</p>
+
+        <!-- Connection Status -->
+        <div class="test-section">
+            <h2>🔌 Real-time Connection Status</h2>
+            <div class="grid">
+                <div class="metric-card">
+                    <div id="wsConnectionStatus" class="connection-status disconnected">
+                        <span class="live-indicator inactive" id="wsIndicator"></span>
+                        WebSocket: Disconnected
+                    </div>
+                    <button onclick="toggleWebSocketConnection()" id="wsToggle">Connect WebSocket</button>
+                </div>
+                <div class="metric-card">
+                    <div id="apiConnectionStatus" class="connection-status disconnected">
+                        <span class="live-indicator inactive" id="apiIndicator"></span>
+                        REST API: Not Tested
+                    </div>
+                    <button onclick="testApiConnection()">Test API Connection</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div class="test-section">
+            <h2>📊 Real-time Data Metrics</h2>
+            <div class="grid">
+                <div class="metric-card">
+                    <div id="messageCount" class="metric-value">0</div>
+                    <div class="metric-label">Messages Received</div>
+                </div>
+                <div class="metric-card">
+                    <div id="dataLatency" class="metric-value latency-indicator">0ms</div>
+                    <div class="metric-label">Average Latency</div>
+                </div>
+                <div class="metric-card">
+                    <div id="updateRate" class="metric-value">0</div>
+                    <div class="metric-label">Updates/Minute</div>
+                </div>
+                <div class="metric-card">
+                    <div id="errorRate" class="metric-value">0%</div>
+                    <div class="metric-label">Error Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div id="uniqueSymbols" class="metric-value">0</div>
+                    <div class="metric-label">Active Symbols</div>
+                </div>
+                <div class="metric-card">
+                    <div id="dataFreshness" class="metric-value">0s</div>
+                    <div class="metric-label">Last Update</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Source Controls -->
+        <div class="test-section">
+            <h2>🎛️ Data Source Controls</h2>
+            <div class="control-panel">
+                <h4>Asset Class Subscriptions:</h4>
+                <div class="asset-filter">
+                    <input type="checkbox" id="cryptoFilter" checked onchange="updateSubscriptions()">
+                    <label for="cryptoFilter">Crypto (BTC, ETH, ADA, etc.)</label>
+                </div>
+                <div class="asset-filter">
+                    <input type="checkbox" id="stocksFilter" onchange="updateSubscriptions()">
+                    <label for="stocksFilter">Stocks (AAPL, GOOGL, TSLA, etc.)</label>
+                </div>
+                <div class="asset-filter">
+                    <input type="checkbox" id="forexFilter" onchange="updateSubscriptions()">
+                    <label for="forexFilter">Forex (EUR/USD, GBP/USD, etc.)</label>
+                </div>
+                <div class="asset-filter">
+                    <input type="checkbox" id="bistFilter" onchange="updateSubscriptions()">
+                    <label for="bistFilter">BIST (Turkish Stocks)</label>
+                </div>
+            </div>
+            <div style="margin: 10px 0;">
+                <button onclick="subscribeToAll()">📡 Subscribe to All</button>
+                <button onclick="unsubscribeFromAll()">📴 Unsubscribe All</button>
+                <button onclick="testDataAccuracy()">🎯 Test Data Accuracy</button>
+                <button onclick="benchmarkPerformance()">⚡ Benchmark Performance</button>
+            </div>
+        </div>
+
+        <!-- Live Market Data Display -->
+        <div class="test-section">
+            <h2>📈 Live Market Data Stream</h2>
+            <div class="update-frequency">
+                <strong>Update Frequency:</strong> <span id="updateFrequency">Waiting for data...</span>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table class="data-table" id="marketDataTable">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Price</th>
+                            <th>Change</th>
+                            <th>Change %</th>
+                            <th>Volume</th>
+                            <th>Last Update</th>
+                            <th>Latency</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="marketDataBody">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: #6c757d;">
+                                No market data received yet. Connect to WebSocket to start receiving updates.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Data Quality Tests -->
+        <div class="test-section">
+            <h2>🔍 Data Quality & Validation Tests</h2>
+            <div class="grid">
+                <div class="metric-card">
+                    <button onclick="testDataConsistency()">📊 Data Consistency Test</button>
+                    <div id="consistencyResult" class="metric-label">Not tested</div>
+                </div>
+                <div class="metric-card">
+                    <button onclick="testPriceValidation()">💰 Price Validation Test</button>
+                    <div id="priceValidationResult" class="metric-label">Not tested</div>
+                </div>
+                <div class="metric-card">
+                    <button onclick="testTimestampAccuracy()">⏰ Timestamp Accuracy Test</button>
+                    <div id="timestampResult" class="metric-label">Not tested</div>
+                </div>
+                <div class="metric-card">
+                    <button onclick="testMissingDataDetection()">🚨 Missing Data Detection</button>
+                    <div id="missingDataResult" class="metric-label">Not tested</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Integration Tests -->
+        <div class="test-section">
+            <h2>🔄 Market Data Integration Tests</h2>
+            <button onclick="runFullMarketDataTest()">🎯 Run Full Integration Test</button>
+            <button onclick="testConcurrentConnections()">👥 Test Concurrent Connections</button>
+            <button onclick="testConnectionResilience()">🛡️ Test Connection Resilience</button>
+            <button onclick="testDataBackfill()">⏮️ Test Data Backfill</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+
+        <!-- Test Results -->
+        <div class="test-section">
+            <h2>📋 Test Results</h2>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:5002';
+        const WEBSOCKET_URL = `${API_BASE}/hubs/marketdata`;
+
+        // Global state
+        let wsConnection = null;
+        let marketData = new Map();
+        let metrics = {
+            messageCount: 0,
+            totalLatency: 0,
+            errorCount: 0,
+            updateCounts: [],
+            uniqueSymbols: new Set(),
+            lastUpdateTime: null
+        };
+        let subscriptions = new Set(['CRYPTO']);
+
+        // DOM elements
+        const resultsDiv = document.getElementById('results');
+        const marketDataBody = document.getElementById('marketDataBody');
+
+        function addResult(title, type, message, details = '') {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `
+                <strong>${title}</strong>
+                <div>${message}</div>
+                ${details ? `<pre>${details}</pre>` : ''}
+                <small>⏰ ${new Date().toLocaleTimeString()}</small>
+            `;
+            resultsDiv.appendChild(resultDiv);
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateMetrics() {
+            document.getElementById('messageCount').textContent = metrics.messageCount;
+
+            const avgLatency = metrics.messageCount > 0 ?
+                Math.round(metrics.totalLatency / metrics.messageCount) : 0;
+            const latencyElement = document.getElementById('dataLatency');
+            latencyElement.textContent = avgLatency + 'ms';
+            latencyElement.className = `metric-value latency-indicator ${
+                avgLatency < 100 ? 'latency-good' :
+                avgLatency < 500 ? 'latency-warning' : 'latency-bad'
+            }`;
+
+            const updatesPerMinute = metrics.updateCounts.length;
+            document.getElementById('updateRate').textContent = updatesPerMinute;
+
+            const errorRate = metrics.messageCount > 0 ?
+                ((metrics.errorCount / metrics.messageCount) * 100).toFixed(1) : '0.0';
+            document.getElementById('errorRate').textContent = errorRate + '%';
+
+            document.getElementById('uniqueSymbols').textContent = metrics.uniqueSymbols.size;
+
+            const timeSinceUpdate = metrics.lastUpdateTime ?
+                Math.floor((Date.now() - metrics.lastUpdateTime) / 1000) : 0;
+            document.getElementById('dataFreshness').textContent = timeSinceUpdate + 's';
+        }
+
+        function updateConnectionStatus(type, status, connected) {
+            const statusDiv = document.getElementById(type + 'ConnectionStatus');
+            const indicator = document.getElementById(type.charAt(0).toLowerCase() + type.slice(1) + 'Indicator');
+
+            statusDiv.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            statusDiv.innerHTML = `<span class="live-indicator ${connected ? 'active' : 'inactive'}"></span>${status}`;
+
+            if (indicator) {
+                indicator.className = `live-indicator ${connected ? 'active' : 'inactive'}`;
+            }
+        }
+
+        async function toggleWebSocketConnection() {
+            const button = document.getElementById('wsToggle');
+
+            if (wsConnection && wsConnection.state === 'Connected') {
+                await disconnectWebSocket();
+            } else {
+                await connectWebSocket();
+            }
+        }
+
+        async function connectWebSocket() {
+            try {
+                updateConnectionStatus('ws', 'WebSocket: Connecting...', false);
+                addResult('WebSocket Connection', 'info', 'Attempting to connect to market data WebSocket...');
+
+                wsConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(WEBSOCKET_URL)
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Set up event handlers
+                wsConnection.on('PriceUpdate', handlePriceUpdate);
+                wsConnection.on('ReceivePriceUpdate', handlePriceUpdate); // Legacy support
+
+                wsConnection.onclose((error) => {
+                    updateConnectionStatus('ws', 'WebSocket: Disconnected', false);
+                    document.getElementById('wsToggle').textContent = 'Connect WebSocket';
+                    if (error) {
+                        addResult('WebSocket Connection', 'error', 'Connection closed with error', error.toString());
+                    }
+                });
+
+                wsConnection.onreconnecting(() => {
+                    updateConnectionStatus('ws', 'WebSocket: Reconnecting...', false);
+                    addResult('WebSocket Connection', 'warning', 'WebSocket reconnecting...');
+                });
+
+                wsConnection.onreconnected((connectionId) => {
+                    updateConnectionStatus('ws', 'WebSocket: Connected', true);
+                    addResult('WebSocket Connection', 'success', `WebSocket reconnected: ${connectionId}`);
+                    // Resubscribe to previous subscriptions
+                    updateSubscriptions();
+                });
+
+                await wsConnection.start();
+
+                updateConnectionStatus('ws', 'WebSocket: Connected', true);
+                document.getElementById('wsToggle').textContent = 'Disconnect WebSocket';
+                addResult('WebSocket Connection', 'success', 'Successfully connected to market data WebSocket');
+
+                // Subscribe to default asset classes
+                await updateSubscriptions();
+
+            } catch (error) {
+                updateConnectionStatus('ws', 'WebSocket: Connection Failed', false);
+                addResult('WebSocket Connection', 'error', 'Failed to connect to WebSocket', error.toString());
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function disconnectWebSocket() {
+            if (wsConnection) {
+                try {
+                    await wsConnection.stop();
+                    wsConnection = null;
+                    updateConnectionStatus('ws', 'WebSocket: Disconnected', false);
+                    document.getElementById('wsToggle').textContent = 'Connect WebSocket';
+                    addResult('WebSocket Connection', 'info', 'WebSocket disconnected');
+                } catch (error) {
+                    addResult('WebSocket Connection', 'error', 'Error disconnecting WebSocket', error.toString());
+                }
+            }
+        }
+
+        function handlePriceUpdate(data) {
+            try {
+                const receiveTime = Date.now();
+                metrics.messageCount++;
+                metrics.lastUpdateTime = receiveTime;
+
+                // Normalize data format (handle both old and new formats)
+                const symbol = data.symbol || data.Symbol || 'UNKNOWN';
+                const price = parseFloat(data.price || data.Price || 0);
+                const change = parseFloat(data.change || data.Change24h || 0);
+                const changePercent = parseFloat(data.changePercent || data.Change24h || 0);
+                const volume = parseFloat(data.volume || data.Volume || 0);
+                const timestamp = data.timestamp || data.Timestamp || new Date().toISOString();
+
+                // Calculate latency if timestamp is available
+                let latency = 0;
+                if (timestamp) {
+                    try {
+                        const dataTime = new Date(timestamp).getTime();
+                        latency = receiveTime - dataTime;
+                        metrics.totalLatency += Math.abs(latency);
+                    } catch (e) {
+                        // Invalid timestamp, use current time
+                        latency = 0;
+                    }
+                }
+
+                // Validate data
+                if (!symbol || symbol === 'UNKNOWN' || !Number.isFinite(price) || price <= 0) {
+                    metrics.errorCount++;
+                    addResult('Data Validation Error', 'error',
+                             `Invalid data received for ${symbol}`, JSON.stringify(data, null, 2));
+                    updateMetrics();
+                    return;
+                }
+
+                // Store market data
+                marketData.set(symbol, {
+                    symbol,
+                    price,
+                    change,
+                    changePercent,
+                    volume,
+                    timestamp,
+                    latency,
+                    receiveTime,
+                    source: data.source || data.Source || 'live'
+                });
+
+                metrics.uniqueSymbols.add(symbol);
+                updateMarketDataDisplay();
+                updateMetrics();
+
+                // Log first few updates for debugging
+                if (metrics.messageCount <= 5) {
+                    addResult(`Price Update #${metrics.messageCount}`, 'success',
+                             `${symbol}: $${price.toFixed(2)} (${changePercent.toFixed(2)}%)`,
+                             JSON.stringify(data, null, 2));
+                }
+
+            } catch (error) {
+                metrics.errorCount++;
+                addResult('Price Update Error', 'error', 'Error processing price update', error.toString());
+                updateMetrics();
+            }
+        }
+
+        function updateMarketDataDisplay() {
+            if (marketData.size === 0) {
+                marketDataBody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: #6c757d;">
+                            No market data received yet.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const sortedData = Array.from(marketData.values())
+                .sort((a, b) => b.receiveTime - a.receiveTime)
+                .slice(0, 20); // Show only latest 20
+
+            marketDataBody.innerHTML = sortedData.map(item => {
+                const changeClass = item.change > 0 ? 'price-positive' :
+                                  item.change < 0 ? 'price-negative' : 'price-neutral';
+
+                const latencyClass = item.latency < 100 ? 'latency-good' :
+                                   item.latency < 500 ? 'latency-warning' : 'latency-bad';
+
+                return `
+                    <tr>
+                        <td><strong>${item.symbol}</strong></td>
+                        <td>$${item.price.toFixed(2)}</td>
+                        <td class="${changeClass}">${item.change.toFixed(2)}</td>
+                        <td class="${changeClass}">${item.changePercent.toFixed(2)}%</td>
+                        <td>${item.volume.toLocaleString()}</td>
+                        <td>${new Date(item.timestamp).toLocaleTimeString()}</td>
+                        <td class="${latencyClass}">${Math.abs(item.latency)}ms</td>
+                        <td>${item.source}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Update frequency display
+            const updates = Array.from(marketData.values())
+                .filter(item => Date.now() - item.receiveTime < 60000); // Last minute
+            document.getElementById('updateFrequency').textContent =
+                `${updates.length} updates in the last minute`;
+        }
+
+        async function updateSubscriptions() {
+            if (!wsConnection || wsConnection.state !== 'Connected') {
+                addResult('Subscription Update', 'warning', 'WebSocket not connected');
+                return;
+            }
+
+            try {
+                const crypto = document.getElementById('cryptoFilter').checked;
+                const stocks = document.getElementById('stocksFilter').checked;
+                const forex = document.getElementById('forexFilter').checked;
+                const bist = document.getElementById('bistFilter').checked;
+
+                subscriptions.clear();
+
+                if (crypto) {
+                    subscriptions.add('CRYPTO');
+                    await wsConnection.invoke('SubscribeToPriceUpdates', 'CRYPTO',
+                        ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'AVAXUSDT', 'LINKUSDT', 'UNIUSDT', 'DOTUSDT', 'MATICUSDT']);
+                }
+
+                if (stocks) {
+                    subscriptions.add('STOCKS');
+                    await wsConnection.invoke('SubscribeToPriceUpdates', 'STOCKS',
+                        ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA', 'META']);
+                }
+
+                if (forex) {
+                    subscriptions.add('FOREX');
+                    await wsConnection.invoke('SubscribeToPriceUpdates', 'FOREX',
+                        ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD']);
+                }
+
+                if (bist) {
+                    subscriptions.add('BIST');
+                    await wsConnection.invoke('SubscribeToPriceUpdates', 'BIST',
+                        ['THYAO', 'AKBNK', 'GARAN', 'ISCTR', 'KOZAL']);
+                }
+
+                const subscribedAssets = Array.from(subscriptions).join(', ');
+                addResult('Subscription Update', 'success',
+                         `Subscribed to: ${subscribedAssets || 'None'}`);
+
+            } catch (error) {
+                addResult('Subscription Update', 'error', 'Failed to update subscriptions', error.toString());
+            }
+        }
+
+        async function testApiConnection() {
+            try {
+                updateConnectionStatus('api', 'REST API: Testing...', false);
+                addResult('API Connection Test', 'info', 'Testing REST API endpoints...');
+
+                // Test health endpoint
+                const healthResponse = await fetch(`${API_BASE}/health`);
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed: ${healthResponse.status}`);
+                }
+
+                // Test symbols endpoint
+                const symbolsResponse = await fetch(`${API_BASE}/api/symbols`);
+                if (!symbolsResponse.ok) {
+                    throw new Error(`Symbols endpoint failed: ${symbolsResponse.status}`);
+                }
+
+                const symbolsData = await symbolsResponse.json();
+                const symbolCount = Object.keys(symbolsData.symbols || {}).length;
+
+                updateConnectionStatus('api', 'REST API: Connected', true);
+                addResult('API Connection Test', 'success',
+                         `REST API is working. Found ${symbolCount} symbols available.`);
+
+            } catch (error) {
+                updateConnectionStatus('api', 'REST API: Failed', false);
+                addResult('API Connection Test', 'error', 'REST API connection failed', error.toString());
+            }
+        }
+
+        async function testDataConsistency() {
+            addResult('Data Consistency Test', 'info', 'Testing data consistency between WebSocket and REST API...');
+
+            try {
+                // Get data from REST API
+                const apiResponse = await fetch(`${API_BASE}/api/symbols`);
+                const apiData = await apiResponse.json();
+
+                // Compare with WebSocket data
+                const wsSymbols = Array.from(metrics.uniqueSymbols);
+                const apiSymbols = Object.keys(apiData.symbols || {});
+
+                const commonSymbols = wsSymbols.filter(symbol =>
+                    apiSymbols.some(apiSymbol => apiData.symbols[apiSymbol].symbol === symbol)
+                );
+
+                const consistencyRate = wsSymbols.length > 0 ?
+                    (commonSymbols.length / wsSymbols.length) * 100 : 0;
+
+                document.getElementById('consistencyResult').textContent = `${consistencyRate.toFixed(1)}% consistent`;
+
+                if (consistencyRate >= 80) {
+                    addResult('Data Consistency Test', 'success',
+                             `High consistency: ${consistencyRate.toFixed(1)}% of WebSocket symbols match API`);
+                } else if (consistencyRate >= 50) {
+                    addResult('Data Consistency Test', 'warning',
+                             `Moderate consistency: ${consistencyRate.toFixed(1)}% of WebSocket symbols match API`);
+                } else {
+                    addResult('Data Consistency Test', 'error',
+                             `Low consistency: ${consistencyRate.toFixed(1)}% of WebSocket symbols match API`);
+                }
+
+            } catch (error) {
+                document.getElementById('consistencyResult').textContent = 'Test failed';
+                addResult('Data Consistency Test', 'error', 'Consistency test failed', error.toString());
+            }
+        }
+
+        function testPriceValidation() {
+            addResult('Price Validation Test', 'info', 'Validating price data quality...');
+
+            const prices = Array.from(marketData.values());
+            if (prices.length === 0) {
+                document.getElementById('priceValidationResult').textContent = 'No data to validate';
+                addResult('Price Validation Test', 'warning', 'No price data available for validation');
+                return;
+            }
+
+            let validPrices = 0;
+            let invalidPrices = 0;
+            let suspiciousPrices = 0;
+
+            prices.forEach(item => {
+                if (Number.isFinite(item.price) && item.price > 0) {
+                    validPrices++;
+
+                    // Check for suspicious price movements (>50% change)
+                    if (Math.abs(item.changePercent) > 50) {
+                        suspiciousPrices++;
+                    }
+                } else {
+                    invalidPrices++;
+                }
+            });
+
+            const validPercentage = (validPrices / prices.length) * 100;
+            const suspiciousPercentage = (suspiciousPrices / prices.length) * 100;
+
+            document.getElementById('priceValidationResult').textContent =
+                `${validPercentage.toFixed(1)}% valid, ${suspiciousPercentage.toFixed(1)}% suspicious`;
+
+            if (validPercentage >= 95 && suspiciousPercentage < 5) {
+                addResult('Price Validation Test', 'success',
+                         `Excellent data quality: ${validPercentage.toFixed(1)}% valid prices`);
+            } else if (validPercentage >= 90) {
+                addResult('Price Validation Test', 'warning',
+                         `Good data quality: ${validPercentage.toFixed(1)}% valid, ${suspiciousPercentage.toFixed(1)}% suspicious`);
+            } else {
+                addResult('Price Validation Test', 'error',
+                         `Poor data quality: ${validPercentage.toFixed(1)}% valid, ${invalidPrices} invalid prices`);
+            }
+        }
+
+        function testTimestampAccuracy() {
+            addResult('Timestamp Accuracy Test', 'info', 'Testing timestamp accuracy and freshness...');
+
+            const data = Array.from(marketData.values());
+            if (data.length === 0) {
+                document.getElementById('timestampResult').textContent = 'No data to test';
+                addResult('Timestamp Accuracy Test', 'warning', 'No timestamp data available');
+                return;
+            }
+
+            const now = Date.now();
+            let freshData = 0;
+            let staleData = 0;
+            let totalLatency = 0;
+
+            data.forEach(item => {
+                const dataAge = now - new Date(item.timestamp).getTime();
+                const latency = Math.abs(item.latency);
+
+                totalLatency += latency;
+
+                if (dataAge < 60000) { // Less than 1 minute old
+                    freshData++;
+                } else {
+                    staleData++;
+                }
+            });
+
+            const freshnessPercentage = (freshData / data.length) * 100;
+            const avgLatency = totalLatency / data.length;
+
+            document.getElementById('timestampResult').textContent =
+                `${freshnessPercentage.toFixed(1)}% fresh, ${avgLatency.toFixed(0)}ms avg latency`;
+
+            if (freshnessPercentage >= 90 && avgLatency < 200) {
+                addResult('Timestamp Accuracy Test', 'success',
+                         `Excellent timestamp accuracy: ${freshnessPercentage.toFixed(1)}% fresh data`);
+            } else if (freshnessPercentage >= 70) {
+                addResult('Timestamp Accuracy Test', 'warning',
+                         `Acceptable timestamp accuracy: ${freshnessPercentage.toFixed(1)}% fresh data`);
+            } else {
+                addResult('Timestamp Accuracy Test', 'error',
+                         `Poor timestamp accuracy: ${freshnessPercentage.toFixed(1)}% fresh data`);
+            }
+        }
+
+        function testMissingDataDetection() {
+            addResult('Missing Data Detection', 'info', 'Checking for missing or incomplete data...');
+
+            const data = Array.from(marketData.values());
+            if (data.length === 0) {
+                document.getElementById('missingDataResult').textContent = 'No data to check';
+                addResult('Missing Data Detection', 'warning', 'No data available for analysis');
+                return;
+            }
+
+            let completeRecords = 0;
+            let incompleteRecords = 0;
+            let missingFields = [];
+
+            data.forEach(item => {
+                const requiredFields = ['symbol', 'price', 'timestamp'];
+                const missingInRecord = requiredFields.filter(field =>
+                    !item[field] || (typeof item[field] === 'number' && !Number.isFinite(item[field]))
+                );
+
+                if (missingInRecord.length === 0) {
+                    completeRecords++;
+                } else {
+                    incompleteRecords++;
+                    missingFields.push(...missingInRecord);
+                }
+            });
+
+            const completenessPercentage = (completeRecords / data.length) * 100;
+            document.getElementById('missingDataResult').textContent =
+                `${completenessPercentage.toFixed(1)}% complete`;
+
+            if (completenessPercentage >= 95) {
+                addResult('Missing Data Detection', 'success',
+                         `Excellent data completeness: ${completenessPercentage.toFixed(1)}% complete records`);
+            } else if (completenessPercentage >= 85) {
+                addResult('Missing Data Detection', 'warning',
+                         `Good data completeness: ${completenessPercentage.toFixed(1)}% complete records`);
+            } else {
+                const uniqueMissingFields = [...new Set(missingFields)];
+                addResult('Missing Data Detection', 'error',
+                         `Poor data completeness: ${completenessPercentage.toFixed(1)}% complete records`,
+                         `Missing fields: ${uniqueMissingFields.join(', ')}`);
+            }
+        }
+
+        async function subscribeToAll() {
+            document.getElementById('cryptoFilter').checked = true;
+            document.getElementById('stocksFilter').checked = true;
+            document.getElementById('forexFilter').checked = true;
+            document.getElementById('bistFilter').checked = true;
+            await updateSubscriptions();
+        }
+
+        async function unsubscribeFromAll() {
+            document.getElementById('cryptoFilter').checked = false;
+            document.getElementById('stocksFilter').checked = false;
+            document.getElementById('forexFilter').checked = false;
+            document.getElementById('bistFilter').checked = false;
+            await updateSubscriptions();
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+            marketData.clear();
+            metrics = {
+                messageCount: 0,
+                totalLatency: 0,
+                errorCount: 0,
+                updateCounts: [],
+                uniqueSymbols: new Set(),
+                lastUpdateTime: null
+            };
+            updateMetrics();
+            updateMarketDataDisplay();
+        }
+
+        async function runFullMarketDataTest() {
+            addResult('Full Market Data Test', 'info', 'Starting comprehensive market data integration test...');
+
+            // Clear previous results
+            clearResults();
+
+            // Test API connection
+            await testApiConnection();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Connect WebSocket
+            if (!wsConnection || wsConnection.state !== 'Connected') {
+                await connectWebSocket();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            // Subscribe to all asset classes
+            await subscribeToAll();
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            // Run data quality tests
+            testPriceValidation();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            testTimestampAccuracy();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            testMissingDataDetection();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await testDataConsistency();
+
+            addResult('Full Market Data Test', 'success', '🎉 Comprehensive market data test completed!');
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            addResult('System Check', 'info', 'Market data integration test page loaded. Ready to test real-time data streams.');
+            updateMetrics();
+
+            // Update metrics every second
+            setInterval(updateMetrics, 1000);
+
+            // Track updates per minute
+            setInterval(() => {
+                metrics.updateCounts.push(Date.now());
+                // Keep only last minute of data
+                const oneMinuteAgo = Date.now() - 60000;
+                metrics.updateCounts = metrics.updateCounts.filter(time => time > oneMinuteAgo);
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

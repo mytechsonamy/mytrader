@@ -1,0 +1,485 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base layer customizations */
+@layer base {
+  /* Inter font import */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap');
+
+  /* CSS Custom Properties for theme values */
+  :root {
+    /* Brand colors */
+    --color-brand-primary: #667eea;
+    --color-brand-secondary: #764ba2;
+
+    /* Market colors */
+    --color-positive: #10b981;
+    --color-negative: #ef4444;
+    --color-neutral: #6b7280;
+
+    /* Text hierarchy */
+    --color-text-primary: #1f2937;
+    --color-text-secondary: #374151;
+    --color-text-tertiary: #6b7280;
+    --color-text-quaternary: #9ca3af;
+
+    /* Background system */
+    --color-bg-primary: #f8fafc;
+    --color-bg-card: rgba(255, 255, 255, 0.95);
+
+    /* Layout */
+    --navbar-height: 64px;
+    --sidebar-width: 280px;
+    --sidebar-width-collapsed: 64px;
+
+    /* Spacing */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+
+    /* Border radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 15px;
+
+    /* Shadows */
+    --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-card-hover: 0 10px 15px rgba(0, 0, 0, 0.1);
+    --shadow-focus: 0 0 0 3px rgba(102, 126, 234, 0.5);
+
+    /* Animation durations */
+    --duration-fast: 0.15s;
+    --duration-normal: 0.2s;
+    --duration-slow: 0.3s;
+  }
+
+  /* Dark mode support (future enhancement) */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-text-primary: #f9fafb;
+      --color-text-secondary: #e5e7eb;
+      --color-text-tertiary: #9ca3af;
+      --color-bg-primary: #111827;
+      --color-bg-card: rgba(31, 41, 55, 0.95);
+    }
+  }
+
+  /* Base HTML elements */
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background-primary text-text-primary;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overflow-x: hidden;
+  }
+
+  /* Heading styles */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold;
+    letter-spacing: -0.025em;
+  }
+
+  h1 {
+    @apply text-4xl leading-tight;
+  }
+
+  h2 {
+    @apply text-3xl leading-tight;
+  }
+
+  h3 {
+    @apply text-2xl leading-normal;
+  }
+
+  h4 {
+    @apply text-xl leading-normal;
+  }
+
+  h5 {
+    @apply text-lg leading-normal;
+  }
+
+  /* Focus styles for accessibility */
+  *:focus {
+    outline: none;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-brand-primary);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  /* Selection styling */
+  ::selection {
+    @apply bg-brand-500/20 text-brand-900;
+  }
+}
+
+/* Component layer customizations */
+@layer components {
+  /* Loading spinner component */
+  .loading-spinner {
+    @apply inline-block w-8 h-8 border-4 border-gray-200 border-t-brand-500 rounded-full animate-spin;
+  }
+
+  /* Skeleton loading animation */
+  .skeleton {
+    @apply bg-gray-200 rounded animate-pulse;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Financial data styling */
+  .financial-data {
+    @apply font-mono font-bold;
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Market status indicators */
+  .market-status {
+    @apply inline-flex items-center px-2 py-1 text-xs font-medium rounded-full;
+  }
+
+  .market-status.open {
+    @apply bg-positive-100 text-positive-800;
+  }
+
+  .market-status.closed {
+    @apply bg-negative-100 text-negative-800;
+  }
+
+  .market-status.pre-market,
+  .market-status.after-market {
+    @apply bg-warning-100 text-warning-800;
+  }
+
+  /* Toast notification styles */
+  .toast {
+    @apply fixed top-4 right-4 z-tooltip max-w-sm p-4 rounded-lg shadow-modal;
+    animation: slide-down 0.3s ease-out;
+  }
+
+  .toast.success {
+    @apply bg-positive-50 border border-positive-200 text-positive-800;
+  }
+
+  .toast.error {
+    @apply bg-negative-50 border border-negative-200 text-negative-800;
+  }
+
+  .toast.warning {
+    @apply bg-warning-50 border border-warning-200 text-warning-800;
+  }
+
+  .toast.info {
+    @apply bg-blue-50 border border-blue-200 text-blue-800;
+  }
+
+  /* Form validation states */
+  .form-error {
+    @apply border-negative-500 focus:border-negative-500 focus:ring-negative-500;
+  }
+
+  .form-success {
+    @apply border-positive-500 focus:border-positive-500 focus:ring-positive-500;
+  }
+
+  /* Button component styles */
+  .btn-base {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn-base bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500;
+  }
+
+  .btn-secondary {
+    @apply btn-base border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-brand-500;
+  }
+
+  .btn-ghost {
+    @apply btn-base bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-brand-500;
+  }
+
+  .btn-danger {
+    @apply btn-base bg-negative-500 text-white hover:bg-negative-600 focus:ring-negative-500;
+  }
+
+  /* Brand gradient background */
+  .bg-gradient-brand {
+    background: linear-gradient(135deg, var(--color-brand-primary) 0%, var(--color-brand-secondary) 100%);
+  }
+
+  /* Navigation link states */
+  .nav-link {
+    @apply px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200;
+  }
+
+  .nav-link:hover {
+    @apply bg-gray-100 text-gray-900;
+  }
+
+  .nav-link.active {
+    @apply bg-brand-500 text-white;
+  }
+
+  /* Responsive container utilities */
+  .container-narrow {
+    @apply max-w-4xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .container-wide {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Glass morphism effect for cards */
+  .glass {
+    @apply bg-white/80 backdrop-blur-sm border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-gray-900/80 backdrop-blur-sm border border-gray-700/20;
+  }
+}
+
+/* Keyframe animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utility layer customizations */
+@layer utilities {
+  /* Text truncation utilities */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Safe area utilities for mobile devices */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Hide scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth scrolling */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  /* Interactive utilities */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* Print utilities */
+  @media print {
+    .print-hidden {
+      display: none !important;
+    }
+
+    .print-visible {
+      display: block !important;
+    }
+  }
+}
+
+/* Responsive design optimizations */
+@media (max-width: 767px) {
+  /* Mobile-specific optimizations */
+  .container {
+    @apply px-4;
+  }
+
+  /* Reduce font sizes on mobile */
+  h1 {
+    @apply text-3xl;
+  }
+
+  h2 {
+    @apply text-2xl;
+  }
+
+  h3 {
+    @apply text-xl;
+  }
+
+  /* Adjust card padding on mobile */
+  .card {
+    @apply p-3;
+  }
+
+  /* Stack navigation items on mobile */
+  .nav-mobile {
+    @apply flex-col space-y-2;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet-specific optimizations */
+  .container {
+    @apply px-6;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop-specific optimizations */
+  .container {
+    @apply px-8;
+  }
+
+  /* Enhanced hover effects on desktop */
+  .hover-lift:hover {
+    transform: translateY(-4px);
+  }
+
+  /* Multi-column layouts */
+  .columns-auto {
+    columns: auto;
+  }
+
+  .columns-2 {
+    columns: 2;
+  }
+
+  .columns-3 {
+    columns: 3;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-spin {
+    animation: none;
+  }
+
+  .animate-pulse {
+    animation: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .card {
+    @apply border-2 border-gray-800;
+  }
+
+  .btn-primary {
+    @apply border-2 border-brand-800;
+  }
+
+  .btn-secondary {
+    @apply border-2 border-gray-800;
+  }
+}

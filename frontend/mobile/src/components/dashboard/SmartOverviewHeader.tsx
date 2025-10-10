@@ -65,12 +65,13 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
     let bestReturn = -Infinity;
 
     portfolio.positions?.forEach((position) => {
-      if (position.unrealizedPnLPercent > bestReturn) {
-        bestReturn = position.unrealizedPnLPercent;
+      const returnPercent = position.unrealizedPnLPercent ?? 0;
+      if (returnPercent > bestReturn) {
+        bestReturn = returnPercent;
         topPerformer = {
           symbol: position.symbol,
           symbolName: position.symbolName || position.symbol,
-          returnPercent: position.unrealizedPnLPercent,
+          returnPercent: returnPercent,
         };
       }
     });
@@ -78,7 +79,7 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
     return {
       totalValue: portfolio.totalValue || 0,
       dailyPnL: portfolio.dailyPnL || 0,
-      dailyPnLPercent: portfolio.totalPnLPercent || 0,
+      dailyPnLPercent: portfolio.totalPnLPercent ?? 0,
       topPerformer,
     };
   }, [portfolio]);
@@ -126,11 +127,21 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
       return acc;
     }, {} as Record<string, number>);
 
+    // Count OPEN as open, everything else (CLOSED, POST_MARKET, PRE_MARKET, HOLIDAY) as closed
+    const openCount = statusCounts['OPEN'] || 0;
+    const closedCount =
+      (statusCounts['CLOSED'] || 0) +
+      (statusCounts['POST_MARKET'] || 0) +
+      (statusCounts['PRE_MARKET'] || 0) +
+      (statusCounts['AFTER_MARKET'] || 0) +
+      (statusCounts['HOLIDAY'] || 0);
+
     return {
-      openMarkets: statusCounts['OPEN'] || 0,
-      closedMarkets: statusCounts['CLOSED'] || 0,
+      openMarkets: openCount,
+      closedMarkets: closedCount,
       preMarkets: statusCounts['PRE_MARKET'] || 0,
       afterMarkets: statusCounts['AFTER_MARKET'] || 0,
+      postMarkets: statusCounts['POST_MARKET'] || 0,
       total: validMarketStatuses.length,
     };
   }, [marketStatuses]);
@@ -152,7 +163,10 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
     }).format(amount);
   };
 
-  const formatPercentage = (percent: number): string => {
+  const formatPercentage = (percent: number | undefined | null): string => {
+    if (percent === undefined || percent === null || isNaN(percent)) {
+      return '0.00%';
+    }
     const sign = percent >= 0 ? '+' : '';
     return `${sign}${percent.toFixed(2)}%`;
   };
@@ -211,7 +225,7 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
           onPress={user ? onProfilePress : onLoginPress}
         >
           <Text style={styles.userButtonText}>
-            {user ? `👤 ${user.first_name}` : '👤 Giriş'}
+            {user ? `👤 ${(user as any).FirstName || (user as any).first_name || user.email?.split('@')[0] || 'Kullanıcı'}` : '👤 Giriş'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -298,7 +312,7 @@ const SmartOverviewHeader: React.FC<SmartOverviewHeaderProps> = ({
               <Text style={styles.rankingPosition}>#{userRanking.rank}</Text>
               <Text style={styles.rankingTotal}>/ {userRanking.totalParticipants}</Text>
               <Text style={styles.rankingPercentile}>
-                %{userRanking.percentile.toFixed(1)} dilim
+                %{userRanking.percentile ? userRanking.percentile.toFixed(1) : '0.0'} dilim
               </Text>
             </View>
           </View>

@@ -2,64 +2,45 @@
 <html>
 <head>
     <title>SignalR Test</title>
-    <script src="https://unpkg.com/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
 </head>
 <body>
-    <h1>SignalR Connection Test</h1>
-    <div id="status">Connecting...</div>
+    <h3>SignalR WebSocket Test</h3>
     <div id="messages"></div>
 
     <script>
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("http://localhost:5002/hubs/market-data")
-            .withAutomaticReconnect()
             .build();
 
-        const statusDiv = document.getElementById('status');
-        const messagesDiv = document.getElementById('messages');
+        const messages = document.getElementById("messages");
 
         function addMessage(message) {
-            const div = document.createElement('div');
-            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
-            messagesDiv.appendChild(div);
+            const div = document.createElement("div");
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            messages.appendChild(div);
         }
 
-        connection.onconnected = () => {
-            statusDiv.textContent = 'Connected to SignalR Hub';
-            statusDiv.style.color = 'green';
-            addMessage('Connected to SignalR Hub');
-        };
+        connection.onclose(() => addMessage("Connection closed"));
+        connection.onreconnecting(() => addMessage("Reconnecting..."));
+        connection.onreconnected(() => addMessage("Reconnected"));
 
-        connection.onclose = () => {
-            statusDiv.textContent = 'Disconnected from SignalR Hub';
-            statusDiv.style.color = 'red';
-            addMessage('Disconnected from SignalR Hub');
-        };
-
-        // Listen for connection status
-        connection.on("ConnectionStatus", function (data) {
-            addMessage('Connection Status: ' + JSON.stringify(data));
-        });
-
-        // Listen for price updates
+        // Listen for PriceUpdate events
         connection.on("PriceUpdate", function (data) {
-            addMessage('Price Update: ' + JSON.stringify(data));
+            addMessage(`PriceUpdate received: ${JSON.stringify(data)}`);
         });
 
-        // Start connection
-        connection.start().then(function () {
-            addMessage('SignalR connection started successfully');
+        connection.start()
+            .then(() => {
+                addMessage("Connected to SignalR hub");
 
-            // Test subscribing to crypto price updates
-            connection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSDT", "ETHUSDT"])
-                .then(() => addMessage('Subscribed to CRYPTO price updates'))
-                .catch(err => addMessage('Error subscribing: ' + err));
-
-        }).catch(function (err) {
-            statusDiv.textContent = 'Failed to connect: ' + err;
-            statusDiv.style.color = 'red';
-            addMessage('Connection failed: ' + err);
-        });
+                // Wait for messages for 10 seconds
+                setTimeout(() => {
+                    addMessage("Test completed after 10 seconds");
+                    connection.stop();
+                }, 10000);
+            })
+            .catch(err => addMessage(`Connection failed: ${err.toString()}`));
     </script>
 </body>
 </html>

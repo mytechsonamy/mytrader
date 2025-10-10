@@ -49,6 +49,19 @@ const EnhancedLeaderboardScreen: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [userRanking, setUserRanking] = useState<UserRanking | null>(null);
   const [stats, setStats] = useState<CompetitionStats | null>(null);
+
+  // Ensure leaderboard is always an array - defensive programming
+  const safeLeaderboard = Array.isArray(leaderboard) ? leaderboard : [];
+
+  // Safe setter that ensures only arrays are set to leaderboard state
+  const setSafeLeaderboard = useCallback((data: any) => {
+    if (Array.isArray(data)) {
+      setLeaderboard(data);
+    } else {
+      console.warn('Attempted to set non-array data to leaderboard:', data);
+      setLeaderboard([]);
+    }
+  }, []);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,10 +85,11 @@ const EnhancedLeaderboardScreen: React.FC = () => {
     connectionStatus: wsStatus,
     forceRefresh,
   } = useLeaderboardWebSocket({
-    enabled: true,
+    enabled: false,
     period: filters.period,
     onRankingChange: (newRanking) => {
-      setLeaderboard(newRanking);
+      // Use safe setter to prevent iteration errors
+      setSafeLeaderboard(newRanking);
     },
     onUserRankingChange: (newUserRanking) => {
       setUserRanking(newUserRanking);
@@ -101,7 +115,8 @@ const EnhancedLeaderboardScreen: React.FC = () => {
       ]);
 
       if (leaderboardData.status === 'fulfilled') {
-        setLeaderboard(leaderboardData.value);
+        // Use safe setter to prevent iteration errors
+        setSafeLeaderboard(leaderboardData.value);
       }
       if (userRankingData.status === 'fulfilled') {
         setUserRanking(userRankingData.value);
@@ -111,6 +126,10 @@ const EnhancedLeaderboardScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to fetch leaderboard data:', error);
+      // Reset to safe state on error to prevent crashes
+      setSafeLeaderboard([]);
+      setUserRanking(null);
+      setStats(null);
       Alert.alert('Hata', 'Veriler yüklenirken bir hata oluştu.');
     } finally {
       setLoading(false);
@@ -132,7 +151,8 @@ const EnhancedLeaderboardScreen: React.FC = () => {
 
   // Filter and search logic
   const filteredLeaderboard = useMemo(() => {
-    let filtered = [...leaderboard];
+    // Use safeLeaderboard which is guaranteed to be an array
+    let filtered = [...safeLeaderboard];
 
     // Search filter
     if (searchQuery.trim()) {
@@ -169,16 +189,18 @@ const EnhancedLeaderboardScreen: React.FC = () => {
     });
 
     return filtered;
-  }, [leaderboard, searchQuery, filters]);
+  }, [safeLeaderboard, searchQuery, filters]);
 
   // Helper functions
-  const formatCurrency = (amount: number): string => {
+  const formatCurrency = (amount: number | undefined | null): string => {
+    if (amount === undefined || amount === null || isNaN(amount)) return '0 ₺';
     if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)}M ₺`;
     if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K ₺`;
     return `${amount.toFixed(0)} ₺`;
   };
 
-  const formatPercentage = (percent: number): string => {
+  const formatPercentage = (percent: number | undefined | null): string => {
+    if (percent === undefined || percent === null || isNaN(percent)) return '0.0%';
     const sign = percent >= 0 ? '+' : '';
     return `${sign}${percent.toFixed(1)}%`;
   };
@@ -423,7 +445,7 @@ const EnhancedLeaderboardScreen: React.FC = () => {
           </View>
 
           <View style={styles.tradingStatsRow}>
-            <Text style={styles.winRate}>{item.winRate.toFixed(0)}% kazanç</Text>
+            <Text style={styles.winRate}>{item.winRate ? item.winRate.toFixed(0) : '0'}% kazanç</Text>
             <Text style={styles.totalTrades}>{item.totalTrades} işlem</Text>
           </View>
         </View>
@@ -564,7 +586,7 @@ const EnhancedLeaderboardScreen: React.FC = () => {
         <View style={styles.analyticsContainer}>
           <PerformanceChart
             userRanking={userRanking}
-            leaderboard={leaderboard}
+            leaderboard={safeLeaderboard}
             period={filters.period}
             showComparison={true}
             compact={false}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stock WebSocket Field Names Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.0/dist/browser/signalr.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        h1 { color: #4fc3f7; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #1b5e20; color: #a5d6a7; }
+        .disconnected { background: #b71c1c; color: #ef9a9a; }
+        .message { background: #263238; padding: 10px; margin: 5px 0; border-left: 3px solid #4fc3f7; }
+        .field-name { color: #ce93d8; font-weight: bold; }
+        .field-value { color: #a5d6a7; }
+        .missing { color: #ff6b6b; font-weight: bold; }
+        pre { background: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Stock WebSocket Field Names Test</h1>
+    <div id="status" class="status disconnected">Status: Connecting...</div>
+
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Make sure backend is running on port 5002</li>
+        <li>Wait for connection to establish</li>
+        <li>Watch for STOCK price updates (AAPL, GARAN, etc.)</li>
+        <li>Check if "previousClose" or "PreviousClose" field exists</li>
+    </ol>
+
+    <h2>Raw WebSocket Messages:</h2>
+    <div id="messages"></div>
+
+    <h2>Field Name Analysis:</h2>
+    <div id="analysis"></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const analysisDiv = document.getElementById('analysis');
+
+        const stockUpdateCount = {};
+        const fieldNamesFound = new Set();
+
+        function log(message, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.style.borderLeftColor = isError ? '#ff6b6b' : '#4fc3f7';
+            div.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            messagesDiv.insertBefore(div, messagesDiv.firstChild);
+            if (messagesDiv.children.length > 50) {
+                messagesDiv.removeChild(messagesDiv.lastChild);
+            }
+        }
+
+        function updateAnalysis() {
+            analysisDiv.innerHTML = `
+                <h3>Found Field Names:</h3>
+                <pre>${Array.from(fieldNamesFound).sort().join('\n') || 'No fields found yet...'}</pre>
+                <h3>Stock Update Counts:</h3>
+                <pre>${JSON.stringify(stockUpdateCount, null, 2)}</pre>
+            `;
+        }
+
+        async function connect() {
+            try {
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/dashboard", {
+                        skipNegotiation: false,
+                        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.ServerSentEvents | signalR.HttpTransportType.LongPolling
+                    })
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                connection.on("PriceUpdate", (data) => {
+                    handlePriceUpdate(data, "PriceUpdate");
+                });
+
+                connection.on("MarketDataUpdate", (data) => {
+                    handlePriceUpdate(data, "MarketDataUpdate");
+                });
+
+                connection.on("ReceivePriceUpdate", (data) => {
+                    handlePriceUpdate(data, "ReceivePriceUpdate");
+                });
+
+                connection.on("ReceiveMarketData", (data) => {
+                    handlePriceUpdate(data, "ReceiveMarketData");
+                });
+
+                connection.onreconnecting(() => {
+                    statusDiv.textContent = 'Status: Reconnecting...';
+                    statusDiv.className = 'status disconnected';
+                });
+
+                connection.onreconnected(() => {
+                    statusDiv.textContent = 'Status: Reconnected';
+                    statusDiv.className = 'status connected';
+                    subscribeToStocks(connection);
+                });
+
+                connection.onclose(() => {
+                    statusDiv.textContent = 'Status: Disconnected';
+                    statusDiv.className = 'status disconnected';
+                });
+
+                await connection.start();
+                statusDiv.textContent = 'Status: Connected ✅';
+                statusDiv.className = 'status connected';
+                log('✅ Connected to SignalR hub');
+
+                await subscribeToStocks(connection);
+
+            } catch (err) {
+                statusDiv.textContent = `Status: Connection Failed - ${err.message}`;
+                statusDiv.className = 'status disconnected';
+                log(`❌ Connection error: ${err.message}`, true);
+                setTimeout(connect, 5000);
+            }
+        }
+
+        async function subscribeToStocks(connection) {
+            try {
+                // Subscribe to STOCK asset class
+                await connection.invoke("SubscribeToAssetClass", "STOCK");
+                log('📊 Subscribed to STOCK updates');
+
+                // Subscribe to specific stock symbols
+                const stocks = ['AAPL', 'GARAN', 'GOOGL', 'MSFT', 'NVDA', 'THYAO', 'SISE'];
+                for (const symbol of stocks) {
+                    await connection.invoke("SubscribeToSymbol", "STOCK", symbol);
+                }
+                log(`✅ Subscribed to ${stocks.length} stock symbols: ${stocks.join(', ')}`);
+            } catch (err) {
+                log(`❌ Subscription error: ${err.message}`, true);
+            }
+        }
+
+        function handlePriceUpdate(data, eventName) {
+            // Only process STOCK data
+            const assetClass = data.assetClass || data.AssetClass;
+            if (assetClass !== 'STOCK') return;
+
+            const symbol = data.symbol || data.Symbol;
+            stockUpdateCount[symbol] = (stockUpdateCount[symbol] || 0) + 1;
+
+            // Collect all field names
+            Object.keys(data).forEach(key => fieldNamesFound.add(key));
+
+            // Check for previousClose variations
+            const hasPreviousClose = data.previousClose !== undefined;
+            const hasPreviousClosePascal = data.PreviousClose !== undefined;
+            const hasPrevClose = data.prevClose !== undefined;
+            const hasPrevClosePascal = data.PrevClose !== undefined;
+
+            const previousCloseValue = data.previousClose || data.PreviousClose || data.prevClose || data.PrevClose || 'MISSING';
+            const price = data.price || data.Price;
+            const change = data.change24h || data.Change24h;
+
+            const fieldInfo = [];
+            if (hasPreviousClose) fieldInfo.push('✅ previousClose (camelCase)');
+            if (hasPreviousClosePascal) fieldInfo.push('✅ PreviousClose (PascalCase)');
+            if (hasPrevClose) fieldInfo.push('✅ prevClose');
+            if (hasPrevClosePascal) fieldInfo.push('✅ PrevClose');
+            if (!hasPreviousClose && !hasPreviousClosePascal && !hasPrevClose && !hasPrevClosePascal) {
+                fieldInfo.push('<span class="missing">❌ NO PREVIOUS CLOSE FIELD FOUND</span>');
+            }
+
+            log(`
+                <div><strong>${eventName}:</strong> <span class="field-name">${symbol}</span></div>
+                <div>Price: <span class="field-value">$${price}</span></div>
+                <div>Change24h: <span class="field-value">${change}%</span></div>
+                <div>PreviousClose: <span class="field-value">${previousCloseValue}</span></div>
+                <div>${fieldInfo.join(' | ')}</div>
+                <details>
+                    <summary>Full Data Object (click to expand)</summary>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </details>
+            `);
+
+            updateAnalysis();
+        }
+
+        // Start connection
+        connect();
+    </script>
+</body>
+</html>

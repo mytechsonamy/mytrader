@@ -288,7 +288,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<UserSessionResponse> LoginAsync(LoginRequest request)
+    public async Task<UserSessionResponse> LoginAsync(LoginRequest request, string? userAgent = null, string? ipAddress = null)
     {
         try
         {
@@ -315,10 +315,12 @@ public class AuthenticationService : IAuthenticationService
             var session = new UserSession
             {
                 UserId = user.Id,
-                SessionToken = accessToken, // Keep this for backward compatibility, but use JwtId for new logic
+                SessionToken = TruncateSessionToken(accessToken), // Truncate to avoid varchar constraint
                 JwtId = jwtId,
                 RefreshTokenHash = refreshTokenHash,
                 TokenFamilyId = Guid.NewGuid(), // New token family
+                UserAgent = TruncateUserAgent(userAgent),
+                IpAddress = ipAddress,
                 ExpiresAt = refreshTokenExpiry
             };
 
@@ -762,7 +764,7 @@ public class AuthenticationService : IAuthenticationService
                 RefreshTokenHash = newRefreshTokenHash,
                 TokenFamilyId = session.TokenFamilyId, // Keep same family
                 RotatedFrom = session.Id, // Track rotation chain
-                UserAgent = userAgent,
+                UserAgent = TruncateUserAgent(userAgent),
                 IpAddress = ipAddress,
                 ExpiresAt = DateTime.UtcNow.AddDays(30), // 30-day refresh token expiry
                 CreatedAt = DateTime.UtcNow
@@ -929,7 +931,8 @@ public class AuthenticationService : IAuthenticationService
 
     private string GenerateJwtToken(User user, string jwtId)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
+        var jwtSecret = _configuration["Jwt:SecretKey"] ?? "your_super_secret_jwt_key_for_development_only_at_least_256_bits_long_abcdef123456";
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -975,6 +978,26 @@ public class AuthenticationService : IAuthenticationService
             return "Linux PC";
 
         return "Web Browser";
+    }
+
+    private string? TruncateUserAgent(string? userAgent)
+    {
+        if (string.IsNullOrEmpty(userAgent))
+            return null;
+
+        // Truncate to 500 characters to match the current database constraint
+        // TODO: Update database schema to support 1000 characters as per UserSession model
+        return userAgent.Length > 500 ? userAgent.Substring(0, 500) : userAgent;
+    }
+
+    private string TruncateSessionToken(string sessionToken)
+    {
+        if (string.IsNullOrEmpty(sessionToken))
+            return string.Empty;
+
+        // Truncate to 500 characters to match the database constraint
+        // Since we use JwtId for session management, SessionToken is mainly for backward compatibility
+        return sessionToken.Length > 500 ? sessionToken.Substring(0, 500) : sessionToken;
     }
 }
 

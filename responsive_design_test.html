@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Design Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 3px; border-left: 4px solid; }
+        .success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        .viewport-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+        .viewport-btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .viewport-btn:hover { background: #0056b3; }
+        .viewport-btn.active { background: #28a745; }
+        .viewport-info { background: #e9ecef; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .iframe-container { border: 2px solid #ddd; border-radius: 4px; margin: 20px 0; overflow: hidden; }
+        .iframe-container iframe { width: 100%; border: none; }
+        .screenshot-area { width: 100%; height: 600px; border: 1px solid #ccc; border-radius: 4px; background: #f8f9fa; position: relative; overflow: hidden; }
+        .device-frame { margin: 20px auto; padding: 20px; border: 3px solid #333; border-radius: 15px; background: #000; position: relative; }
+        .device-frame.mobile { width: 375px; height: 667px; border-radius: 25px; }
+        .device-frame.tablet { width: 768px; height: 1024px; border-radius: 15px; }
+        .device-frame.desktop { width: 1024px; height: 768px; border-radius: 10px; }
+        .device-frame.large { width: 1440px; height: 900px; border-radius: 8px; }
+        .device-screen { width: 100%; height: 100%; background: white; border-radius: inherit; overflow: hidden; }
+        button { margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .metric-card { background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; text-align: center; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        .metric-label { font-size: 14px; color: #6c757d; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Responsive Design Integration Test</h1>
+        <p>Test responsive behavior across all device breakpoints and orientations</p>
+
+        <!-- Current Viewport Info -->
+        <div class="test-section">
+            <h2>📏 Current Viewport Information</h2>
+            <div id="viewportInfo" class="viewport-info">
+                <strong>Viewport:</strong> <span id="currentViewport">Loading...</span><br>
+                <strong>Device Type:</strong> <span id="deviceType">Loading...</span><br>
+                <strong>Orientation:</strong> <span id="orientation">Loading...</span><br>
+                <strong>Touch Support:</strong> <span id="touchSupport">Loading...</span>
+            </div>
+            <button onclick="updateViewportInfo()">🔄 Refresh Info</button>
+        </div>
+
+        <!-- Viewport Testing Controls -->
+        <div class="test-section">
+            <h2>🔧 Viewport Testing Controls</h2>
+            <div class="viewport-controls">
+                <button class="viewport-btn" onclick="testViewport(320, 568, 'iPhone SE')">📱 iPhone SE (320px)</button>
+                <button class="viewport-btn" onclick="testViewport(375, 667, 'iPhone 8')">📱 iPhone 8 (375px)</button>
+                <button class="viewport-btn" onclick="testViewport(414, 896, 'iPhone 11')">📱 iPhone 11 (414px)</button>
+                <button class="viewport-btn" onclick="testViewport(768, 1024, 'iPad')">📱 iPad (768px)</button>
+                <button class="viewport-btn" onclick="testViewport(1024, 768, 'Desktop')">💻 Desktop (1024px)</button>
+                <button class="viewport-btn" onclick="testViewport(1440, 900, 'Large Desktop')">🖥️ Large (1440px)</button>
+                <button class="viewport-btn" onclick="testViewport(1920, 1080, 'Full HD')">🖥️ Full HD (1920px)</button>
+            </div>
+            <button onclick="testAllBreakpoints()">🔄 Test All Breakpoints</button>
+            <button onclick="testOrientationChanges()">🔄 Test Orientation Changes</button>
+        </div>
+
+        <!-- Frontend Application Preview -->
+        <div class="test-section">
+            <h2>🌐 Frontend Application Preview</h2>
+            <div id="currentTestInfo" class="info result">
+                <strong>Current Test:</strong> Default viewport
+            </div>
+            <div class="iframe-container">
+                <iframe id="frontendFrame" src="http://localhost:3000" style="height: 600px;"></iframe>
+            </div>
+            <div style="text-align: center; margin: 10px 0;">
+                <button onclick="refreshFrame()">🔄 Refresh Frame</button>
+                <button onclick="openInNewTab()">🔗 Open in New Tab</button>
+                <button onclick="captureScreenshot()">📸 Capture Screenshot</button>
+            </div>
+        </div>
+
+        <!-- Responsive Design Metrics -->
+        <div class="test-section">
+            <h2>📊 Responsive Design Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div id="breakpointCount" class="metric-value">0</div>
+                    <div class="metric-label">Breakpoints Tested</div>
+                </div>
+                <div class="metric-card">
+                    <div id="layoutShifts" class="metric-value">0</div>
+                    <div class="metric-label">Layout Shifts Detected</div>
+                </div>
+                <div class="metric-card">
+                    <div id="contentOverflow" class="metric-value">0</div>
+                    <div class="metric-label">Content Overflow Issues</div>
+                </div>
+                <div class="metric-card">
+                    <div id="touchTargets" class="metric-value">0</div>
+                    <div class="metric-label">Small Touch Targets</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automated Tests -->
+        <div class="test-section">
+            <h2>🤖 Automated Responsive Tests</h2>
+            <button onclick="testNavigationResponsiveness()">🧭 Test Navigation</button>
+            <button onclick="testContentReflow()">📝 Test Content Reflow</button>
+            <button onclick="testImageResponsiveness()">🖼️ Test Images</button>
+            <button onclick="testFormResponsiveness()">📋 Test Forms</button>
+            <button onclick="testTouchTargets()">👆 Test Touch Targets</button>
+            <button onclick="runFullResponsiveTest()">🎯 Run Full Test Suite</button>
+        </div>
+
+        <!-- CSS Media Query Tests -->
+        <div class="test-section">
+            <h2>🎨 CSS Media Query Tests</h2>
+            <div id="mediaQueryResults"></div>
+            <button onclick="testMediaQueries()">🔍 Test Media Queries</button>
+        </div>
+
+        <!-- Test Results -->
+        <div class="test-section">
+            <h2>📋 Test Results</h2>
+            <div id="results"></div>
+            <button onclick="clearResults()">🧹 Clear Results</button>
+        </div>
+    </div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+        const frontendFrame = document.getElementById('frontendFrame');
+        let currentTest = 'Default';
+        let metrics = {
+            breakpointCount: 0,
+            layoutShifts: 0,
+            contentOverflow: 0,
+            touchTargets: 0
+        };
+
+        // Breakpoint definitions
+        const breakpoints = {
+            mobile: { min: 0, max: 767, name: 'Mobile' },
+            tablet: { min: 768, max: 1023, name: 'Tablet' },
+            desktop: { min: 1024, max: 1439, name: 'Desktop' },
+            large: { min: 1440, max: Infinity, name: 'Large Desktop' }
+        };
+
+        function addResult(title, type, message, details = '') {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `
+                <strong>${title}</strong>
+                <div>${message}</div>
+                ${details ? `<pre style="background: #f1f3f4; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 12px;">${details}</pre>` : ''}
+                <small>⏰ ${new Date().toLocaleTimeString()}</small>
+            `;
+            resultsDiv.appendChild(resultDiv);
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateMetrics() {
+            document.getElementById('breakpointCount').textContent = metrics.breakpointCount;
+            document.getElementById('layoutShifts').textContent = metrics.layoutShifts;
+            document.getElementById('contentOverflow').textContent = metrics.contentOverflow;
+            document.getElementById('touchTargets').textContent = metrics.touchTargets;
+        }
+
+        function updateViewportInfo() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const devicePixelRatio = window.devicePixelRatio || 1;
+
+            // Determine device type
+            let deviceType = 'Desktop';
+            let breakpointName = 'Unknown';
+
+            for (const [key, bp] of Object.entries(breakpoints)) {
+                if (width >= bp.min && width <= bp.max) {
+                    breakpointName = bp.name;
+                    deviceType = key === 'mobile' ? 'Mobile' : key === 'tablet' ? 'Tablet' : 'Desktop';
+                    break;
+                }
+            }
+
+            // Check orientation
+            const orientation = height > width ? 'Portrait' : 'Landscape';
+
+            // Check touch support
+            const touchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+            document.getElementById('currentViewport').textContent = `${width} × ${height} (${devicePixelRatio}x)`;
+            document.getElementById('deviceType').textContent = `${deviceType} (${breakpointName})`;
+            document.getElementById('orientation').textContent = orientation;
+            document.getElementById('touchSupport').textContent = touchSupport ? 'Yes' : 'No';
+        }
+
+        function testViewport(width, height, deviceName) {
+            currentTest = deviceName;
+            document.getElementById('currentTestInfo').innerHTML = `<strong>Current Test:</strong> ${deviceName} (${width} × ${height})`;
+
+            // Update iframe size to simulate viewport
+            const frame = document.getElementById('frontendFrame');
+            frame.style.width = width + 'px';
+            frame.style.height = height + 'px';
+
+            // Add active class to button
+            document.querySelectorAll('.viewport-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            metrics.breakpointCount++;
+            updateMetrics();
+
+            addResult(`Viewport Test: ${deviceName}`, 'info', `Testing ${deviceName} viewport (${width} × ${height})`);
+
+            // Test for common responsive issues
+            setTimeout(() => {
+                testResponsiveIssues(width, height, deviceName);
+            }, 1000);
+        }
+
+        function testResponsiveIssues(width, height, deviceName) {
+            try {
+                const frame = document.getElementById('frontendFrame');
+                const frameDoc = frame.contentDocument || frame.contentWindow.document;
+
+                if (!frameDoc) {
+                    addResult(`Responsive Issues: ${deviceName}`, 'warning', 'Cannot access frame content (CORS or loading issue)');
+                    return;
+                }
+
+                let issues = [];
+                let warnings = [];
+
+                // Check for horizontal scrollbars
+                if (frameDoc.body && frameDoc.body.scrollWidth > width) {
+                    issues.push(`Horizontal overflow detected (content: ${frameDoc.body.scrollWidth}px, viewport: ${width}px)`);
+                    metrics.contentOverflow++;
+                }
+
+                // Check for very small touch targets (mobile only)
+                if (width <= 767) {
+                    const clickableElements = frameDoc.querySelectorAll('button, a, input, select, [onclick], [role="button"]');
+                    let smallTargets = 0;
+
+                    clickableElements.forEach(el => {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width < 44 || rect.height < 44) {
+                            smallTargets++;
+                        }
+                    });
+
+                    if (smallTargets > 0) {
+                        warnings.push(`${smallTargets} touch targets smaller than 44px (recommended minimum)`);
+                        metrics.touchTargets += smallTargets;
+                    }
+                }
+
+                // Check for readable text size
+                const textElements = frameDoc.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6');
+                let smallTextCount = 0;
+
+                textElements.forEach(el => {
+                    const style = frameDoc.defaultView.getComputedStyle(el);
+                    const fontSize = parseFloat(style.fontSize);
+                    if (fontSize < 14 && width <= 767) {
+                        smallTextCount++;
+                    }
+                });
+
+                if (smallTextCount > 0) {
+                    warnings.push(`${smallTextCount} text elements smaller than 14px on mobile`);
+                }
+
+                updateMetrics();
+
+                if (issues.length === 0 && warnings.length === 0) {
+                    addResult(`Responsive Issues: ${deviceName}`, 'success', 'No responsive issues detected');
+                } else {
+                    const type = issues.length > 0 ? 'error' : 'warning';
+                    const allIssues = [...issues, ...warnings];
+                    addResult(`Responsive Issues: ${deviceName}`, type, `Found ${allIssues.length} potential issues`, allIssues.join('\n'));
+                }
+
+            } catch (error) {
+                addResult(`Responsive Issues: ${deviceName}`, 'warning', 'Could not analyze frame content', error.toString());
+            }
+        }
+
+        function testAllBreakpoints() {
+            addResult('All Breakpoints Test', 'info', 'Testing all major breakpoints...');
+
+            const testSequence = [
+                { width: 320, height: 568, name: 'iPhone SE' },
+                { width: 375, height: 667, name: 'iPhone 8' },
+                { width: 414, height: 896, name: 'iPhone 11' },
+                { width: 768, height: 1024, name: 'iPad' },
+                { width: 1024, height: 768, name: 'Desktop' },
+                { width: 1440, height: 900, name: 'Large Desktop' }
+            ];
+
+            let currentIndex = 0;
+
+            function runNextTest() {
+                if (currentIndex >= testSequence.length) {
+                    addResult('All Breakpoints Test', 'success', '🎉 All breakpoint tests completed!');
+                    return;
+                }
+
+                const test = testSequence[currentIndex];
+                testViewport(test.width, test.height, test.name);
+                currentIndex++;
+
+                setTimeout(runNextTest, 3000); // Wait 3 seconds between tests
+            }
+
+            runNextTest();
+        }
+
+        function testOrientationChanges() {
+            addResult('Orientation Test', 'info', 'Testing portrait and landscape orientations...');
+
+            const orientationTests = [
+                { width: 375, height: 667, name: 'iPhone Portrait' },
+                { width: 667, height: 375, name: 'iPhone Landscape' },
+                { width: 768, height: 1024, name: 'iPad Portrait' },
+                { width: 1024, height: 768, name: 'iPad Landscape' }
+            ];
+
+            let currentIndex = 0;
+
+            function runNextOrientationTest() {
+                if (currentIndex >= orientationTests.length) {
+                    addResult('Orientation Test', 'success', '📱 Orientation tests completed!');
+                    return;
+                }
+
+                const test = orientationTests[currentIndex];
+                testViewport(test.width, test.height, test.name);
+                currentIndex++;
+
+                setTimeout(runNextOrientationTest, 2500);
+            }
+
+            runNextOrientationTest();
+        }
+
+        function testMediaQueries() {
+            addResult('Media Query Test', 'info', 'Testing CSS media query responsiveness...');
+
+            const mediaQueryResults = document.getElementById('mediaQueryResults');
+            mediaQueryResults.innerHTML = '';
+
+            const queries = [
+                { query: '(max-width: 767px)', name: 'Mobile Styles' },
+                { query: '(min-width: 768px) and (max-width: 1023px)', name: 'Tablet Styles' },
+                { query: '(min-width: 1024px)', name: 'Desktop Styles' },
+                { query: '(min-width: 1440px)', name: 'Large Desktop Styles' },
+                { query: '(orientation: portrait)', name: 'Portrait Orientation' },
+                { query: '(orientation: landscape)', name: 'Landscape Orientation' },
+                { query: '(hover: hover)', name: 'Hover Support' },
+                { query: '(pointer: coarse)', name: 'Touch Device' }
+            ];
+
+            queries.forEach(({ query, name }) => {
+                const matches = window.matchMedia(query).matches;
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `result ${matches ? 'success' : 'info'}`;
+                resultDiv.innerHTML = `<strong>${name}:</strong> ${matches ? '✅ Active' : '❌ Inactive'} <code>${query}</code>`;
+                mediaQueryResults.appendChild(resultDiv);
+            });
+
+            addResult('Media Query Test', 'success', 'Media query test completed');
+        }
+
+        function testNavigationResponsiveness() {
+            addResult('Navigation Test', 'info', 'Testing navigation responsiveness...');
+
+            try {
+                const frame = document.getElementById('frontendFrame');
+                const frameDoc = frame.contentDocument || frame.contentWindow.document;
+
+                if (!frameDoc) {
+                    addResult('Navigation Test', 'warning', 'Cannot access navigation (CORS limitation)');
+                    return;
+                }
+
+                const navElements = frameDoc.querySelectorAll('nav, header, .navbar, .navigation');
+                const menuButtons = frameDoc.querySelectorAll('.hamburger, .menu-toggle, [aria-label*="menu"]');
+
+                let navScore = 0;
+                let maxScore = 3;
+
+                if (navElements.length > 0) {
+                    navScore++;
+                    addResult('Navigation Elements', 'success', `Found ${navElements.length} navigation elements`);
+                } else {
+                    addResult('Navigation Elements', 'warning', 'No navigation elements detected');
+                }
+
+                if (menuButtons.length > 0) {
+                    navScore++;
+                    addResult('Mobile Menu', 'success', `Found ${menuButtons.length} mobile menu toggles`);
+                } else {
+                    addResult('Mobile Menu', 'warning', 'No mobile menu toggles detected');
+                }
+
+                // Check if navigation is responsive
+                const hasResponsiveNav = Array.from(frameDoc.styleSheets).some(sheet => {
+                    try {
+                        return Array.from(sheet.cssRules).some(rule =>
+                            rule.media && rule.media.mediaText.includes('max-width')
+                        );
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                if (hasResponsiveNav) {
+                    navScore++;
+                    addResult('Responsive Styles', 'success', 'Responsive navigation styles detected');
+                } else {
+                    addResult('Responsive Styles', 'info', 'Could not detect responsive navigation styles');
+                }
+
+                const scorePercentage = (navScore / maxScore) * 100;
+                addResult('Navigation Test', scorePercentage >= 66 ? 'success' : 'warning',
+                         `Navigation responsiveness score: ${scorePercentage.toFixed(0)}% (${navScore}/${maxScore})`);
+
+            } catch (error) {
+                addResult('Navigation Test', 'error', 'Navigation test failed', error.toString());
+            }
+        }
+
+        function testContentReflow() {
+            addResult('Content Reflow Test', 'info', 'Testing content reflow behavior...');
+
+            const originalWidth = frontendFrame.style.width;
+            const originalHeight = frontendFrame.style.height;
+
+            const testSizes = [
+                { width: '320px', height: '568px', name: 'Mobile' },
+                { width: '768px', height: '1024px', name: 'Tablet' },
+                { width: '1024px', height: '768px', name: 'Desktop' }
+            ];
+
+            let testIndex = 0;
+
+            function runReflowTest() {
+                if (testIndex >= testSizes.length) {
+                    // Restore original size
+                    frontendFrame.style.width = originalWidth;
+                    frontendFrame.style.height = originalHeight;
+                    addResult('Content Reflow Test', 'success', 'Content reflow tests completed');
+                    return;
+                }
+
+                const test = testSizes[testIndex];
+                frontendFrame.style.width = test.width;
+                frontendFrame.style.height = test.height;
+
+                setTimeout(() => {
+                    // Check for layout shifts or content overflow
+                    try {
+                        const frameDoc = frontendFrame.contentDocument || frontendFrame.contentWindow.document;
+                        if (frameDoc && frameDoc.body) {
+                            const hasOverflow = frameDoc.body.scrollWidth > parseInt(test.width);
+                            const status = hasOverflow ? 'warning' : 'success';
+                            addResult(`Reflow: ${test.name}`, status,
+                                     hasOverflow ? 'Content overflow detected' : 'Content fits properly');
+                        }
+                    } catch (e) {
+                        addResult(`Reflow: ${test.name}`, 'info', 'Content reflow tested (limited access)');
+                    }
+
+                    testIndex++;
+                    setTimeout(runReflowTest, 1500);
+                }, 1000);
+            }
+
+            runReflowTest();
+        }
+
+        function testImageResponsiveness() {
+            addResult('Image Responsiveness Test', 'info', 'Testing image scaling and responsiveness...');
+
+            try {
+                const frame = document.getElementById('frontendFrame');
+                const frameDoc = frame.contentDocument || frame.contentWindow.document;
+
+                if (!frameDoc) {
+                    addResult('Image Responsiveness Test', 'warning', 'Cannot access images (CORS limitation)');
+                    return;
+                }
+
+                const images = frameDoc.querySelectorAll('img');
+                const responsiveImages = Array.from(images).filter(img => {
+                    const style = frameDoc.defaultView.getComputedStyle(img);
+                    return style.maxWidth === '100%' || style.width === '100%' || img.hasAttribute('srcset');
+                });
+
+                const percentage = images.length > 0 ? (responsiveImages.length / images.length) * 100 : 100;
+                const type = percentage >= 80 ? 'success' : percentage >= 50 ? 'warning' : 'error';
+
+                addResult('Image Responsiveness Test', type,
+                         `${responsiveImages.length}/${images.length} images are responsive (${percentage.toFixed(0)}%)`);
+
+            } catch (error) {
+                addResult('Image Responsiveness Test', 'error', 'Image test failed', error.toString());
+            }
+        }
+
+        function testFormResponsiveness() {
+            addResult('Form Responsiveness Test', 'info', 'Testing form element responsiveness...');
+
+            try {
+                const frame = document.getElementById('frontendFrame');
+                const frameDoc = frame.contentDocument || frame.contentWindow.document;
+
+                if (!frameDoc) {
+                    addResult('Form Responsiveness Test', 'warning', 'Cannot access forms (CORS limitation)');
+                    return;
+                }
+
+                const formElements = frameDoc.querySelectorAll('input, select, textarea, button');
+                let responsiveElements = 0;
+
+                formElements.forEach(element => {
+                    const style = frameDoc.defaultView.getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+
+                    // Check if element is appropriately sized
+                    if (style.width === '100%' || style.maxWidth === '100%' || rect.width <= 300) {
+                        responsiveElements++;
+                    }
+                });
+
+                const percentage = formElements.length > 0 ? (responsiveElements / formElements.length) * 100 : 100;
+                const type = percentage >= 80 ? 'success' : percentage >= 50 ? 'warning' : 'error';
+
+                addResult('Form Responsiveness Test', type,
+                         `${responsiveElements}/${formElements.length} form elements are responsive (${percentage.toFixed(0)}%)`);
+
+            } catch (error) {
+                addResult('Form Responsiveness Test', 'error', 'Form test failed', error.toString());
+            }
+        }
+
+        function testTouchTargets() {
+            addResult('Touch Target Test', 'info', 'Testing touch target sizes for mobile usability...');
+
+            try {
+                const frame = document.getElementById('frontendFrame');
+                const frameDoc = frame.contentDocument || frame.contentWindow.document;
+
+                if (!frameDoc) {
+                    addResult('Touch Target Test', 'warning', 'Cannot access touch targets (CORS limitation)');
+                    return;
+                }
+
+                const touchTargets = frameDoc.querySelectorAll('button, a, input[type="button"], input[type="submit"], [onclick], [role="button"]');
+                let adequateTargets = 0;
+                const minSize = 44; // Recommended minimum touch target size
+
+                touchTargets.forEach(target => {
+                    const rect = target.getBoundingClientRect();
+                    if (rect.width >= minSize && rect.height >= minSize) {
+                        adequateTargets++;
+                    }
+                });
+
+                const percentage = touchTargets.length > 0 ? (adequateTargets / touchTargets.length) * 100 : 100;
+                const type = percentage >= 90 ? 'success' : percentage >= 70 ? 'warning' : 'error';
+
+                addResult('Touch Target Test', type,
+                         `${adequateTargets}/${touchTargets.length} touch targets are ≥${minSize}px (${percentage.toFixed(0)}%)`);
+
+            } catch (error) {
+                addResult('Touch Target Test', 'error', 'Touch target test failed', error.toString());
+            }
+        }
+
+        function runFullResponsiveTest() {
+            addResult('Full Responsive Test', 'info', 'Starting comprehensive responsive design test suite...');
+
+            // Reset metrics
+            metrics = { breakpointCount: 0, layoutShifts: 0, contentOverflow: 0, touchTargets: 0 };
+            updateMetrics();
+
+            const testSequence = [
+                { fn: testMediaQueries, delay: 1000 },
+                { fn: testNavigationResponsiveness, delay: 2000 },
+                { fn: testImageResponsiveness, delay: 1000 },
+                { fn: testFormResponsiveness, delay: 1000 },
+                { fn: testTouchTargets, delay: 1000 },
+                { fn: testContentReflow, delay: 2000 },
+                { fn: testAllBreakpoints, delay: 15000 } // This test takes longer
+            ];
+
+            let currentIndex = 0;
+            let totalDelay = 0;
+
+            function runNextTest() {
+                if (currentIndex >= testSequence.length) {
+                    addResult('Full Responsive Test', 'success', '🎉 Comprehensive responsive design test completed!');
+                    return;
+                }
+
+                const test = testSequence[currentIndex];
+                setTimeout(() => {
+                    test.fn();
+                    currentIndex++;
+                    totalDelay += test.delay;
+                    runNextTest();
+                }, totalDelay);
+            }
+
+            runNextTest();
+        }
+
+        function refreshFrame() {
+            frontendFrame.src = frontendFrame.src;
+            addResult('Frame Refresh', 'info', 'Frontend frame refreshed');
+        }
+
+        function openInNewTab() {
+            window.open('http://localhost:3000', '_blank');
+            addResult('Open New Tab', 'info', 'Frontend opened in new tab');
+        }
+
+        function captureScreenshot() {
+            // Note: Real screenshot capture would require additional APIs or browser extensions
+            addResult('Screenshot', 'info', 'Screenshot capture initiated (Note: Browser security limitations apply)');
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+            metrics = { breakpointCount: 0, layoutShifts: 0, contentOverflow: 0, touchTargets: 0 };
+            updateMetrics();
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            updateViewportInfo();
+            addResult('System Check', 'info', 'Responsive design test page loaded. Ready to test responsive behavior.');
+        });
+
+        window.addEventListener('resize', updateViewportInfo);
+    </script>
+</body>
+</html>

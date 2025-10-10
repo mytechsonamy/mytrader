@@ -2,6 +2,9 @@
  * Utility functions for the mobile app
  */
 
+// Export time formatting utilities
+export * from './timeFormatting';
+
 /**
  * Safely parse a number from a string or return a default value
  */

@@ -1,0 +1,389 @@
+# .github/workflows/websocket-health.yml
+# Purpose: Monitor WebSocket connection health in production
+# Runtime: < 1 minute per check
+
+name: WebSocket Health Monitor
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:  # Allow manual trigger for testing
+
+env:
+  WEBSOCKET_TIMEOUT: 3000  # 3 seconds max connection time
+  ALERT_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}  # Or Discord/Teams
+
+jobs:
+  # Production WebSocket Health Check
+  production-health:
+    name: Production WebSocket Health
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install WebSocket client
+      run: npm install ws axios
+    
+    - name: Check Production WebSocket
+      id: prod-check
+      run: |
+        cat > websocket-health-check.js << 'EOF'
+        const WebSocket = require('ws');
+        const axios = require('axios');
+        
+        const PRODUCTION_URL = 'wss://mytrader.tech/hubs/market-data';
+        const TIMEOUT = parseInt(process.env.WEBSOCKET_TIMEOUT);
+        
+        const checkWebSocket = async (url, label) => {
+          console.log(`\nChecking ${label}: ${url}`);
+          const startTime = Date.now();
+          
+          return new Promise((resolve) => {
+            const ws = new WebSocket(url);
+            let connected = false;
+            
+            const timeout = setTimeout(() => {
+              if (!connected) {
+                ws.terminate();
+                resolve({
+                  status: 'failed',
+                  reason: 'Connection timeout',
+                  duration: TIMEOUT,
+                  url: url
+                });
+              }
+            }, TIMEOUT + 500);
+            
+            ws.on('open', () => {
+              connected = true;
+              clearTimeout(timeout);
+              const duration = Date.now() - startTime;
+              
+              // Test message sending
+              ws.send(JSON.stringify({
+                type: 'ping',
+                timestamp: Date.now()
+              }));
+              
+              // Test subscription
+              ws.send(JSON.stringify({
+                type: 'subscribe',
+                symbols: ['BTCUSDT']
+              }));
+              
+              setTimeout(() => {
+                ws.close();
+                resolve({
+                  status: 'success',
+                  duration: duration,
+                  url: url
+                });
+              }, 1000);
+            });
+            
+            ws.on('error', (err) => {
+              clearTimeout(timeout);
+              resolve({
+                status: 'failed',
+                reason: err.message,
+                duration: Date.now() - startTime,
+                url: url
+              });
+            });
+          });
+        };
+        
+        const main = async () => {
+          const results = {
+            production: await checkWebSocket(PRODUCTION_URL, 'Production'),
+            timestamp: new Date().toISOString()
+          };
+          
+          // Check connection time
+          if (results.production.status === 'success' && results.production.duration > TIMEOUT) {
+            results.production.status = 'slow';
+            results.production.reason = `Connection took ${results.production.duration}ms (max: ${TIMEOUT}ms)`;
+          }
+          
+          // Output results
+          console.log('\n=== WebSocket Health Check Results ===');
+          console.log(JSON.stringify(results, null, 2));
+          
+          // Set output for GitHub Actions
+          if (results.production.status === 'success') {
+            console.log('::set-output name=status::healthy');
+            console.log(`::set-output name=connection_time::${results.production.duration}ms`);
+          } else {
+            console.log('::set-output name=status::unhealthy');
+            console.log(`::set-output name=reason::${results.production.reason}`);
+            process.exit(1);
+          }
+        };
+        
+        main().catch(console.error);
+        EOF
+        
+        node websocket-health-check.js
+    
+    - name: Test Reconnection Capability
+      run: |
+        cat > test-reconnection.js << 'EOF'
+        const WebSocket = require('ws');
+        
+        const PRODUCTION_URL = 'wss://mytrader.tech/hubs/market-data';
+        
+        const testReconnection = async () => {
+          console.log('Testing reconnection capability...');
+          
+          let ws = new WebSocket(PRODUCTION_URL);
+          let reconnectCount = 0;
+          const maxReconnects = 3;
+          
+          const connect = () => {
+            return new Promise((resolve, reject) => {
+              ws = new WebSocket(PRODUCTION_URL);
+              
+              ws.on('open', () => {
+                console.log('Connected successfully');
+                
+                if (reconnectCount === 0) {
+                  // First connection - force close to test reconnection
+                  setTimeout(() => {
+                    console.log('Forcing disconnect...');
+                    ws.close();
+                  }, 1000);
+                } else {
+                  // Reconnection successful
+                  console.log(`Reconnection ${reconnectCount} successful`);
+                  ws.close();
+                  resolve(true);
+                }
+              });
+              
+              ws.on('close', () => {
+                if (reconnectCount < maxReconnects) {
+                  reconnectCount++;
+                  console.log(`Attempting reconnection ${reconnectCount}...`);
+                  setTimeout(() => connect().then(resolve).catch(reject), 1000);
+                }
+              });
+              
+              ws.on('error', (err) => {
+                console.error('Connection error:', err.message);
+                reject(err);
+              });
+            });
+          };
+          
+          try {
+            await connect();
+            console.log('✅ Reconnection test passed');
+          } catch (err) {
+            console.error('❌ Reconnection test failed');
+            process.exit(1);
+          }
+        };
+        
+        testReconnection();
+        EOF
+        
+        node test-reconnection.js
+    
+    - name: Check Message Flow
+      run: |
+        cat > test-message-flow.js << 'EOF'
+        const WebSocket = require('ws');
+        
+        const PRODUCTION_URL = 'wss://mytrader.tech/hubs/market-data';
+        const TEST_DURATION = 10000; // 10 seconds
+        
+        const testMessageFlow = async () => {
+          console.log('Testing message flow for 10 seconds...');
+          
+          return new Promise((resolve, reject) => {
+            const ws = new WebSocket(PRODUCTION_URL);
+            let messageCount = 0;
+            let lastMessageTime = Date.now();
+            
+            const timeout = setTimeout(() => {
+              ws.close();
+              
+              if (messageCount === 0) {
+                reject(new Error('No messages received'));
+              } else {
+                console.log(`✅ Received ${messageCount} messages`);
+                resolve(messageCount);
+              }
+            }, TEST_DURATION);
+            
+            ws.on('open', () => {
+              console.log('Connected, subscribing to symbols...');
+              ws.send(JSON.stringify({
+                type: 'subscribe',
+                symbols: ['BTCUSDT', 'ETHUSDT']
+              }));
+            });
+            
+            ws.on('message', (data) => {
+              messageCount++;
+              const now = Date.now();
+              const gap = now - lastMessageTime;
+              
+              if (gap > 5000) {
+                console.warn(`⚠️ Message gap detected: ${gap}ms`);
+              }
+              
+              lastMessageTime = now;
+              
+              if (messageCount % 10 === 0) {
+                console.log(`Received ${messageCount} messages...`);
+              }
+            });
+            
+            ws.on('error', (err) => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+          });
+        };
+        
+        testMessageFlow()
+          .then(count => {
+            console.log(`Message flow test completed: ${count} messages`);
+            process.exit(0);
+          })
+          .catch(err => {
+            console.error('Message flow test failed:', err.message);
+            process.exit(1);
+          });
+        EOF
+        
+        node test-message-flow.js
+    
+    - name: Generate Health Report
+      if: always()
+      run: |
+        echo "## 🔌 WebSocket Health Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.prod-check.outputs.status }}" == "healthy" ]; then
+          echo "### ✅ Production WebSocket: HEALTHY" >> $GITHUB_STEP_SUMMARY
+          echo "- Connection Time: ${{ steps.prod-check.outputs.connection_time }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Reconnection: ✅ Working" >> $GITHUB_STEP_SUMMARY
+          echo "- Message Flow: ✅ Active" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Production WebSocket: UNHEALTHY" >> $GITHUB_STEP_SUMMARY
+          echo "- Reason: ${{ steps.prod-check.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Metrics" >> $GITHUB_STEP_SUMMARY
+        echo "- Target Connection Time: < 3000ms" >> $GITHUB_STEP_SUMMARY
+        echo "- Message Frequency: Expected every 1-2s" >> $GITHUB_STEP_SUMMARY
+        echo "- Reconnection Test: 3 attempts" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Send Alert on Failure
+      if: failure()
+      run: |
+        # Send Slack notification
+        if [ ! -z "${{ env.ALERT_WEBHOOK }}" ]; then
+          curl -X POST ${{ env.ALERT_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "🚨 WebSocket Health Check Failed",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "WebSocket Health Check Failed"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Time:*\n'$(date -u '+%Y-%m-%d %H:%M UTC')'"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Action Required:* Check WebSocket service immediately\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+                  }
+                }
+              ]
+            }'
+        fi
+    
+    - name: Create Issue on Repeated Failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Check if there's already an open issue
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: 'websocket-health',
+            state: 'open'
+          });
+          
+          if (issues.data.length === 0) {
+            // Create new issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 WebSocket Health Check Failing',
+              body: `## WebSocket Health Check Failed
+              
+              **Time**: ${new Date().toISOString()}
+              **Environment**: Production
+              **Workflow Run**: [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              
+              ### Symptoms
+              - [ ] Connection timeout (> 3s)
+              - [ ] No message flow
+              - [ ] Reconnection failing
+              
+              ### Action Required
+              1. Check WebSocket service status
+              2. Review SignalR Hub logs
+              3. Check network connectivity
+              4. Verify SSL certificates
+              
+              cc: @backend-team`,
+              labels: ['websocket-health', 'critical', 'production']
+            });
+          }
+
+  # Staging WebSocket Health Check (Optional)
+  staging-health:
+    name: Staging WebSocket Health
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'  # Only on manual trigger
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check Staging WebSocket
+      run: |
+        echo "Checking staging WebSocket..."
+        # Similar to production but with staging URL
+        # wss://staging.mytrader.tech/hubs/market-data

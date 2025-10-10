@@ -33,6 +33,11 @@ public class MultiAssetPriceUpdate
     public decimal Change24h { get; set; }
 
     /// <summary>
+    /// Previous closing price (used for percent calculation)
+    /// </summary>
+    public decimal? PreviousClose { get; set; }
+
+    /// <summary>
     /// 24-hour trading volume
     /// </summary>
     public decimal Volume { get; set; }
@@ -76,7 +81,7 @@ public class MarketStatusUpdate
     /// <summary>
     /// Current status of the market
     /// </summary>
-    public MarketStatus Status { get; set; }
+    public Enums.MarketStatus Status { get; set; }
 
     /// <summary>
     /// Next time the market will open (if currently closed)

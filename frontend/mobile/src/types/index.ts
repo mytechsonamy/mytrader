@@ -264,15 +264,24 @@ export interface UnifiedMarketDataDto {
   marketCap?: number;
   pe?: number;
   timestamp: string;
-  marketStatus: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+  marketStatus: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
   dataSource: string;
   lastUpdated: string;
+  // Alpaca integration fields (optional, backward compatible)
+  source?: 'ALPACA' | 'YAHOO_FALLBACK' | 'YAHOO_REALTIME';
+  qualityScore?: number;
+  isRealtime?: boolean;
+  // Market status enhancement fields
+  exchange?: 'BIST' | 'NASDAQ' | 'NYSE' | 'CRYPTO' | string;
+  lastUpdateTime?: string; // Alias for timestamp for clarity
+  nextOpenTime?: string;
+  nextCloseTime?: string;
 }
 
 export interface MarketStatusDto {
   marketId: string;
   marketName: string;
-  status: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+  status: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
   nextOpen?: string;
   nextClose?: string;
   timeZone: string;
@@ -491,10 +500,11 @@ export interface ErrorRecoveryStrategy {
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
 export type AssetClassType = 'CRYPTO' | 'STOCK' | 'FOREX' | 'COMMODITY' | 'INDEX';
-export type MarketStatus = 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+export type MarketStatus = 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
 export type TimeRange = '1D' | '7D' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 export type SortDirection = 'ASC' | 'DESC';
 export type PriceDataSource = 'REAL_TIME' | 'DELAYED' | 'HISTORICAL' | 'SIMULATED';
+export type DataSourceType = 'ALPACA' | 'YAHOO_FALLBACK' | 'YAHOO_REALTIME';
 
 // Common Component Props
 export interface BaseScreenProps {
@@ -508,6 +518,20 @@ export type RootStackParamList = {
   StrategyTest: {
     symbol: string;
     displayName: string;
+    assetClass?: AssetClassType;
+    templateId?: string;
+    strategyName?: string;
+    bestFor?: string;
+    defaultParameters?: {
+      bb_period: string;
+      bb_std: string;
+      macd_fast: string;
+      macd_slow: string;
+      macd_signal: string;
+      rsi_period: string;
+      rsi_overbought: string;
+      rsi_oversold: string;
+    };
   };
   News?: undefined;
 };
@@ -518,6 +542,7 @@ export type MainTabParamList = {
   Strategies: undefined;
   Gamification: undefined;
   Profile: undefined;
+  Test?: undefined; // Temporary test screen for error boundaries - REMOVE AFTER TESTING
 };
 
 // Backward-compatible alias

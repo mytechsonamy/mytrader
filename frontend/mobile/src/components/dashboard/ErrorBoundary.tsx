@@ -14,159 +14,7 @@ interface ErrorBoundaryProps {
   isolate?: boolean;
 }
 
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
-  }
-
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return {
-      hasError: true,
-      error,
-    };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    // Call the onError callback if provided
-    this.props.onError?.(error, errorInfo);
-
-    // Log to crash reporting service in production
-    if (__DEV__) {
-      console.group('🚨 Error Boundary');
-      console.error('Error:', error);
-      console.error('Error Info:', errorInfo);
-      console.error('Component Stack:', errorInfo.componentStack);
-      console.groupEnd();
-    }
-  }
-
-  retry = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
-  };
-
-  render() {
-    if (this.state.hasError && this.state.error) {
-      // If a custom fallback is provided, use it
-      if (this.props.fallback) {
-        return this.props.fallback(this.state.error, this.state.errorInfo, this.retry);
-      }
-
-      // Default error UI
-      return (
-        <View style={[
-          styles.container,
-          this.props.isolate && styles.isolatedContainer
-        ]}>
-          <View style={styles.errorCard}>
-            <Text style={styles.errorIcon}>⚠️</Text>
-            <Text style={styles.errorTitle}>Bir şeyler ters gitti</Text>
-            <Text style={styles.errorMessage}>
-              {this.state.error.message || 'Beklenmeyen bir hata oluştu'}
-            </Text>
-
-            {__DEV__ && (
-              <View style={styles.debugInfo}>
-                <Text style={styles.debugTitle}>Geliştirici Bilgisi:</Text>
-                <Text style={styles.debugText} numberOfLines={5}>
-                  {this.state.error.stack}
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.retryButton} onPress={this.retry}>
-              <Text style={styles.retryButtonText}>🔄 Tekrar Dene</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
-// Higher-order component for easier usage
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  errorBoundaryConfig?: Omit<ErrorBoundaryProps, 'children'>
-) {
-  const WithErrorBoundaryComponent = (props: P) => (
-    <ErrorBoundary {...errorBoundaryConfig}>
-      <WrappedComponent {...props} />
-    </ErrorBoundary>
-  );
-
-  WithErrorBoundaryComponent.displayName =
-    `withErrorBoundary(${WrappedComponent.displayName || WrappedComponent.name})`;
-
-  return WithErrorBoundaryComponent;
-}
-
-// Specialized error boundaries for different sections
-export const DashboardErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => (
-  <ErrorBoundary
-    onError={(error, errorInfo) => {
-      // Log dashboard-specific errors
-      console.error('Dashboard Error:', { error, errorInfo });
-    }}
-    fallback={(error, errorInfo, retry) => (
-      <View style={styles.dashboardErrorContainer}>
-        <Text style={styles.dashboardErrorIcon}>📊</Text>
-        <Text style={styles.dashboardErrorTitle}>Dashboard Hatası</Text>
-        <Text style={styles.dashboardErrorMessage}>
-          Dashboard yüklenirken bir sorun oluştu. Lütfen tekrar deneyin.
-        </Text>
-        <TouchableOpacity style={styles.dashboardRetryButton} onPress={retry}>
-          <Text style={styles.dashboardRetryButtonText}>Yenile</Text>
-        </TouchableOpacity>
-      </View>
-    )}
-  >
-    {children}
-  </ErrorBoundary>
-);
-
-export const AccordionErrorBoundary: React.FC<{
-  children: ReactNode;
-  sectionName: string;
-}> = ({ children, sectionName }) => (
-  <ErrorBoundary
-    isolate={true}
-    fallback={(error, errorInfo, retry) => (
-      <View style={styles.sectionErrorContainer}>
-        <Text style={styles.sectionErrorIcon}>⚠️</Text>
-        <Text style={styles.sectionErrorText}>
-          {sectionName} bölümü yüklenemedi
-        </Text>
-        <TouchableOpacity style={styles.sectionRetryButton} onPress={retry}>
-          <Text style={styles.sectionRetryText}>Tekrar Dene</Text>
-        </TouchableOpacity>
-      </View>
-    )}
-    onError={(error) => {
-      console.error(`Section Error (${sectionName}):`, error);
-    }}
-  >
-    {children}
-  </ErrorBoundary>
-);
-
+// Styles defined first to ensure they're available for all components
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -312,5 +160,168 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return {
+      hasError: true,
+      error,
+    };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    this.setState({
+      error,
+      errorInfo,
+    });
+
+    // Call the onError callback if provided
+    this.props.onError?.(error, errorInfo);
+
+    // Log to crash reporting service in production
+    if (__DEV__) {
+      console.group('🚨 Error Boundary');
+      console.error('Error:', error);
+      console.error('Error Info:', errorInfo);
+      console.error('Component Stack:', errorInfo.componentStack);
+      console.groupEnd();
+    }
+  }
+
+  retry = () => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    });
+  };
+
+  render() {
+    if (this.state.hasError && this.state.error) {
+      // If a custom fallback is provided, use it
+      if (this.props.fallback) {
+        return this.props.fallback(this.state.error, this.state.errorInfo, this.retry);
+      }
+
+      // Default error UI
+      return (
+        <View style={[
+          styles.container,
+          this.props.isolate && styles.isolatedContainer
+        ]}>
+          <View style={styles.errorCard}>
+            <Text style={styles.errorIcon}>⚠️</Text>
+            <Text style={styles.errorTitle}>Bir şeyler ters gitti</Text>
+            <Text style={styles.errorMessage}>
+              {this.state.error.message || 'Beklenmeyen bir hata oluştu'}
+            </Text>
+
+            {__DEV__ && (
+              <View style={styles.debugInfo}>
+                <Text style={styles.debugTitle}>Geliştirici Bilgisi:</Text>
+                <Text style={styles.debugText} numberOfLines={5}>
+                  {this.state.error.stack}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.retryButton} onPress={this.retry}>
+              <Text style={styles.retryButtonText}>🔄 Tekrar Dene</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Higher-order component for easier usage
+export function withErrorBoundary<P extends object>(
+  WrappedComponent: React.ComponentType<P>,
+  errorBoundaryConfig?: Omit<ErrorBoundaryProps, 'children'>
+) {
+  const WithErrorBoundaryComponent = (props: P) => (
+    <ErrorBoundary {...errorBoundaryConfig}>
+      <WrappedComponent {...props} />
+    </ErrorBoundary>
+  );
+
+  WithErrorBoundaryComponent.displayName =
+    `withErrorBoundary(${WrappedComponent.displayName || WrappedComponent.name})`;
+
+  return WithErrorBoundaryComponent;
+}
+
+// Specialized error boundaries for different sections
+export const DashboardErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Create a local reference to styles to ensure it's captured in the closure
+  const errorStyles = styles;
+
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        // Log dashboard-specific errors
+        console.error('Dashboard Error:', { error, errorInfo });
+      }}
+      fallback={(error, errorInfo, retry) => (
+        <View style={errorStyles.dashboardErrorContainer}>
+          <Text style={errorStyles.dashboardErrorIcon}>📊</Text>
+          <Text style={errorStyles.dashboardErrorTitle}>Dashboard Hatası</Text>
+          <Text style={errorStyles.dashboardErrorMessage}>
+            Dashboard yüklenirken bir sorun oluştu. Lütfen tekrar deneyin.
+          </Text>
+          <TouchableOpacity style={errorStyles.dashboardRetryButton} onPress={retry}>
+            <Text style={errorStyles.dashboardRetryButtonText}>Yenile</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+};
+
+export const AccordionErrorBoundary: React.FC<{
+  children: ReactNode;
+  sectionName: string;
+}> = ({ children, sectionName }) => {
+  // Create a local reference to styles to ensure it's captured in the closure
+  const errorStyles = styles;
+
+  return (
+    <ErrorBoundary
+      isolate={true}
+      fallback={(error, errorInfo, retry) => (
+        <View style={errorStyles.sectionErrorContainer}>
+          <Text style={errorStyles.sectionErrorIcon}>⚠️</Text>
+          <Text style={errorStyles.sectionErrorText}>
+            {sectionName} bölümü yüklenemedi
+          </Text>
+          <TouchableOpacity style={errorStyles.sectionRetryButton} onPress={retry}>
+            <Text style={errorStyles.sectionRetryText}>Tekrar Dene</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      onError={(error) => {
+        console.error(`Section Error (${sectionName}):`, error);
+      }}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+};
 
 export default ErrorBoundary;

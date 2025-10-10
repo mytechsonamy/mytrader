@@ -1,0 +1,480 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-10-09",
+  "strategies": {
+    "bb_macd": {
+      "id": "bb_macd",
+      "name": "Bollinger Bands + MACD",
+      "name_tr": "Bollinger Bantları + MACD",
+      "emoji": "📊",
+      "difficulty": "easy",
+      "difficulty_tr": "Kolay",
+      "description": "BB bantları ve MACD sinyallerini kombine eden klasik strateji",
+      "timeframes": ["5m", "15m"],
+      "optimal_assets": ["BTCUSDT", "ETHUSDT"],
+      "beginner": {
+        "parameters": {
+          "bb_period": 20,
+          "bb_std": 2.0,
+          "macd_fast": 12,
+          "macd_slow": 26,
+          "macd_signal": 9,
+          "rsi_period": 14,
+          "rsi_overbought": 70,
+          "rsi_oversold": 30
+        },
+        "risk_management": {
+          "position_size_pct": 2.0,
+          "stop_loss_pct": 1.5,
+          "take_profit_pct": 3.0,
+          "max_concurrent_positions": 3,
+          "max_daily_loss_pct": 5.0
+        },
+        "expected_performance": {
+          "annual_return_min": 15,
+          "annual_return_max": 25,
+          "win_rate_min": 55,
+          "win_rate_max": 60,
+          "max_drawdown_min": -12,
+          "max_drawdown_max": -15,
+          "sharpe_ratio_min": 1.2,
+          "sharpe_ratio_max": 1.5,
+          "avg_trade_duration_hours": 3,
+          "trades_per_month": 50
+        }
+      },
+      "advanced": {
+        "parameters": {
+          "bb_period": 20,
+          "bb_std": 2.5,
+          "macd_fast": 8,
+          "macd_slow": 21,
+          "macd_signal": 5,
+          "rsi_period": 14,
+          "rsi_overbought": 75,
+          "rsi_oversold": 25
+        },
+        "risk_management": {
+          "position_size_pct": 3.0,
+          "stop_loss_pct": 1.2,
+          "take_profit_pct": 4.0,
+          "max_concurrent_positions": 3,
+          "max_daily_loss_pct": 6.0
+        },
+        "expected_performance": {
+          "annual_return_min": 25,
+          "annual_return_max": 40,
+          "win_rate_min": 58,
+          "win_rate_max": 65,
+          "max_drawdown_min": -15,
+          "max_drawdown_max": -20,
+          "sharpe_ratio_min": 1.5,
+          "sharpe_ratio_max": 2.0,
+          "avg_trade_duration_hours": 2,
+          "trades_per_month": 70
+        }
+      },
+      "best_market_conditions": [
+        "Sideways/ranging markets",
+        "Moderate volatility (2-4% daily ATR)",
+        "High liquidity periods"
+      ],
+      "worst_market_conditions": [
+        "Strong trending markets",
+        "Very low volatility (< 1% ATR)",
+        "Weekend low liquidity"
+      ],
+      "entry_logic": {
+        "long": [
+          "Price touches lower Bollinger Band",
+          "MACD crosses above signal line",
+          "MACD Histogram positive",
+          "RSI < 40"
+        ],
+        "short": [
+          "Price touches upper Bollinger Band",
+          "MACD crosses below signal line",
+          "MACD Histogram negative",
+          "RSI > 60"
+        ]
+      }
+    },
+    "rsi_ema": {
+      "id": "rsi_ema",
+      "name": "RSI + EMA Crossover",
+      "name_tr": "RSI + EMA Geçişi",
+      "emoji": "📈",
+      "difficulty": "medium",
+      "difficulty_tr": "Orta",
+      "description": "RSI momentum ve EMA trend takibi kombinasyonu",
+      "timeframes": ["15m", "1h"],
+      "optimal_assets": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"],
+      "beginner": {
+        "parameters": {
+          "ema_fast": 9,
+          "ema_slow": 21,
+          "rsi_period": 14,
+          "rsi_overbought": 70,
+          "rsi_oversold": 30,
+          "volume_filter_multiplier": 1.2,
+          "atr_period": 14
+        },
+        "risk_management": {
+          "position_size_pct": 2.5,
+          "stop_loss_pct": 1.5,
+          "take_profit_pct": 3.0,
+          "max_concurrent_positions": 4,
+          "max_daily_loss_pct": 6.0
+        },
+        "expected_performance": {
+          "annual_return_min": 20,
+          "annual_return_max": 35,
+          "win_rate_min": 52,
+          "win_rate_max": 58,
+          "max_drawdown_min": -15,
+          "max_drawdown_max": -18,
+          "sharpe_ratio_min": 1.4,
+          "sharpe_ratio_max": 1.8,
+          "avg_trade_duration_hours": 6,
+          "trades_per_month": 38
+        }
+      },
+      "advanced": {
+        "parameters": {
+          "ema_fast": 8,
+          "ema_slow": 21,
+          "rsi_period": 13,
+          "rsi_overbought": 75,
+          "rsi_oversold": 25,
+          "volume_filter_multiplier": 1.5,
+          "atr_period": 14
+        },
+        "risk_management": {
+          "position_size_pct": 3.5,
+          "stop_loss_pct": 1.2,
+          "take_profit_pct": 4.0,
+          "max_concurrent_positions": 4,
+          "max_daily_loss_pct": 7.0
+        },
+        "expected_performance": {
+          "annual_return_min": 35,
+          "annual_return_max": 55,
+          "win_rate_min": 55,
+          "win_rate_max": 62,
+          "max_drawdown_min": -18,
+          "max_drawdown_max": -25,
+          "sharpe_ratio_min": 1.8,
+          "sharpe_ratio_max": 2.3,
+          "avg_trade_duration_hours": 4.5,
+          "trades_per_month": 55
+        }
+      },
+      "best_market_conditions": [
+        "Clear trending markets",
+        "Medium to high volatility (3-6% ATR)",
+        "Post-consolidation breakouts"
+      ],
+      "worst_market_conditions": [
+        "Choppy sideways markets",
+        "Low volatility consolidation",
+        "False breakout zones"
+      ],
+      "entry_logic": {
+        "long": [
+          "EMA(9) crosses above EMA(21)",
+          "40 < RSI < 70",
+          "Volume > 1.2x average",
+          "Price > EMA(21)"
+        ],
+        "short": [
+          "EMA(9) crosses below EMA(21)",
+          "30 < RSI < 60",
+          "Volume > 1.2x average",
+          "Price < EMA(21)"
+        ]
+      }
+    },
+    "volume_breakout": {
+      "id": "volume_breakout",
+      "name": "Volume Breakout",
+      "name_tr": "Hacimli Kırılım",
+      "emoji": "🚀",
+      "difficulty": "advanced",
+      "difficulty_tr": "İleri",
+      "description": "Hacim artışı ile desteklenen fiyat kırılımları",
+      "timeframes": ["1h", "4h"],
+      "optimal_assets": ["BTCUSDT", "ETHUSDT"],
+      "beginner": {
+        "parameters": {
+          "volume_sma_period": 20,
+          "volume_breakout_multiplier": 2.0,
+          "price_breakout_lookback": 20,
+          "atr_period": 14,
+          "atr_multiplier_entry": 1.5,
+          "rsi_filter_min": 50
+        },
+        "risk_management": {
+          "position_size_pct": 3.0,
+          "stop_loss_pct": 2.0,
+          "take_profit_pct": 6.0,
+          "max_concurrent_positions": 3,
+          "max_daily_loss_pct": 7.0
+        },
+        "expected_performance": {
+          "annual_return_min": 25,
+          "annual_return_max": 45,
+          "win_rate_min": 45,
+          "win_rate_max": 52,
+          "max_drawdown_min": -18,
+          "max_drawdown_max": -22,
+          "sharpe_ratio_min": 1.5,
+          "sharpe_ratio_max": 2.0,
+          "avg_trade_duration_hours": 9,
+          "trades_per_month": 20
+        }
+      },
+      "advanced": {
+        "parameters": {
+          "volume_sma_period": 20,
+          "volume_breakout_multiplier": 2.5,
+          "price_breakout_lookback": 30,
+          "atr_period": 14,
+          "atr_multiplier_entry": 2.0,
+          "rsi_filter_min": 55
+        },
+        "risk_management": {
+          "position_size_pct": 4.0,
+          "stop_loss_pct": 1.5,
+          "take_profit_pct": 8.0,
+          "max_concurrent_positions": 3,
+          "max_daily_loss_pct": 8.0
+        },
+        "expected_performance": {
+          "annual_return_min": 45,
+          "annual_return_max": 75,
+          "win_rate_min": 48,
+          "win_rate_max": 55,
+          "max_drawdown_min": -22,
+          "max_drawdown_max": -30,
+          "sharpe_ratio_min": 2.0,
+          "sharpe_ratio_max": 2.6,
+          "avg_trade_duration_hours": 7,
+          "trades_per_month": 28
+        }
+      },
+      "best_market_conditions": [
+        "High volatility expansion events",
+        "News catalyst-driven moves",
+        "Post-consolidation breakouts"
+      ],
+      "worst_market_conditions": [
+        "Low volatility consolidation",
+        "False breakout zones",
+        "Weekend/holiday low volume"
+      ],
+      "entry_logic": {
+        "long": [
+          "Price breaks above 20-period high",
+          "Volume > 2.0x average",
+          "Current ATR > 1.5x ATR average",
+          "RSI > 50",
+          "Price closes above breakout level"
+        ],
+        "short": [
+          "Price breaks below 20-period low",
+          "Volume > 2.0x average",
+          "Current ATR > 1.5x ATR average",
+          "RSI < 50",
+          "Price closes below breakdown level"
+        ]
+      }
+    },
+    "trend_following": {
+      "id": "trend_following",
+      "name": "Trend Following",
+      "name_tr": "Trend Takibi",
+      "emoji": "📍",
+      "difficulty": "medium",
+      "difficulty_tr": "Orta",
+      "description": "Uzun vadeli trend takip stratejisi",
+      "timeframes": ["4h", "1d"],
+      "optimal_assets": ["BTCUSDT", "ETHUSDT"],
+      "beginner": {
+        "parameters": {
+          "ema_fast": 21,
+          "ema_medium": 50,
+          "ema_slow": 200,
+          "adx_period": 14,
+          "adx_threshold": 25,
+          "supertrend_period": 10,
+          "supertrend_multiplier": 3.0
+        },
+        "risk_management": {
+          "position_size_pct": 4.0,
+          "stop_loss_pct": 3.0,
+          "take_profit_pct": 12.0,
+          "max_concurrent_positions": 2,
+          "max_weekly_loss_pct": 10.0
+        },
+        "expected_performance": {
+          "annual_return_min": 30,
+          "annual_return_max": 55,
+          "win_rate_min": 48,
+          "win_rate_max": 55,
+          "max_drawdown_min": -20,
+          "max_drawdown_max": -25,
+          "sharpe_ratio_min": 1.6,
+          "sharpe_ratio_max": 2.2,
+          "avg_trade_duration_hours": 96,
+          "trades_per_month": 12
+        }
+      },
+      "advanced": {
+        "parameters": {
+          "ema_fast": 21,
+          "ema_medium": 50,
+          "ema_slow": 200,
+          "adx_period": 14,
+          "adx_threshold": 30,
+          "supertrend_period": 10,
+          "supertrend_multiplier": 2.5,
+          "ichimoku_enabled": true
+        },
+        "risk_management": {
+          "position_size_pct": 5.0,
+          "stop_loss_pct": 2.5,
+          "take_profit_pct": 16.0,
+          "max_concurrent_positions": 2,
+          "max_weekly_loss_pct": 12.0
+        },
+        "expected_performance": {
+          "annual_return_min": 50,
+          "annual_return_max": 85,
+          "win_rate_min": 52,
+          "win_rate_max": 60,
+          "max_drawdown_min": -25,
+          "max_drawdown_max": -35,
+          "sharpe_ratio_min": 2.0,
+          "sharpe_ratio_max": 2.8,
+          "avg_trade_duration_hours": 72,
+          "trades_per_month": 16
+        }
+      },
+      "best_market_conditions": [
+        "Sustained trending markets",
+        "Strong ADX (>30)",
+        "Post-accumulation phases"
+      ],
+      "worst_market_conditions": [
+        "Choppy sideways consolidation",
+        "Frequent trend reversals",
+        "Low ADX (<20)"
+      ],
+      "entry_logic": {
+        "long": [
+          "EMA(21) > EMA(50) > EMA(200)",
+          "Price > EMA(21)",
+          "ADX > 25",
+          "+DI > -DI",
+          "SuperTrend BUY signal",
+          "Price makes higher high"
+        ],
+        "short": [
+          "EMA(21) < EMA(50) < EMA(200)",
+          "Price < EMA(21)",
+          "ADX > 25",
+          "-DI > +DI",
+          "SuperTrend SELL signal",
+          "Price makes lower low"
+        ]
+      }
+    }
+  },
+  "risk_warnings": {
+    "general": {
+      "title": "RİSK UYARISI",
+      "warnings": [
+        "Kripto para ticareti yüksek risk içerir ve tüm sermayenizi kaybedebilirsiniz",
+        "Geçmiş performans gelecek sonuçları garanti etmez",
+        "Bu stratejiler eğitim amaçlıdır ve yatırım tavsiyesi değildir",
+        "Kaybetmeyi göze alamayacağınız parayla işlem yapmayın",
+        "Her stratejinin maksimum çekilme riski %15-35 arasındadır",
+        "Piyasa koşulları beklenmedik kayıplara neden olabilir"
+      ]
+    },
+    "strategy_specific": {
+      "bb_macd": [
+        "Trend piyasalarında sık stop-loss tetikleyebilir",
+        "Yüksek volatilite dönemlerinde bekleyin"
+      ],
+      "rsi_ema": [
+        "Yanlış kırılmalarda (false breakout) kayıp riski yüksek",
+        "Konsolidasyon dönemlerinden kaçının"
+      ],
+      "volume_breakout": [
+        "En riskli strateji - yüksek sermaye gerektirir",
+        "Yalnızca deneyimli trader'lar için uygundur",
+        "Maksimum çekilme %30'a ulaşabilir"
+      ],
+      "trend_following": [
+        "Uzun tutma süreleri gerektirir (günler/haftalar)",
+        "Choppy piyasalarda birden fazla kayıp yaşanabilir",
+        "Sabır ve disiplin gerektirir"
+      ]
+    }
+  },
+  "backtesting_requirements": {
+    "minimum_data_period_months": 18,
+    "in_sample_ratio": 0.67,
+    "out_sample_ratio": 0.33,
+    "monte_carlo_simulations": 1000,
+    "confidence_level": 0.95,
+    "slippage_pct": 0.1,
+    "commission_pct": 0.1,
+    "validation_metrics": {
+      "min_sharpe_ratio": 1.5,
+      "min_sortino_ratio": 2.0,
+      "min_win_rate": 50,
+      "min_profit_factor": 1.6,
+      "max_consecutive_losses": 7
+    }
+  },
+  "parameter_labels": {
+    "bb_macd": {
+      "bb_period": "BB Periyot",
+      "bb_std": "BB Std Sapma",
+      "macd_fast": "MACD Hızlı",
+      "macd_slow": "MACD Yavaş",
+      "macd_signal": "MACD Sinyal",
+      "rsi_period": "RSI Periyot",
+      "rsi_overbought": "RSI Aşırı Alım",
+      "rsi_oversold": "RSI Aşırı Satım"
+    },
+    "rsi_ema": {
+      "ema_fast": "EMA Hızlı",
+      "ema_slow": "EMA Yavaş",
+      "rsi_period": "RSI Periyot",
+      "rsi_overbought": "RSI Üst Eşik",
+      "rsi_oversold": "RSI Alt Eşik",
+      "volume_filter_multiplier": "Volume Çarpanı",
+      "atr_period": "ATR Periyot"
+    },
+    "volume_breakout": {
+      "volume_sma_period": "Volume SMA",
+      "volume_breakout_multiplier": "Volume Katsayısı",
+      "price_breakout_lookback": "Kırılım Geriye Bakış",
+      "atr_period": "ATR Periyot",
+      "atr_multiplier_entry": "ATR Çarpanı",
+      "rsi_filter_min": "RSI Min Filtre"
+    },
+    "trend_following": {
+      "ema_fast": "EMA Hızlı",
+      "ema_medium": "EMA Orta",
+      "ema_slow": "EMA Yavaş",
+      "adx_period": "ADX Periyot",
+      "adx_threshold": "ADX Eşik",
+      "supertrend_period": "SuperTrend Periyot",
+      "supertrend_multiplier": "SuperTrend Çarpan"
+    }
+  }
+}

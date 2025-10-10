@@ -41,6 +41,17 @@ interface StrategyTemplate {
   emoji: string;
   difficulty: 'Kolay' | 'Orta' | 'İleri';
   timeframe: string;
+  bestFor: string;
+  defaultParameters: {
+    bb_period: string;
+    bb_std: string;
+    macd_fast: string;
+    macd_slow: string;
+    macd_signal: string;
+    rsi_period: string;
+    rsi_overbought: string;
+    rsi_oversold: string;
+  };
 }
 
 const StrategiesScreen: React.FC = () => {
@@ -62,7 +73,18 @@ const StrategiesScreen: React.FC = () => {
       description: 'BB bantları ve MACD sinyallerini kombine eden klasik strateji',
       emoji: '📊',
       difficulty: 'Kolay',
-      timeframe: '5m-15m'
+      timeframe: '5m-15m',
+      bestFor: 'Yatay piyasalar, ortalamaya dönüş',
+      defaultParameters: {
+        bb_period: '20',
+        bb_std: '2.0',
+        macd_fast: '12',
+        macd_slow: '26',
+        macd_signal: '9',
+        rsi_period: '14',
+        rsi_overbought: '70',
+        rsi_oversold: '30',
+      }
     },
     {
       id: 'rsi_ema',
@@ -70,7 +92,18 @@ const StrategiesScreen: React.FC = () => {
       description: 'RSI momentum ve EMA trend takibi kombinasyonu',
       emoji: '📈',
       difficulty: 'Orta',
-      timeframe: '15m-1h'
+      timeframe: '15m-1h',
+      bestFor: 'Momentum + trend onayı',
+      defaultParameters: {
+        bb_period: '20',
+        bb_std: '1.2',
+        macd_fast: '9',  // EMA fast
+        macd_slow: '21', // EMA slow
+        macd_signal: '9',
+        rsi_period: '14',
+        rsi_overbought: '70',
+        rsi_oversold: '30',
+      }
     },
     {
       id: 'volume_breakout',
@@ -78,7 +111,18 @@ const StrategiesScreen: React.FC = () => {
       description: 'Hacim artışı ile desteklenen fiyat kırılımları',
       emoji: '🚀',
       difficulty: 'İleri',
-      timeframe: '1h-4h'
+      timeframe: '1h-4h',
+      bestFor: 'Haber olayları, yüksek volatilite',
+      defaultParameters: {
+        bb_period: '20',  // Volume SMA period
+        bb_std: '2.0',    // Volume multiplier
+        macd_fast: '20',  // Volume SMA
+        macd_slow: '15',  // ATR multiplier * 10
+        macd_signal: '14', // ATR period
+        rsi_period: '14',
+        rsi_overbought: '80',
+        rsi_oversold: '20',
+      }
     },
     {
       id: 'trend_following',
@@ -86,7 +130,18 @@ const StrategiesScreen: React.FC = () => {
       description: 'Uzun vadeli trend takip stratejisi',
       emoji: '📍',
       difficulty: 'Orta',
-      timeframe: '4h-1d'
+      timeframe: '4h-1d',
+      bestFor: 'Güçlü yönlü piyasalar',
+      defaultParameters: {
+        bb_period: '50',  // EMA medium (scaled)
+        bb_std: '25',     // ADX threshold (scaled)
+        macd_fast: '12',
+        macd_slow: '26',
+        macd_signal: '9',
+        rsi_period: '14',
+        rsi_overbought: '70',
+        rsi_oversold: '30',
+      }
     },
   ];
 
@@ -144,15 +199,16 @@ const StrategiesScreen: React.FC = () => {
   // Load strategies on component mount
   useEffect(() => {
     loadStrategies();
-  }, [user]);
+  }, []); // Removed user dependency for debugging
 
   // Refresh strategies when screen comes into focus (e.g., after creating a new strategy)
   useFocusEffect(
     useCallback(() => {
-      if (user) {
+      // Temporarily remove user check for debugging
+      // if (user) {
         loadStrategies();
-      }
-    }, [user])
+      // }
+    }, [])
   );
 
   const loadAssets = async () => {
@@ -187,13 +243,17 @@ const StrategiesScreen: React.FC = () => {
   };
 
   const loadStrategies = async () => {
-    if (!user) {
-      setStrategies([]);
-      return;
-    }
+    // Temporarily remove user check for debugging
+    // if (!user) {
+    //   setStrategies([]);
+    //   return;
+    // }
 
+    console.log('🔍 StrategiesScreen: loadStrategies called');
     try {
+      console.log('🌐 StrategiesScreen: Making API call to getUserStrategies');
       const result = await apiService.getUserStrategies();
+      console.log('📊 StrategiesScreen: API response received:', result);
       if (result.success && Array.isArray(result.data)) {
         // Convert API response to Strategy interface format
         const apiStrategies = result.data.map((strategy: any) => ({
@@ -209,29 +269,20 @@ const StrategiesScreen: React.FC = () => {
             maxDrawdown: Math.random() * 10 + 5
           }
         }));
+        console.log('✅ StrategiesScreen: Processed strategies count:', apiStrategies.length);
         setStrategies(apiStrategies);
+        console.log('🎯 StrategiesScreen: Strategies state updated');
       } else {
-        // Handle API errors gracefully - don't show errors to users
-        // 404 errors or empty results are expected when user has no strategies yet
-        if (result.message?.includes('404') || !result.message) {
-          // User has no strategies yet, this is normal
-          setStrategies([]);
-        } else {
-          // Only log other types of errors for debugging
-          console.error('Failed to load strategies:', result.message);
-          setStrategies([]);
-        }
+        console.log('❌ StrategiesScreen: API call failed or no data:', result);
+        // Don't use mock data - show empty state instead
+        setStrategies([]);
       }
     } catch (error: any) {
       // Handle network/connection errors gracefully
-      if (error?.message?.includes('404')) {
-        // User has no strategies yet, this is normal
-        setStrategies([]);
-      } else {
-        // Only log other types of errors for debugging
-        console.error('Error loading strategies:', error);
-        setStrategies([]);
-      }
+      console.error('🚨 StrategiesScreen: Exception in loadStrategies:', error);
+      console.error('❌ StrategiesScreen: Network/connection error:', error);
+      // Don't use mock data - show empty state instead
+      setStrategies([]);
     }
   };
 
@@ -242,10 +293,11 @@ const StrategiesScreen: React.FC = () => {
   };
 
   const handleCreateStrategy = () => {
-    if (!user) {
-      Alert.alert('Giriş Gerekli', 'Strateji oluşturmak için giriş yapmalısınız.');
-      return;
-    }
+    // Temporarily remove user check for debugging
+    // if (!user) {
+    //   Alert.alert('Giriş Gerekli', 'Strateji oluşturmak için giriş yapmalısınız.');
+    //   return;
+    // }
     setShowCreateModal(true);
   };
 
@@ -266,6 +318,10 @@ const StrategiesScreen: React.FC = () => {
     navigation.navigate('StrategyTest', {
       symbol: selectedAsset,
       displayName: selectedAssetData?.name || 'Kripto Para',
+      templateId: selectedTemplate?.id,
+      strategyName: selectedTemplate?.name,
+      bestFor: selectedTemplate?.bestFor,
+      defaultParameters: selectedTemplate?.defaultParameters,
     });
 
     setShowCreateModal(false);
@@ -298,7 +354,7 @@ const StrategiesScreen: React.FC = () => {
   const renderStrategyCard = (strategy: Strategy) => (
     <View key={strategy.id} style={styles.strategyCard}>
       <View style={styles.strategyHeader}>
-        <View>
+        <View style={styles.strategyInfo}>
           <Text style={styles.strategyName}>{strategy.name}</Text>
           <Text style={styles.strategyDescription}>{strategy.description}</Text>
           {strategy.symbol && (
@@ -381,7 +437,9 @@ const StrategiesScreen: React.FC = () => {
       <View style={styles.templateHeader}>
         <Text style={styles.templateEmoji}>{template.emoji}</Text>
         <View style={styles.difficultyBadge}>
-          <Text style={styles.difficultyText}>{template.difficulty}</Text>
+          <Text style={styles.difficultyText} numberOfLines={1} ellipsizeMode="tail">
+            {template.difficulty}
+          </Text>
         </View>
       </View>
       <Text style={styles.templateName}>{template.name}</Text>
@@ -457,17 +515,22 @@ const StrategiesScreen: React.FC = () => {
           {strategyTemplates.map((template) => (
             <View key={template.id} style={styles.strategyCard}>
               <View style={styles.strategyHeader}>
-                <View>
+                <View style={styles.strategyInfo}>
                   <Text style={styles.strategyName}>
                     {template.emoji} {template.name}
                   </Text>
                   <Text style={styles.strategyDescription}>{template.description}</Text>
+                  <View style={styles.bestForBadge}>
+                    <Text style={styles.bestForText}>✨ {template.bestFor}</Text>
+                  </View>
                 </View>
                 <View style={styles.difficultyBadge}>
-                  <Text style={styles.difficultyText}>{template.difficulty}</Text>
+                  <Text style={styles.difficultyText} numberOfLines={1} ellipsizeMode="tail">
+                    {template.difficulty}
+                  </Text>
                 </View>
               </View>
-              
+
               <View style={styles.templateInfo}>
                 <Text style={styles.templateTimeframe}>⏱ Zaman: {template.timeframe}</Text>
               </View>
@@ -475,8 +538,15 @@ const StrategiesScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.useTemplateButton}
                 onPress={() => {
-                  setSelectedTemplate(template);
-                  handleCreateStrategy();
+                  const firstAsset = assets.length > 0 ? assets[0] : fallbackAssets[0];
+                  navigation.navigate('StrategyTest', {
+                    symbol: firstAsset.symbol,
+                    displayName: firstAsset.name,
+                    templateId: template.id,
+                    strategyName: template.name,
+                    bestFor: template.bestFor,
+                    defaultParameters: template.defaultParameters,
+                  });
                 }}
               >
                 <Text style={styles.useTemplateButtonText}>🚀 Bu Şablonu Kullan</Text>
@@ -510,12 +580,35 @@ const StrategiesScreen: React.FC = () => {
             <View style={{ width: 24 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
             {!selectedTemplate && (
               <View>
                 <Text style={styles.modalSectionTitle}>Strateji Şablonu Seçin</Text>
                 <View style={styles.templatesGrid}>
                   {strategyTemplates.map(renderTemplateCard)}
+                </View>
+
+                {/* Skip Template Button */}
+                <View style={styles.skipTemplateSection}>
+                  <Text style={styles.skipTemplateText}>veya</Text>
+                  <TouchableOpacity
+                    style={styles.skipTemplateButton}
+                    onPress={() => {
+                      const firstAsset = assets.length > 0 ? assets[0] : fallbackAssets[0];
+                      navigation.navigate('StrategyTest', {
+                        symbol: firstAsset.symbol,
+                        displayName: firstAsset.name,
+                      });
+                      setShowCreateModal(false);
+                      resetModal();
+                    }}
+                  >
+                    <Text style={styles.skipTemplateButtonText}>✨ Şablon Kullanmadan Özel Strateji Oluştur</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
@@ -661,6 +754,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 15,
+    gap: 12,
   },
   strategyName: {
     fontSize: 18,
@@ -773,13 +867,41 @@ const styles = StyleSheet.create({
   },
   difficultyBadge: {
     backgroundColor: '#f59e0b',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
+    minWidth: 70,
+    maxWidth: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    flexShrink: 0, // Prevents badge from shrinking
   },
   difficultyText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  strategyInfo: {
+    flex: 1,
+    marginRight: 8, // Ensures space for badge
+  },
+  bestForBadge: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  bestForText: {
+    color: 'white',
+    fontSize: 11,
     fontWeight: '600',
   },
   // Modal Styles
@@ -809,7 +931,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     flex: 1,
+  },
+  modalContentContainer: {
     padding: 20,
+    paddingBottom: 40,
   },
   modalSectionTitle: {
     fontSize: 18,
@@ -837,6 +962,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 12,
   },
   templateEmoji: {
     fontSize: 24,
@@ -940,6 +1066,31 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  skipTemplateSection: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  skipTemplateText: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  skipTemplateButton: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    width: '100%',
+  },
+  skipTemplateButtonText: {
+    color: '#667eea',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

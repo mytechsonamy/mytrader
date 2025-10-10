@@ -156,7 +156,7 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             AssetClass = AssetClassCode.CRYPTO,
             Symbol = priceUpdate.Symbol,
             Price = priceUpdate.Price,
-            Change24h = priceUpdate.PriceChange,
+            Change24h = priceUpdate.PriceChange, // This is already a percentage from Binance
             Volume = priceUpdate.Volume,
             MarketStatus = MyTrader.Core.Enums.MarketStatus.OPEN, // Crypto markets are always open
             Timestamp = priceUpdate.Timestamp,
@@ -164,7 +164,8 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             Metadata = new Dictionary<string, object>
             {
                 { "exchange", "BINANCE" },
-                { "originalTimestamp", priceUpdate.Timestamp }
+                { "originalTimestamp", priceUpdate.Timestamp },
+                { "percentChange24h", priceUpdate.PriceChange }
             }
         };
 
@@ -174,8 +175,8 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
     private async void OnStockPriceUpdated(StockPriceData stockUpdate)
     {
         // Legacy handler for direct Yahoo integration (when DataSourceRouter is not available)
-        _logger.LogDebug("Received stock price update for {Symbol} ({AssetClass}): ${Price} from {Source}",
-            stockUpdate.Symbol, stockUpdate.AssetClass, stockUpdate.Price, stockUpdate.Source);
+        _logger.LogInformation("📊 Stock Update: {Symbol} - Price: ${Price}, PreviousClose: ${PreviousClose}, Change%: {ChangePercent}%, Source: {Source}",
+            stockUpdate.Symbol, stockUpdate.Price, stockUpdate.PreviousClose, stockUpdate.PriceChangePercent, stockUpdate.Source);
 
         // Enrich with market status information
         EnrichWithMarketStatus(stockUpdate);
@@ -187,7 +188,8 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             AssetClass = stockUpdate.AssetClass,
             Symbol = stockUpdate.Symbol,
             Price = stockUpdate.Price,
-            Change24h = stockUpdate.PriceChange, // ✅ FIX: Use price change amount, not percent
+            Change24h = stockUpdate.PriceChangePercent, // ✅ FIXED: Use percent not amount
+            PreviousClose = stockUpdate.PreviousClose, // ✅ Added: Previous close for frontend display
             Volume = stockUpdate.Volume,
             MarketStatus = stockUpdate.MarketStatus,
             Timestamp = stockUpdate.Timestamp,
@@ -197,6 +199,7 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
                 { "market", stockUpdate.Market },
                 { "priceChange", stockUpdate.PriceChange },
                 { "priceChangePercent", stockUpdate.PriceChangePercent },
+                { "previousClose", stockUpdate.PreviousClose },
                 { "originalTimestamp", stockUpdate.Timestamp },
                 { "dataSource", stockUpdate.Source },
                 { "nextOpenTime", stockUpdate.NextOpenTime },
@@ -226,7 +229,8 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             AssetClass = stockUpdate.AssetClass,
             Symbol = stockUpdate.Symbol,
             Price = stockUpdate.Price,
-            Change24h = stockUpdate.PriceChange, // ✅ FIX: Use price change amount, not percent
+            Change24h = stockUpdate.PriceChangePercent, // ✅ FIXED: Use percent not amount
+            PreviousClose = stockUpdate.PreviousClose, // ✅ Added: Previous close for frontend display
             Volume = stockUpdate.Volume,
             MarketStatus = stockUpdate.MarketStatus,
             Timestamp = stockUpdate.Timestamp,
@@ -236,6 +240,7 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
                 { "market", stockUpdate.Market },
                 { "priceChange", stockUpdate.PriceChange },
                 { "priceChangePercent", stockUpdate.PriceChangePercent },
+                { "previousClose", stockUpdate.PreviousClose },
                 { "originalTimestamp", stockUpdate.Timestamp },
                 { "dataSource", stockUpdate.Source },
                 { "isRealTime", stockUpdate.IsRealTime },
@@ -310,6 +315,8 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
                 symbol = priceUpdate.Symbol,
                 price = priceUpdate.Price,
                 change = priceUpdate.Change24h,
+                change24h = priceUpdate.Change24h, // ✅ ADDED: Mobile app also checks for change24h field
+                previousClose = priceUpdate.PreviousClose, // ✅ FIXED: Added for stock data
                 volume = priceUpdate.Volume,
                 timestamp = priceUpdate.Timestamp,
                 assetClass = priceUpdate.AssetClass.ToString()

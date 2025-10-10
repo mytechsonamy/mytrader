@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mobile WebSocket Integration Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.js"></script>
+</head>
+<body>
+    <h1>Mobile WebSocket Integration Test</h1>
+    <div id="status">Initializing...</div>
+    <div id="connection-time"></div>
+    <div id="data-received"></div>
+    <div id="test-results"></div>
+
+    <script>
+        const results = {
+            connectionStartTime: null,
+            connectionEndTime: null,
+            connectionSuccess: false,
+            dataReceived: [],
+            testsPassed: 0,
+            totalTests: 4
+        };
+
+        async function testMobileWebSocketConnection() {
+            const statusDiv = document.getElementById('status');
+            const connectionTimeDiv = document.getElementById('connection-time');
+            const dataDiv = document.getElementById('data-received');
+            const resultsDiv = document.getElementById('test-results');
+
+            statusDiv.innerHTML = 'Testing Mobile WebSocket connection...';
+
+            // Test 1: Connection establishment to mobile backend
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("http://192.168.68.103:5002/hubs/market-data")
+                .build();
+
+            connection.on("PriceUpdate", function (data) {
+                results.dataReceived.push({
+                    timestamp: new Date().toISOString(),
+                    data: data
+                });
+                dataDiv.innerHTML += `<p>Mobile received: ${JSON.stringify(data)} at ${new Date().toLocaleTimeString()}</p>`;
+            });
+
+            try {
+                results.connectionStartTime = Date.now();
+                statusDiv.innerHTML = 'Connecting to Mobile WebSocket...';
+
+                await connection.start();
+                results.connectionEndTime = Date.now();
+                results.connectionSuccess = true;
+
+                const connectionTime = results.connectionEndTime - results.connectionStartTime;
+                connectionTimeDiv.innerHTML = `Mobile connection established in ${connectionTime}ms`;
+
+                // Test connection time (should be < 3 seconds)
+                if (connectionTime < 3000) {
+                    results.testsPassed++;
+                    connectionTimeDiv.innerHTML += ' ✅ (< 3 seconds)';
+                } else {
+                    connectionTimeDiv.innerHTML += ' ❌ (> 3 seconds)';
+                }
+
+                statusDiv.innerHTML = 'Mobile Connected! Subscribing to crypto symbols...';
+
+                // Test 2: Subscribe to crypto symbols
+                try {
+                    await connection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSD", "ETHUSD", "ADAUSD", "SOLUSD", "AVAXUSD"]);
+                    results.testsPassed++;
+                    statusDiv.innerHTML = 'Mobile subscribed to crypto symbols ✅';
+                } catch (err) {
+                    statusDiv.innerHTML = `Mobile subscription failed ❌: ${err.message}`;
+                }
+
+                // Test 3: Wait for data (10 seconds)
+                statusDiv.innerHTML += '<br>Waiting for mobile price updates (10 seconds)...';
+
+                setTimeout(() => {
+                    if (results.dataReceived.length > 0) {
+                        results.testsPassed++;
+                        statusDiv.innerHTML += '<br>Mobile data received ✅';
+                    } else {
+                        statusDiv.innerHTML += '<br>No mobile data received ❌';
+                    }
+
+                    // Test 4: Data freshness (should be within 5 seconds)
+                    const now = new Date();
+                    const recentData = results.dataReceived.filter(item => {
+                        const itemTime = new Date(item.timestamp);
+                        return (now - itemTime) < 5000;
+                    });
+
+                    if (recentData.length > 0) {
+                        results.testsPassed++;
+                        statusDiv.innerHTML += '<br>Recent mobile data received ✅';
+                    } else {
+                        statusDiv.innerHTML += '<br>No recent mobile data ❌';
+                    }
+
+                    // Display final results
+                    resultsDiv.innerHTML = `
+                        <h2>Mobile Test Results</h2>
+                        <p><strong>Tests passed: ${results.testsPassed}/${results.totalTests}</strong></p>
+                        <p>Connection time: ${connectionTime}ms ${connectionTime < 3000 ? '✅' : '❌'}</p>
+                        <p>Subscription: ${results.testsPassed >= 2 ? '✅' : '❌'}</p>
+                        <p>Data received: ${results.dataReceived.length} messages ${results.dataReceived.length > 0 ? '✅' : '❌'}</p>
+                        <p>Recent data: ${recentData.length > 0 ? '✅' : '❌'}</p>
+                        <h3>Overall: ${results.testsPassed === results.totalTests ? '✅ PASS' : '❌ FAIL'}</h3>
+                    `;
+                }, 10000);
+
+            } catch (err) {
+                statusDiv.innerHTML = `Mobile connection failed ❌: ${err.message}`;
+                connectionTimeDiv.innerHTML = `Failed to connect to mobile after ${Date.now() - results.connectionStartTime}ms`;
+                resultsDiv.innerHTML = `<h2>Mobile Test Results: ❌ CONNECTION FAILED</h2><p>${err.message}</p>`;
+            }
+        }
+
+        // Start test when page loads
+        window.onload = testMobileWebSocketConnection;
+    </script>
+</body>
+</html>

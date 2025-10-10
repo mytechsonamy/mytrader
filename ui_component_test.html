@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UI Component Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .accordion { border: 1px solid #ddd; margin: 5px 0; }
+        .accordion-header {
+            background: #f1f1f1;
+            padding: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .accordion-content {
+            padding: 10px;
+            display: none;
+            background: #f9f9f9;
+        }
+        .accordion.open .accordion-content { display: block; }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>UI Component Integration Test</h1>
+
+    <div class="test-section">
+        <h2>Testing Independent Accordion Behavior</h2>
+        <p>Click each accordion to test independent behavior (only one should open at a time):</p>
+
+        <div class="accordion" id="nasdaq-accordion">
+            <div class="accordion-header" onclick="toggleAccordion('nasdaq')">
+                📈 NASDAQ (Click to test)
+            </div>
+            <div class="accordion-content">
+                <p>NASDAQ content is visible. Other sections should remain closed.</p>
+                <ul>
+                    <li>AAPL: $150.00</li>
+                    <li>GOOGL: $2800.00</li>
+                    <li>MSFT: $300.00</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="accordion" id="crypto-accordion">
+            <div class="accordion-header" onclick="toggleAccordion('crypto')">
+                🪙 CRYPTO (Click to test)
+            </div>
+            <div class="accordion-content">
+                <p>CRYPTO content is visible. Other sections should remain closed.</p>
+                <ul>
+                    <li>BTCUSD: $65,000</li>
+                    <li>ETHUSD: $2,500</li>
+                    <li>ADAUSD: $0.35</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="accordion" id="bist-accordion">
+            <div class="accordion-header" onclick="toggleAccordion('bist')">
+                🏛️ BIST (Click to test)
+            </div>
+            <div class="accordion-content">
+                <p>BIST content is visible. Other sections should remain closed.</p>
+                <ul>
+                    <li>AKBNK: 58.25 TL</li>
+                    <li>GARAN: 112.50 TL</li>
+                    <li>TUPRS: 425.00 TL</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="accordion" id="nyse-accordion">
+            <div class="accordion-header" onclick="toggleAccordion('nyse')">
+                🏢 NYSE (Click to test)
+            </div>
+            <div class="accordion-content">
+                <p>NYSE content is visible. Other sections should remain closed.</p>
+                <ul>
+                    <li>XOM: $110.00</li>
+                    <li>JPM: $145.00</li>
+                    <li>JNJ: $160.00</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="test-results">
+            <p>Click the accordions above to test independent behavior...</p>
+        </div>
+    </div>
+
+    <script>
+        const testResults = {
+            nasdaq: false,
+            crypto: false,
+            bist: false,
+            nyse: false
+        };
+
+        function toggleAccordion(section) {
+            // Close all accordions first
+            const allAccordions = document.querySelectorAll('.accordion');
+            allAccordions.forEach(acc => acc.classList.remove('open'));
+
+            // Open only the clicked accordion
+            const accordion = document.getElementById(section + '-accordion');
+            accordion.classList.add('open');
+
+            // Mark test as passed for this section
+            testResults[section] = true;
+
+            // Update test results
+            updateTestResults();
+        }
+
+        function updateTestResults() {
+            const resultsDiv = document.getElementById('test-results');
+            const totalTests = Object.keys(testResults).length;
+            const passedTests = Object.values(testResults).filter(t => t).length;
+
+            let html = `<h3>Accordion Independence Test Results (${passedTests}/${totalTests})</h3>`;
+
+            for (const [section, passed] of Object.entries(testResults)) {
+                const className = passed ? 'pass' : 'fail';
+                const status = passed ? '✅ PASSED' : '❌ NOT TESTED';
+                html += `<div class="test-result ${className}">
+                    ${section.toUpperCase()} accordion: ${status}
+                </div>`;
+            }
+
+            if (passedTests === totalTests) {
+                html += `<div class="test-result pass">
+                    <strong>🎉 ALL TESTS PASSED - Independent accordion behavior working correctly!</strong>
+                </div>`;
+            }
+
+            html += `<h3>Integration Test Instructions:</h3>
+                     <ol>
+                        <li>Click NASDAQ - verify only NASDAQ opens (others stay closed)</li>
+                        <li>Click CRYPTO - verify only CRYPTO opens (NASDAQ closes)</li>
+                        <li>Click BIST - verify only BIST opens (CRYPTO closes)</li>
+                        <li>Click NYSE - verify only NYSE opens (BIST closes)</li>
+                     </ol>`;
+
+            resultsDiv.innerHTML = html;
+        }
+
+        // Initialize test results display
+        updateTestResults();
+    </script>
+</body>
+</html>

@@ -81,6 +81,64 @@ public static class YahooFinanceServiceExtensions
     }
 
     /// <summary>
+    /// Add Yahoo Finance intraday (5-minute) sync services to the DI container
+    /// </summary>
+    public static IServiceCollection AddYahooFinanceIntradaySync(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        // Intraday service configurations
+        services.Configure<YahooFinanceIntradayConfiguration>(
+            configuration.GetSection("YahooFinance:IntradaySync"));
+
+        services.Configure<YahooFinanceIntradayScheduleConfiguration>(
+            configuration.GetSection("YahooFinance:IntradaySchedule"));
+
+        // Register intraday services
+        services.AddScoped<YahooFinanceIntradayDataService>();
+
+        // Register intraday background service based on configuration
+        var intradayConfig = configuration.GetSection("YahooFinance:IntradaySchedule");
+        if (intradayConfig.GetValue<bool>("EnableIntradaySync", true))
+        {
+            services.AddSingleton<YahooFinanceIntradayScheduledService>();
+            services.AddHostedService<YahooFinanceIntradayScheduledService>(provider =>
+                provider.GetRequiredService<YahooFinanceIntradayScheduledService>());
+        }
+
+        // Add intraday-specific health checks
+        services.AddHealthChecks()
+            .AddCheck<YahooFinanceIntradayHealthCheck>("yahoo_finance_intraday");
+
+        return services;
+    }
+
+    /// <summary>
+    /// Add complete Yahoo Finance sync system (both daily and intraday)
+    /// </summary>
+    public static IServiceCollection AddYahooFinanceCompleteSync(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        // Validate configuration first
+        services.ValidateYahooFinanceConfiguration(configuration);
+
+        // Add daily sync services
+        services.AddYahooFinanceDailySync(configuration);
+
+        // Add intraday sync services
+        services.AddYahooFinanceIntradaySync(configuration);
+
+        // Add monitoring service
+        if (configuration.GetValue<bool>("YahooFinance:EnableMonitoring", true))
+        {
+            services.AddHostedService<YahooFinanceMonitoringService>();
+        }
+
+        return services;
+    }
+
+    /// <summary>
     /// Initialize database optimizations for market data
     /// Call this during application startup
     /// </summary>
@@ -148,6 +206,31 @@ public static class YahooFinanceServiceExtensions
         if (minCompleteness < 0 || minCompleteness > 100)
         {
             errors.Add("YahooFinance:DataQuality:MinCompletenessThreshold must be between 0 and 100");
+        }
+
+        // Validate intraday sync configuration
+        var intradayConfig = configuration.GetSection("YahooFinance:IntradaySync");
+        if (intradayConfig.GetValue<int>("BatchSize") <= 0)
+        {
+            errors.Add("YahooFinance:IntradaySync:BatchSize must be greater than 0");
+        }
+
+        if (intradayConfig.GetValue<int>("LookbackMinutes") < 5)
+        {
+            errors.Add("YahooFinance:IntradaySync:LookbackMinutes should be at least 5 minutes");
+        }
+
+        if (intradayConfig.GetValue<int>("MaxSymbolsPerMarket") <= 0)
+        {
+            errors.Add("YahooFinance:IntradaySync:MaxSymbolsPerMarket must be greater than 0");
+        }
+
+        // Validate intraday schedule configuration
+        var intradayScheduleConfig = configuration.GetSection("YahooFinance:IntradaySchedule");
+        var maxExecutionMinutes = intradayScheduleConfig.GetValue<int>("MaxExecutionDurationMinutes", 4);
+        if (maxExecutionMinutes < 1 || maxExecutionMinutes > 10)
+        {
+            errors.Add("YahooFinance:IntradaySchedule:MaxExecutionDurationMinutes must be between 1 and 10");
         }
 
         if (errors.Any())
@@ -233,6 +316,132 @@ public class YahooFinanceHealthCheck : IHealthCheck
                 ex,
                 data: new Dictionary<string, object> { ["error"] = ex.Message });
         }
+    }
+}
+
+/// <summary>
+/// Health check specifically for Yahoo Finance intraday services
+/// </summary>
+public class YahooFinanceIntradayHealthCheck : IHealthCheck
+{
+    private readonly YahooFinanceIntradayDataService _intradayService;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<YahooFinanceIntradayHealthCheck> _logger;
+
+    public YahooFinanceIntradayHealthCheck(
+        YahooFinanceIntradayDataService intradayService,
+        IServiceProvider serviceProvider,
+        ILogger<YahooFinanceIntradayHealthCheck> logger)
+    {
+        _intradayService = intradayService;
+        _serviceProvider = serviceProvider;
+        _logger = logger;
+    }
+
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var data = new Dictionary<string, object>();
+
+            // Check if intraday scheduled service is running
+            var scheduledService = _serviceProvider.GetService<YahooFinanceIntradayScheduledService>();
+            if (scheduledService != null)
+            {
+                var healthStatus = scheduledService.GetHealthStatus();
+                data["service_running"] = true;
+                data["is_healthy"] = healthStatus.IsHealthy;
+                data["consecutive_failures"] = healthStatus.ConsecutiveFailures;
+                data["last_successful_sync"] = healthStatus.LastSuccessfulSync;
+                data["is_currently_executing"] = healthStatus.IsCurrentlyExecuting;
+                data["next_scheduled_execution"] = healthStatus.NextScheduledExecution;
+
+                // Check if service has been failing
+                if (healthStatus.ConsecutiveFailures >= 5)
+                {
+                    return HealthCheckResult.Unhealthy(
+                        $"Intraday service has {healthStatus.ConsecutiveFailures} consecutive failures",
+                        data: data);
+                }
+                else if (healthStatus.ConsecutiveFailures >= 3)
+                {
+                    return HealthCheckResult.Degraded(
+                        $"Intraday service has {healthStatus.ConsecutiveFailures} consecutive failures",
+                        data: data);
+                }
+
+                // Check if last sync was too long ago (for active markets)
+                var timeSinceLastSuccess = healthStatus.TimeSinceLastSuccess;
+                if (timeSinceLastSuccess.HasValue && timeSinceLastSuccess.Value > TimeSpan.FromMinutes(15))
+                {
+                    // Check if any markets should be active now
+                    var currentTime = DateTime.UtcNow;
+                    var shouldBeActive = CheckIfAnyMarketShouldBeActive(currentTime);
+
+                    if (shouldBeActive)
+                    {
+                        return HealthCheckResult.Degraded(
+                            $"No successful sync in {timeSinceLastSuccess.Value.TotalMinutes:F0} minutes during market hours",
+                            data: data);
+                    }
+                }
+
+                data["status"] = "Healthy";
+                return HealthCheckResult.Healthy("Intraday service operating normally", data: data);
+            }
+            else
+            {
+                data["service_running"] = false;
+                return HealthCheckResult.Degraded("Intraday scheduled service not found or not running", data: data);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during intraday health check");
+            return HealthCheckResult.Unhealthy(
+                "Intraday health check failed with exception",
+                ex,
+                data: new Dictionary<string, object> { ["error"] = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Check if any market should currently be active for intraday collection
+    /// </summary>
+    private bool CheckIfAnyMarketShouldBeActive(DateTime utcTime)
+    {
+        // Check BIST hours (10:00-18:00 Turkey Time)
+        try
+        {
+            var turkeyTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Turkey Standard Time");
+            var turkeyTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, turkeyTimeZone);
+            if (turkeyTime.DayOfWeek != DayOfWeek.Saturday && turkeyTime.DayOfWeek != DayOfWeek.Sunday)
+            {
+                var turkeyTimeOnly = TimeOnly.FromDateTime(turkeyTime);
+                if (turkeyTimeOnly >= new TimeOnly(10, 0) && turkeyTimeOnly <= new TimeOnly(18, 0))
+                    return true;
+            }
+        }
+        catch { }
+
+        // Check US markets (9:30-16:00 ET)
+        try
+        {
+            var etTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+            var etTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, etTimeZone);
+            if (etTime.DayOfWeek != DayOfWeek.Saturday && etTime.DayOfWeek != DayOfWeek.Sunday)
+            {
+                var etTimeOnly = TimeOnly.FromDateTime(etTime);
+                if (etTimeOnly >= new TimeOnly(9, 30) && etTimeOnly <= new TimeOnly(16, 0))
+                    return true;
+            }
+        }
+        catch { }
+
+        // Crypto is always active
+        return true;
     }
 }
 

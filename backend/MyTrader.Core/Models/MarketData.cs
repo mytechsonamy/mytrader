@@ -23,4 +23,6 @@ public class MarketData
     public decimal Close { get; set; }
     
     public decimal Volume { get; set; }
+
+    public string? AssetClass { get; set; }
 }

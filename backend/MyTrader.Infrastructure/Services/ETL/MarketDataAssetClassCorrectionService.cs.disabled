@@ -1,0 +1,971 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using MyTrader.Core.Data;
+using MyTrader.Core.Services.ETL;
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace MyTrader.Infrastructure.Services.ETL;
+
+/// <summary>
+/// Production-ready service for correcting AssetClass values in market_data table
+/// Implements comprehensive batch processing with monitoring, error handling, and rollback capabilities
+/// </summary>
+public class MarketDataAssetClassCorrectionService : IMarketDataAssetClassCorrectionService
+{
+    private readonly ITradingDbContext _dbContext;
+    private readonly ILogger<MarketDataAssetClassCorrectionService> _logger;
+    private readonly SemaphoreSlim _operationSemaphore;
+
+    // In-memory state tracking (in production, this would be persisted)
+    private readonly Dictionary<string, AssetClassCorrectionResult> _operationHistory;
+    private readonly object _historyLock = new();
+    private AssetClassCorrectionStatus _currentStatus = new();
+
+    public MarketDataAssetClassCorrectionService(
+        ITradingDbContext dbContext,
+        ILogger<MarketDataAssetClassCorrectionService> logger)
+    {
+        _dbContext = dbContext;
+        _logger = logger;
+        _operationSemaphore = new SemaphoreSlim(1, 1);
+        _operationHistory = new Dictionary<string, AssetClassCorrectionResult>();
+    }
+
+    public async Task<AssetClassCorrectionResult> ExecuteAssetClassCorrectionAsync(
+        AssetClassCorrectionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        await _operationSemaphore.WaitAsync(cancellationToken);
+
+        options ??= new AssetClassCorrectionOptions();
+        var correctionId = Guid.NewGuid().ToString();
+        var operationStopwatch = Stopwatch.StartNew();
+
+        var result = new AssetClassCorrectionResult
+        {
+            CorrectionId = correctionId,
+            StartTime = DateTime.UtcNow
+        };
+
+        _currentStatus = new AssetClassCorrectionStatus
+        {
+            IsRunning = true,
+            CurrentOperationId = correctionId,
+            LastOperationStart = result.StartTime,
+            CurrentPhase = "Initialization"
+        };
+
+        try
+        {
+            _logger.LogInformation("Starting AssetClass correction operation {CorrectionId} with options: {Options}",
+                correctionId, JsonSerializer.Serialize(options));
+
+            // Phase 1: Pre-flight validation and analysis
+            var analysisStopwatch = Stopwatch.StartNew();
+            _currentStatus.CurrentPhase = "Analysis";
+
+            var integrityReport = await AnalyzeAssetClassIntegrityAsync(cancellationToken);
+            result.TotalRecordsAnalyzed = integrityReport.TotalMarketDataRecords;
+            result.RecordsNeedingCorrection = integrityReport.RecordsWithNullAssetClass +
+                                            integrityReport.RecordsWithEmptyAssetClass +
+                                            (options.OverwriteExistingValues ? integrityReport.RecordsWithMismatchedAssetClass : 0);
+
+            analysisStopwatch.Stop();
+            result.PhaseTimings["Analysis"] = analysisStopwatch.Elapsed;
+
+            if (result.RecordsNeedingCorrection == 0)
+            {
+                _logger.LogInformation("No records need correction. Operation completed successfully.");
+                result.Success = true;
+                result.EndTime = DateTime.UtcNow;
+                return result;
+            }
+
+            _logger.LogInformation("Analysis completed. Records needing correction: {Count}",
+                result.RecordsNeedingCorrection);
+
+            // Phase 2: Create backup if requested
+            if (options.CreateBackup && !options.DryRun)
+            {
+                var backupStopwatch = Stopwatch.StartNew();
+                _currentStatus.CurrentPhase = "Creating Backup";
+
+                result.BackupTableName = await CreateBackupTableAsync(correctionId, cancellationToken);
+                result.BackupCreatedAt = DateTime.UtcNow;
+
+                backupStopwatch.Stop();
+                result.PhaseTimings["Backup"] = backupStopwatch.Elapsed;
+
+                _logger.LogInformation("Backup table created: {BackupTable}", result.BackupTableName);
+            }
+
+            // Phase 3: Execute corrections in batches
+            var correctionStopwatch = Stopwatch.StartNew();
+            _currentStatus.CurrentPhase = "Processing Corrections";
+
+            await ExecuteBatchCorrections(result, options, cancellationToken);
+
+            correctionStopwatch.Stop();
+            result.PhaseTimings["Corrections"] = correctionStopwatch.Elapsed;
+
+            // Phase 4: Post-correction validation
+            if (options.ValidateAfterEachBatch && !options.DryRun)
+            {
+                var validationStopwatch = Stopwatch.StartNew();
+                _currentStatus.CurrentPhase = "Final Validation";
+
+                var validationResult = await ValidateCorrectionsAsync(cancellationToken);
+                result.DataQualityScoreAfter = validationResult.DataQualityScore;
+
+                if (!validationResult.ValidationPassed)
+                {
+                    _logger.LogWarning("Post-correction validation failed with {ErrorCount} errors",
+                        validationResult.ValidationErrors);
+                    result.Errors.AddRange(validationResult.Errors.Select(e => new CorrectionError
+                    {
+                        Category = "Validation",
+                        Message = e.Description,
+                        MarketDataRecordId = e.RecordId?.ToString()
+                    }));
+                }
+
+                validationStopwatch.Stop();
+                result.PhaseTimings["Validation"] = validationStopwatch.Elapsed;
+            }
+
+            // Determine overall success
+            result.Success = result.RecordsFailed == 0 ||
+                           (result.RecordsSuccessfullyProcessed > result.RecordsFailed * 10); // 90% success threshold
+
+            operationStopwatch.Stop();
+            result.EndTime = DateTime.UtcNow;
+
+            // Update metrics
+            result.PerformanceMetrics["TotalBatches"] = result.BatchesProcessed;
+            result.PerformanceMetrics["AverageRecordsPerBatch"] =
+                result.BatchesProcessed > 0 ? result.RecordsSuccessfullyProcessed / result.BatchesProcessed : 0;
+            result.PerformanceMetrics["RecordsPerSecond"] =
+                result.Duration.TotalSeconds > 0 ? result.RecordsSuccessfullyProcessed / result.Duration.TotalSeconds : 0;
+
+            // Store operation history
+            lock (_historyLock)
+            {
+                _operationHistory[correctionId] = result;
+                // Keep only last 100 operations
+                if (_operationHistory.Count > 100)
+                {
+                    var oldestKey = _operationHistory.Keys.OrderBy(k => _operationHistory[k].StartTime).First();
+                    _operationHistory.Remove(oldestKey);
+                }
+            }
+
+            _logger.LogInformation("AssetClass correction completed. Success: {Success}, " +
+                "Records processed: {Processed}, Failed: {Failed}, Duration: {Duration}",
+                result.Success, result.RecordsSuccessfullyProcessed, result.RecordsFailed, result.Duration);
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("AssetClass correction operation {CorrectionId} was cancelled", correctionId);
+            result.Success = false;
+            result.ErrorMessage = "Operation was cancelled";
+            result.EndTime = DateTime.UtcNow;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Fatal error during AssetClass correction operation {CorrectionId}", correctionId);
+            result.Success = false;
+            result.ErrorMessage = $"Fatal error: {ex.Message}";
+            result.EndTime = DateTime.UtcNow;
+            return result;
+        }
+        finally
+        {
+            _currentStatus.IsRunning = false;
+            _currentStatus.CurrentOperationId = null;
+            _currentStatus.LastOperationEnd = DateTime.UtcNow;
+            _currentStatus.LastOperationSuccess = result.Success;
+            _currentStatus.LastOperationError = result.ErrorMessage;
+            _operationSemaphore.Release();
+        }
+    }
+
+    public async Task<AssetClassIntegrityReport> AnalyzeAssetClassIntegrityAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var report = new AssetClassIntegrityReport();
+
+        try
+        {
+            _logger.LogInformation("Starting AssetClass integrity analysis");
+
+            // Get comprehensive statistics using a single optimized query
+            var analysisQuery = from md in _dbContext.MarketData
+                              join s in _dbContext.Symbols on md.Symbol equals s.Ticker into symbolJoin
+                              from symbol in symbolJoin.DefaultIfEmpty()
+                              select new
+                              {
+                                  MarketData = md,
+                                  SymbolAssetClass = symbol != null ? symbol.AssetClass : null,
+                                  HasSymbol = symbol != null
+                              };
+
+            var analysisResults = await analysisQuery.ToListAsync(cancellationToken);
+
+            // Calculate statistics
+            report.TotalMarketDataRecords = analysisResults.Count;
+            report.RecordsWithNullAssetClass = analysisResults.Count(r => r.MarketData.AssetClass == null);
+            report.RecordsWithEmptyAssetClass = analysisResults.Count(r => string.IsNullOrEmpty(r.MarketData.AssetClass));
+            report.OrphanedMarketDataRecords = analysisResults.Count(r => !r.HasSymbol);
+            report.RecordsWithValidAssetClass = analysisResults.Count(r =>
+                !string.IsNullOrEmpty(r.MarketData.AssetClass) && r.HasSymbol);
+
+            // Find mismatched asset classes
+            var mismatchedRecords = analysisResults
+                .Where(r => r.HasSymbol &&
+                           !string.IsNullOrEmpty(r.MarketData.AssetClass) &&
+                           !string.IsNullOrEmpty(r.SymbolAssetClass) &&
+                           r.MarketData.AssetClass != r.SymbolAssetClass)
+                .GroupBy(r => new { r.MarketData.Symbol, r.MarketData.AssetClass, r.SymbolAssetClass })
+                .Select(g => new AssetClassMismatch
+                {
+                    Symbol = g.Key.Symbol,
+                    MarketDataAssetClass = g.Key.AssetClass,
+                    SymbolAssetClass = g.Key.SymbolAssetClass,
+                    AffectedRecords = g.Count()
+                })
+                .ToList();
+
+            report.RecordsWithMismatchedAssetClass = mismatchedRecords.Sum(m => m.AffectedRecords);
+            report.AssetClassMismatches = mismatchedRecords;
+
+            // Get symbol statistics
+            report.TotalSymbolsReferenced = await _dbContext.MarketData
+                .Select(md => md.Symbol)
+                .Distinct()
+                .CountAsync(cancellationToken);
+
+            report.SymbolsWithValidAssetClass = await _dbContext.Symbols
+                .Where(s => !string.IsNullOrEmpty(s.AssetClass))
+                .CountAsync(cancellationToken);
+
+            report.SymbolsWithoutMarketData = await _dbContext.Symbols
+                .Where(s => !_dbContext.MarketData.Any(md => md.Symbol == s.Ticker))
+                .CountAsync(cancellationToken);
+
+            // Generate recommendations
+            report.Recommendations = GenerateRecommendations(report);
+            report.CorrectionEffort = EstimateCorrectionEffort(report);
+
+            // Categorize issues
+            CategorizeIntegrityIssues(report);
+
+            stopwatch.Stop();
+            report.AnalysisDuration = stopwatch.Elapsed;
+
+            _logger.LogInformation("Integrity analysis completed in {Duration}. " +
+                "Total records: {Total}, Issues: {NullAssetClass} null, {EmptyAssetClass} empty, " +
+                "{Mismatched} mismatched, {Orphaned} orphaned",
+                report.AnalysisDuration, report.TotalMarketDataRecords,
+                report.RecordsWithNullAssetClass, report.RecordsWithEmptyAssetClass,
+                report.RecordsWithMismatchedAssetClass, report.OrphanedMarketDataRecords);
+
+            return report;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during integrity analysis");
+            throw;
+        }
+    }
+
+    public async Task<AssetClassCorrectionPreview> PreviewCorrectionsAsync(
+        AssetClassCorrectionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= new AssetClassCorrectionOptions();
+        var preview = new AssetClassCorrectionPreview();
+
+        try
+        {
+            _logger.LogInformation("Generating correction preview");
+
+            // Get sample of records that would be corrected
+            var correctionQuery = from md in _dbContext.MarketData
+                                join s in _dbContext.Symbols on md.Symbol equals s.Ticker
+                                where (options.OnlyProcessNullAssetClass &&
+                                       (md.AssetClass == null || md.AssetClass == "")) ||
+                                      (options.OverwriteExistingValues &&
+                                       md.AssetClass != s.AssetClass)
+                                select new AssetClassCorrectionItem
+                                {
+                                    MarketDataId = md.Id,
+                                    Symbol = md.Symbol,
+                                    CurrentAssetClass = md.AssetClass,
+                                    ProposedAssetClass = s.AssetClass,
+                                    Timestamp = md.Timestamp,
+                                    CorrectionReason = md.AssetClass == null || md.AssetClass == ""
+                                        ? "Null/Empty AssetClass" : "Mismatched AssetClass"
+                                };
+
+            if (options.TargetSymbols?.Any() == true)
+            {
+                correctionQuery = correctionQuery.Where(c => options.TargetSymbols.Contains(c.Symbol));
+            }
+
+            if (options.MaxRecordsToProcess.HasValue)
+            {
+                correctionQuery = correctionQuery.Take(options.MaxRecordsToProcess.Value);
+            }
+
+            var allCorrections = await correctionQuery.ToListAsync(cancellationToken);
+
+            preview.EstimatedRecordsToProcess = allCorrections.Count;
+            preview.EstimatedBatches = (int)Math.Ceiling((double)allCorrections.Count / options.BatchSize);
+            preview.EstimatedDuration = TimeSpan.FromMilliseconds(allCorrections.Count * 10); // Rough estimate
+
+            // Take sample for preview
+            preview.SampleCorrections = allCorrections.Take(Math.Min(50, allCorrections.Count)).ToList();
+
+            // Group by asset class
+            preview.CorrectionsByAssetClass = allCorrections
+                .Where(c => !string.IsNullOrEmpty(c.ProposedAssetClass))
+                .GroupBy(c => c.ProposedAssetClass!)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            // Identify potential risks
+            preview.IdentifiedRisks = IdentifyPotentialRisks(allCorrections, options);
+
+            _logger.LogInformation("Preview generated: {EstimatedRecords} records to process in {EstimatedBatches} batches",
+                preview.EstimatedRecordsToProcess, preview.EstimatedBatches);
+
+            return preview;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating correction preview");
+            throw;
+        }
+    }
+
+    public async Task<AssetClassValidationResult> ValidateCorrectionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var result = new AssetClassValidationResult();
+
+        try
+        {
+            _logger.LogInformation("Starting post-correction validation");
+
+            // Check for remaining integrity issues
+            var validationQuery = from md in _dbContext.MarketData
+                                join s in _dbContext.Symbols on md.Symbol equals s.Ticker into symbolJoin
+                                from symbol in symbolJoin.DefaultIfEmpty()
+                                select new
+                                {
+                                    MarketDataId = md.Id,
+                                    Symbol = md.Symbol,
+                                    MarketDataAssetClass = md.AssetClass,
+                                    SymbolAssetClass = symbol != null ? symbol.AssetClass : null,
+                                    HasSymbol = symbol != null
+                                };
+
+            var validationData = await validationQuery.ToListAsync(cancellationToken);
+            result.RecordsValidated = validationData.Count;
+
+            // Identify validation errors
+            var errors = new List<ValidationError>();
+
+            // Check for null/empty asset classes that should have been corrected
+            var nullAssetClassRecords = validationData
+                .Where(v => v.HasSymbol &&
+                           string.IsNullOrEmpty(v.MarketDataAssetClass) &&
+                           !string.IsNullOrEmpty(v.SymbolAssetClass))
+                .ToList();
+
+            errors.AddRange(nullAssetClassRecords.Select(record => new ValidationError
+            {
+                ErrorType = "UNCORRECTED_NULL_ASSET_CLASS",
+                Description = $"Market data record still has null AssetClass despite symbol having '{record.SymbolAssetClass}'",
+                RecordId = record.MarketDataId,
+                Symbol = record.Symbol,
+                Details = new Dictionary<string, object>
+                {
+                    ["SymbolAssetClass"] = record.SymbolAssetClass ?? "null",
+                    ["MarketDataAssetClass"] = record.MarketDataAssetClass ?? "null"
+                }
+            }));
+
+            // Check for asset class mismatches
+            var mismatchedRecords = validationData
+                .Where(v => v.HasSymbol &&
+                           !string.IsNullOrEmpty(v.MarketDataAssetClass) &&
+                           !string.IsNullOrEmpty(v.SymbolAssetClass) &&
+                           v.MarketDataAssetClass != v.SymbolAssetClass)
+                .ToList();
+
+            errors.AddRange(mismatchedRecords.Select(record => new ValidationError
+            {
+                ErrorType = "ASSET_CLASS_MISMATCH",
+                Description = $"AssetClass mismatch between market data ('{record.MarketDataAssetClass}') and symbol ('{record.SymbolAssetClass}')",
+                RecordId = record.MarketDataId,
+                Symbol = record.Symbol,
+                Details = new Dictionary<string, object>
+                {
+                    ["SymbolAssetClass"] = record.SymbolAssetClass ?? "null",
+                    ["MarketDataAssetClass"] = record.MarketDataAssetClass ?? "null"
+                }
+            }));
+
+            // Check for orphaned market data
+            var orphanedRecords = validationData
+                .Where(v => !v.HasSymbol)
+                .ToList();
+
+            errors.AddRange(orphanedRecords.Select(record => new ValidationError
+            {
+                ErrorType = "ORPHANED_MARKET_DATA",
+                Description = $"Market data record has no corresponding symbol",
+                RecordId = record.MarketDataId,
+                Symbol = record.Symbol
+            }));
+
+            result.Errors = errors;
+            result.ValidationErrors = errors.Count;
+            result.ValidationPassed = errors.Count == 0;
+
+            // Calculate data quality score
+            var totalRecordsWithSymbols = validationData.Count(v => v.HasSymbol);
+            var recordsWithValidAssetClass = validationData.Count(v =>
+                v.HasSymbol &&
+                !string.IsNullOrEmpty(v.MarketDataAssetClass) &&
+                !string.IsNullOrEmpty(v.SymbolAssetClass) &&
+                v.MarketDataAssetClass == v.SymbolAssetClass);
+
+            result.DataQualityScore = totalRecordsWithSymbols > 0
+                ? (decimal)recordsWithValidAssetClass / totalRecordsWithSymbols * 100
+                : 100;
+
+            // Add validation metrics
+            result.ValidationMetrics["TotalRecordsWithSymbols"] = totalRecordsWithSymbols;
+            result.ValidationMetrics["RecordsWithValidAssetClass"] = recordsWithValidAssetClass;
+            result.ValidationMetrics["NullAssetClassErrors"] = nullAssetClassRecords.Count;
+            result.ValidationMetrics["MismatchErrors"] = mismatchedRecords.Count;
+            result.ValidationMetrics["OrphanedErrors"] = orphanedRecords.Count;
+
+            stopwatch.Stop();
+
+            _logger.LogInformation("Validation completed in {Duration}. " +
+                "Passed: {Passed}, Errors: {ErrorCount}, Quality Score: {Score:F2}%",
+                stopwatch.Elapsed, result.ValidationPassed, result.ValidationErrors, result.DataQualityScore);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during validation");
+            throw;
+        }
+    }
+
+    public async Task<AssetClassCorrectionStatus> GetCorrectionStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(10, cancellationToken); // Simulate async operation
+
+        lock (_historyLock)
+        {
+            _currentStatus.RecentOperations = _operationHistory.Values
+                .OrderByDescending(r => r.StartTime)
+                .Take(10)
+                .ToList();
+        }
+
+        return _currentStatus;
+    }
+
+    public async Task<AssetClassRollbackResult> RollbackLastCorrectionAsync(
+        string correctionId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new AssetClassRollbackResult
+        {
+            CorrectionIdRolledBack = correctionId
+        };
+
+        try
+        {
+            _logger.LogInformation("Starting rollback for correction operation {CorrectionId}", correctionId);
+
+            AssetClassCorrectionResult? originalOperation;
+            lock (_historyLock)
+            {
+                if (!_operationHistory.TryGetValue(correctionId, out originalOperation))
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Correction operation {correctionId} not found in history";
+                    return result;
+                }
+            }
+
+            if (string.IsNullOrEmpty(originalOperation.BackupTableName))
+            {
+                result.Success = false;
+                result.ErrorMessage = "No backup table available for rollback";
+                return result;
+            }
+
+            // Check if backup table exists
+            var backupTableExists = await CheckBackupTableExistsAsync(originalOperation.BackupTableName, cancellationToken);
+            if (!backupTableExists)
+            {
+                result.Success = false;
+                result.ErrorMessage = $"Backup table {originalOperation.BackupTableName} does not exist";
+                return result;
+            }
+
+            // Execute rollback using raw SQL for better control
+            var rollbackSql = $@"
+                UPDATE market_data
+                SET asset_class = backup.asset_class,
+                    updated_at = CURRENT_TIMESTAMP
+                FROM {originalOperation.BackupTableName} backup
+                WHERE market_data.id = backup.id
+                    AND (market_data.asset_class IS DISTINCT FROM backup.asset_class)";
+
+            var rowsUpdated = await _dbContext.Database.ExecuteSqlRawAsync(rollbackSql, cancellationToken);
+
+            result.RecordsRolledBack = rowsUpdated;
+            result.BackupTableUsed = originalOperation.BackupTableName;
+            result.Success = true;
+
+            _logger.LogInformation("Rollback completed successfully. {RowsUpdated} records rolled back using backup table {BackupTable}",
+                rowsUpdated, originalOperation.BackupTableName);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during rollback operation for {CorrectionId}", correctionId);
+            result.Success = false;
+            result.ErrorMessage = $"Rollback failed: {ex.Message}";
+            return result;
+        }
+    }
+
+    #region Private Helper Methods
+
+    private async Task ExecuteBatchCorrections(
+        AssetClassCorrectionResult result,
+        AssetClassCorrectionOptions options,
+        CancellationToken cancellationToken)
+    {
+        // Get records that need correction
+        var correctionQuery = from md in _dbContext.MarketData
+                            join s in _dbContext.Symbols on md.Symbol equals s.Ticker
+                            where (options.OnlyProcessNullAssetClass &&
+                                   (md.AssetClass == null || md.AssetClass == "")) ||
+                                  (options.OverwriteExistingValues &&
+                                   md.AssetClass != s.AssetClass)
+                            select new { md.Id, ProposedAssetClass = s.AssetClass };
+
+        if (options.TargetSymbols?.Any() == true)
+        {
+            correctionQuery = correctionQuery.Where(c =>
+                _dbContext.MarketData.Any(md => md.Id == c.Id && options.TargetSymbols.Contains(md.Symbol)));
+        }
+
+        if (options.MaxRecordsToProcess.HasValue)
+        {
+            correctionQuery = correctionQuery.Take(options.MaxRecordsToProcess.Value);
+        }
+
+        var recordsToProcess = await correctionQuery.ToListAsync(cancellationToken);
+
+        _logger.LogInformation("Processing {RecordCount} records in batches of {BatchSize}",
+            recordsToProcess.Count, options.BatchSize);
+
+        // Process in batches
+        var batches = recordsToProcess
+            .Select((record, index) => new { Record = record, Index = index })
+            .GroupBy(x => x.Index / options.BatchSize)
+            .Select(g => g.Select(x => x.Record).ToList())
+            .ToList();
+
+        for (int batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+        {
+            var batch = batches[batchIndex];
+            var batchId = Guid.NewGuid().ToString();
+
+            _logger.LogDebug("Processing batch {BatchIndex}/{TotalBatches} with {RecordCount} records",
+                batchIndex + 1, batches.Count, batch.Count);
+
+            _currentStatus.CurrentProgress = (int)((batchIndex + 1) / (double)batches.Count * 100);
+
+            try
+            {
+                await ProcessBatchWithRetry(batch, batchId, result, options, cancellationToken);
+                result.BatchesProcessed++;
+
+                // Validate batch if requested
+                if (options.ValidateAfterEachBatch && !options.DryRun)
+                {
+                    await ValidateBatch(batch, result, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Batch {BatchId} failed after all retries", batchId);
+                result.BatchesFailed++;
+                result.RecordsFailed += batch.Count;
+                result.Errors.Add(new CorrectionError
+                {
+                    Category = "BatchProcessing",
+                    Message = $"Batch {batchId} failed: {ex.Message}",
+                    BatchId = batchId
+                });
+            }
+
+            // Small delay between batches to prevent overwhelming the database
+            if (batchIndex < batches.Count - 1)
+            {
+                await Task.Delay(100, cancellationToken);
+            }
+        }
+    }
+
+    private async Task ProcessBatchWithRetry(
+        List<dynamic> batch,
+        string batchId,
+        AssetClassCorrectionResult result,
+        AssetClassCorrectionOptions options,
+        CancellationToken cancellationToken)
+    {
+        var retryCount = 0;
+        var delay = options.RetryConfig.InitialDelay;
+
+        while (retryCount <= options.RetryConfig.MaxRetries)
+        {
+            try
+            {
+                if (options.DryRun)
+                {
+                    // Simulate processing without actual changes
+                    await Task.Delay(50, cancellationToken);
+                    result.RecordsSuccessfullyProcessed += batch.Count;
+                    _logger.LogDebug("DRY RUN: Would process {RecordCount} records in batch {BatchId}",
+                        batch.Count, batchId);
+                    return;
+                }
+
+                // Execute the batch update using raw SQL for better performance
+                var recordIds = batch.Select(b => (Guid)b.Id).ToList();
+                var recordMappings = batch.ToDictionary(b => (Guid)b.Id, b => (string)b.ProposedAssetClass);
+
+                // Create a temporary table for batch updates
+                var tempTableName = $"temp_corrections_{batchId.Replace("-", "")}";
+
+                // Batch update approach using a VALUES clause
+                var valuesClauses = recordMappings.Select(kvp =>
+                    $"('{kvp.Key}', '{kvp.Value.Replace("'", "''")}')").ToList();
+
+                var updateSql = $@"
+                    WITH corrections(id, new_asset_class) AS (
+                        VALUES {string.Join(",", valuesClauses)}
+                    )
+                    UPDATE market_data
+                    SET asset_class = corrections.new_asset_class,
+                        updated_at = CURRENT_TIMESTAMP
+                    FROM corrections
+                    WHERE market_data.id = corrections.id::uuid";
+
+                var rowsAffected = await _dbContext.Database.ExecuteSqlRawAsync(updateSql, cancellationToken);
+
+                result.RecordsSuccessfullyProcessed += rowsAffected;
+
+                // Create audit trail entries
+                foreach (var record in batch)
+                {
+                    result.AuditTrail.Add(new CorrectionAuditEntry
+                    {
+                        Action = "UPDATE_ASSET_CLASS",
+                        MarketDataId = record.Id,
+                        NewValue = record.ProposedAssetClass,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["BatchId"] = batchId,
+                            ["RetryCount"] = retryCount
+                        }
+                    });
+                }
+
+                _logger.LogDebug("Batch {BatchId} processed successfully. {RowsAffected} rows updated",
+                    batchId, rowsAffected);
+
+                return; // Success - exit retry loop
+            }
+            catch (Exception ex) when (retryCount < options.RetryConfig.MaxRetries)
+            {
+                retryCount++;
+
+                // Add jitter to prevent thundering herd
+                var jitterDelay = options.RetryConfig.UseJitter
+                    ? TimeSpan.FromMilliseconds(Random.Shared.Next(0, (int)delay.TotalMilliseconds / 2))
+                    : TimeSpan.Zero;
+
+                var totalDelay = delay + jitterDelay;
+
+                _logger.LogWarning(ex, "Batch {BatchId} failed (attempt {Attempt}/{MaxRetries}). Retrying in {Delay}",
+                    batchId, retryCount, options.RetryConfig.MaxRetries + 1, totalDelay);
+
+                await Task.Delay(totalDelay, cancellationToken);
+
+                // Exponential backoff
+                delay = TimeSpan.FromMilliseconds(Math.Min(
+                    delay.TotalMilliseconds * options.RetryConfig.BackoffMultiplier,
+                    options.RetryConfig.MaxDelay.TotalMilliseconds));
+            }
+        }
+
+        throw new InvalidOperationException($"Batch {batchId} failed after {options.RetryConfig.MaxRetries + 1} attempts");
+    }
+
+    private async Task ValidateBatch(
+        List<dynamic> batch,
+        AssetClassCorrectionResult result,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recordIds = batch.Select(b => (Guid)b.Id).ToList();
+
+            // Verify that the records were actually updated
+            var updatedRecords = await _dbContext.MarketData
+                .Where(md => recordIds.Contains(md.Id))
+                .Select(md => new { md.Id, md.AssetClass })
+                .ToListAsync(cancellationToken);
+
+            var expectedMappings = batch.ToDictionary(b => (Guid)b.Id, b => (string)b.ProposedAssetClass);
+
+            foreach (var record in updatedRecords)
+            {
+                if (expectedMappings.TryGetValue(record.Id, out var expectedAssetClass))
+                {
+                    if (record.AssetClass != expectedAssetClass)
+                    {
+                        result.Errors.Add(new CorrectionError
+                        {
+                            Category = "ValidationFailure",
+                            Message = $"Record {record.Id} was not updated correctly. Expected: {expectedAssetClass}, Actual: {record.AssetClass}",
+                            MarketDataRecordId = record.Id.ToString()
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Batch validation failed");
+            result.Errors.Add(new CorrectionError
+            {
+                Category = "ValidationError",
+                Message = $"Batch validation failed: {ex.Message}"
+            });
+        }
+    }
+
+    private async Task<string> CreateBackupTableAsync(string correctionId, CancellationToken cancellationToken)
+    {
+        var backupTableName = $"market_data_backup_{DateTime.UtcNow:yyyyMMdd}_{correctionId.Replace("-", "").Substring(0, 8)}";
+
+        var createBackupSql = $@"
+            CREATE TABLE {backupTableName} AS
+            SELECT * FROM market_data";
+
+        await _dbContext.Database.ExecuteSqlRawAsync(createBackupSql, cancellationToken);
+
+        _logger.LogInformation("Backup table created: {BackupTableName}", backupTableName);
+
+        return backupTableName;
+    }
+
+    private async Task<bool> CheckBackupTableExistsAsync(string backupTableName, CancellationToken cancellationToken)
+    {
+        var checkSql = @"
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_name = {0}";
+
+        var result = await _dbContext.Database.SqlQueryRaw<int>(checkSql, backupTableName).FirstOrDefaultAsync(cancellationToken);
+        return result > 0;
+    }
+
+    private List<string> GenerateRecommendations(AssetClassIntegrityReport report)
+    {
+        var recommendations = new List<string>();
+
+        if (report.RecordsWithNullAssetClass > 0)
+        {
+            recommendations.Add($"Execute AssetClass correction for {report.RecordsWithNullAssetClass} records with null values");
+        }
+
+        if (report.RecordsWithEmptyAssetClass > 0)
+        {
+            recommendations.Add($"Execute AssetClass correction for {report.RecordsWithEmptyAssetClass} records with empty values");
+        }
+
+        if (report.RecordsWithMismatchedAssetClass > 0)
+        {
+            recommendations.Add($"Review and correct {report.RecordsWithMismatchedAssetClass} records with mismatched AssetClass values");
+        }
+
+        if (report.OrphanedMarketDataRecords > 0)
+        {
+            recommendations.Add($"Investigate {report.OrphanedMarketDataRecords} orphaned market data records without corresponding symbols");
+        }
+
+        if (report.AssetClassCompleteness < 95)
+        {
+            recommendations.Add("Schedule regular AssetClass integrity checks to maintain data quality above 95%");
+        }
+
+        if (report.SymbolMappingIntegrity < 98)
+        {
+            recommendations.Add("Improve symbol synchronization process to reduce orphaned records");
+        }
+
+        return recommendations;
+    }
+
+    private EstimatedEffort EstimateCorrectionEffort(AssetClassIntegrityReport report)
+    {
+        var totalIssues = report.RecordsWithNullAssetClass + report.RecordsWithEmptyAssetClass +
+                         report.RecordsWithMismatchedAssetClass;
+
+        var estimatedDuration = TimeSpan.FromMinutes(Math.Max(5, totalIssues * 0.01)); // ~0.01 minutes per record
+        var estimatedBatches = (int)Math.Ceiling(totalIssues / 1000.0);
+
+        string complexityLevel = totalIssues switch
+        {
+            < 1000 => "Low",
+            < 10000 => "Medium",
+            _ => "High"
+        };
+
+        return new EstimatedEffort
+        {
+            EstimatedDuration = estimatedDuration,
+            EstimatedBatches = estimatedBatches,
+            ComplexityLevel = complexityLevel,
+            RequiredResources = new List<string>
+            {
+                "Database connection with update privileges",
+                "Sufficient disk space for backup tables",
+                $"Approximately {estimatedDuration.TotalMinutes:F0} minutes of processing time"
+            }
+        };
+    }
+
+    private void CategorizeIntegrityIssues(AssetClassIntegrityReport report)
+    {
+        report.IssuesByCategory["DataCompleteness"] = new List<DataIntegrityIssue>();
+        report.IssuesByCategory["DataConsistency"] = new List<DataIntegrityIssue>();
+        report.IssuesByCategory["ReferentialIntegrity"] = new List<DataIntegrityIssue>();
+
+        if (report.RecordsWithNullAssetClass > 0)
+        {
+            report.IssuesByCategory["DataCompleteness"].Add(new DataIntegrityIssue
+            {
+                IssueType = "NULL_ASSET_CLASS",
+                Component = "MarketData",
+                Description = $"{report.RecordsWithNullAssetClass} market data records have null AssetClass values",
+                Severity = report.RecordsWithNullAssetClass > report.TotalMarketDataRecords * 0.1m ? "High" : "Medium",
+                RecommendedAction = "Execute AssetClass correction to populate from symbols table",
+                IsAutoFixable = true
+            });
+        }
+
+        if (report.RecordsWithMismatchedAssetClass > 0)
+        {
+            report.IssuesByCategory["DataConsistency"].Add(new DataIntegrityIssue
+            {
+                IssueType = "MISMATCHED_ASSET_CLASS",
+                Component = "MarketData",
+                Description = $"{report.RecordsWithMismatchedAssetClass} market data records have AssetClass values that don't match their symbols",
+                Severity = "Medium",
+                RecommendedAction = "Review and correct mismatched values",
+                IsAutoFixable = true
+            });
+        }
+
+        if (report.OrphanedMarketDataRecords > 0)
+        {
+            report.IssuesByCategory["ReferentialIntegrity"].Add(new DataIntegrityIssue
+            {
+                IssueType = "ORPHANED_MARKET_DATA",
+                Component = "MarketData",
+                Description = $"{report.OrphanedMarketDataRecords} market data records reference symbols that don't exist",
+                Severity = "High",
+                RecommendedAction = "Run symbol synchronization to add missing symbols or clean up orphaned records",
+                IsAutoFixable = false
+            });
+        }
+    }
+
+    private List<PotentialRisk> IdentifyPotentialRisks(List<AssetClassCorrectionItem> corrections, AssetClassCorrectionOptions options)
+    {
+        var risks = new List<PotentialRisk>();
+
+        // Check for large volume operations
+        if (corrections.Count > 100000)
+        {
+            risks.Add(new PotentialRisk
+            {
+                RiskType = "LARGE_VOLUME_OPERATION",
+                Description = $"Processing {corrections.Count:N0} records in a single operation may impact database performance",
+                Severity = "Medium",
+                Mitigation = "Consider processing in smaller batches or during maintenance windows",
+                AffectedRecords = corrections.Count
+            });
+        }
+
+        // Check for overwriting existing data
+        if (options.OverwriteExistingValues)
+        {
+            var recordsWithExistingValues = corrections.Count(c => !string.IsNullOrEmpty(c.CurrentAssetClass));
+            if (recordsWithExistingValues > 0)
+            {
+                risks.Add(new PotentialRisk
+                {
+                    RiskType = "DATA_OVERWRITE",
+                    Description = $"Operation will overwrite {recordsWithExistingValues} existing AssetClass values",
+                    Severity = "High",
+                    Mitigation = "Ensure backup is created and validate changes before proceeding",
+                    AffectedRecords = recordsWithExistingValues
+                });
+            }
+        }
+
+        // Check for missing backup
+        if (!options.CreateBackup)
+        {
+            risks.Add(new PotentialRisk
+            {
+                RiskType = "NO_BACKUP",
+                Description = "Operation configured to run without creating a backup",
+                Severity = "High",
+                Mitigation = "Enable backup creation for rollback capability",
+                AffectedRecords = corrections.Count
+            });
+        }
+
+        return risks;
+    }
+
+    #endregion
+}

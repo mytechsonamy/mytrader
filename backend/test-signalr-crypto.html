@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crypto Price Data Test - SignalR & WebSocket</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        .price-update { background-color: #fff3cd; color: #856404; margin: 5px 0; padding: 5px; border-radius: 3px; }
+        #priceContainer { max-height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 MyTrader Crypto Price Data Test</h1>
+    <p>Testing real-time crypto price streaming via SignalR and REST API</p>
+
+    <div id="status" class="status info">Initializing...</div>
+
+    <h2>📊 API Endpoints Test</h2>
+    <button onclick="testLivePrices()">Test Live Prices API</button>
+    <button onclick="testMarketData()">Test Market Data API</button>
+    <div id="apiResults"></div>
+
+    <h2>🔌 SignalR Real-time Test</h2>
+    <button onclick="connectSignalR()">Connect to Market Data Hub</button>
+    <button onclick="subscribeToSymbols()">Subscribe to Crypto Symbols</button>
+    <button onclick="disconnectSignalR()">Disconnect</button>
+
+    <div id="connectionStatus" class="status">Not connected</div>
+
+    <h3>📈 Live Price Updates:</h3>
+    <div id="priceContainer">
+        <em>No price updates received yet. Connect to SignalR and subscribe to symbols.</em>
+    </div>
+
+    <script>
+        let connection = null;
+        let isConnected = false;
+        const priceContainer = document.getElementById('priceContainer');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const status = document.getElementById('status');
+
+        function updateStatus(message, type = 'info') {
+            status.className = `status ${type}`;
+            status.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            console.log(message);
+        }
+
+        function updateConnectionStatus(message, type = 'info') {
+            connectionStatus.className = `status ${type}`;
+            connectionStatus.textContent = message;
+        }
+
+        // Test REST API endpoints
+        async function testLivePrices() {
+            try {
+                updateStatus('Testing /api/prices/live endpoint...', 'info');
+                const response = await fetch('http://localhost:5002/api/prices/live');
+                const data = await response.json();
+
+                document.getElementById('apiResults').innerHTML = `
+                    <div class="status success">
+                        <h4>✅ Live Prices API Success</h4>
+                        <p>Received ${Object.keys(data.symbols || {}).length} crypto symbols</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+                updateStatus(`Live Prices API: ${Object.keys(data.symbols || {}).length} symbols received`, 'success');
+            } catch (error) {
+                document.getElementById('apiResults').innerHTML = `
+                    <div class="status error">
+                        <h4>❌ Live Prices API Failed</h4>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+                updateStatus(`Live Prices API failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMarketData() {
+            try {
+                updateStatus('Testing /api/market-data/symbols endpoint...', 'info');
+                const response = await fetch('http://localhost:5002/api/market-data/symbols');
+                const data = await response.json();
+
+                document.getElementById('apiResults').innerHTML = `
+                    <div class="status success">
+                        <h4>✅ Market Data API Success</h4>
+                        <p>Received ${Object.keys(data.symbols || {}).length} symbols</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+                updateStatus(`Market Data API: ${Object.keys(data.symbols || {}).length} symbols received`, 'success');
+            } catch (error) {
+                document.getElementById('apiResults').innerHTML = `
+                    <div class="status error">
+                        <h4>❌ Market Data API Failed</h4>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+                updateStatus(`Market Data API failed: ${error.message}`, 'error');
+            }
+        }
+
+        // SignalR connection management
+        async function connectSignalR() {
+            if (isConnected) {
+                updateStatus('Already connected to SignalR', 'info');
+                return;
+            }
+
+            try {
+                updateStatus('Connecting to SignalR MarketDataHub...', 'info');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl('http://localhost:5002/hubs/market-data')
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Connection event handlers
+                connection.onreconnecting(() => {
+                    updateConnectionStatus('Reconnecting...', 'info');
+                    updateStatus('SignalR reconnecting...', 'info');
+                });
+
+                connection.onreconnected(() => {
+                    updateConnectionStatus('Reconnected ✅', 'success');
+                    updateStatus('SignalR reconnected successfully', 'success');
+                });
+
+                connection.onclose(() => {
+                    isConnected = false;
+                    updateConnectionStatus('Disconnected ❌', 'error');
+                    updateStatus('SignalR connection closed', 'error');
+                });
+
+                // Message handlers
+                connection.on('ConnectionStatus', (data) => {
+                    updateStatus(`Connection Status: ${data.message}`, 'success');
+                    console.log('Connection Status:', data);
+                });
+
+                connection.on('PriceUpdate', (priceData) => {
+                    addPriceUpdate('PriceUpdate', priceData);
+                });
+
+                connection.on('MarketDataUpdate', (priceData) => {
+                    addPriceUpdate('MarketDataUpdate', priceData);
+                });
+
+                connection.on('SubscriptionConfirmed', (data) => {
+                    updateStatus(`Subscription confirmed for ${data.symbols?.length || 0} symbols`, 'success');
+                    console.log('Subscription confirmed:', data);
+                });
+
+                connection.on('SubscriptionError', (error) => {
+                    updateStatus(`Subscription error: ${error.message}`, 'error');
+                    console.error('Subscription error:', error);
+                });
+
+                // Legacy handlers for backward compatibility
+                connection.on('ReceiveMarketData', (data) => {
+                    addPriceUpdate('ReceiveMarketData (Legacy)', data);
+                });
+
+                // Start connection
+                await connection.start();
+                isConnected = true;
+                updateConnectionStatus('Connected ✅', 'success');
+                updateStatus('Successfully connected to SignalR MarketDataHub', 'success');
+
+            } catch (error) {
+                isConnected = false;
+                updateConnectionStatus('Connection Failed ❌', 'error');
+                updateStatus(`SignalR connection failed: ${error.message}`, 'error');
+                console.error('SignalR connection error:', error);
+            }
+        }
+
+        async function subscribeToSymbols() {
+            if (!isConnected || !connection) {
+                updateStatus('Not connected. Please connect first.', 'error');
+                return;
+            }
+
+            try {
+                updateStatus('Subscribing to crypto symbols...', 'info');
+
+                // Test both new and legacy subscription methods
+                const cryptoSymbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT'];
+
+                // New multi-asset subscription method
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', cryptoSymbols);
+
+                // Legacy subscription method for backward compatibility
+                await connection.invoke('SubscribeToCrypto', cryptoSymbols);
+
+                updateStatus(`Subscribed to ${cryptoSymbols.length} crypto symbols`, 'success');
+
+            } catch (error) {
+                updateStatus(`Subscription failed: ${error.message}`, 'error');
+                console.error('Subscription error:', error);
+            }
+        }
+
+        async function disconnectSignalR() {
+            if (connection && isConnected) {
+                try {
+                    await connection.stop();
+                    isConnected = false;
+                    updateConnectionStatus('Disconnected', 'info');
+                    updateStatus('Disconnected from SignalR', 'info');
+                } catch (error) {
+                    updateStatus(`Disconnect error: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        function addPriceUpdate(type, data) {
+            const updateDiv = document.createElement('div');
+            updateDiv.className = 'price-update';
+
+            let content = `<strong>[${new Date().toLocaleTimeString()}] ${type}</strong><br>`;
+
+            if (data.symbol || data.Symbol) {
+                const symbol = data.symbol || data.Symbol;
+                const price = data.price || data.Price || 'N/A';
+                const change = data.change || data.Change24h || data.PriceChange || 'N/A';
+                content += `${symbol}: $${price} (${change}%)`;
+            } else if (data.symbols) {
+                content += `Batch update: ${Object.keys(data.symbols).length} symbols`;
+                Object.entries(data.symbols).forEach(([symbol, priceInfo]) => {
+                    content += `<br>${symbol}: $${priceInfo.price} (${priceInfo.change}%)`;
+                });
+            } else {
+                content += JSON.stringify(data, null, 2);
+            }
+
+            updateDiv.innerHTML = content;
+            priceContainer.insertBefore(updateDiv, priceContainer.firstChild);
+
+            // Keep only last 20 updates
+            while (priceContainer.children.length > 20) {
+                priceContainer.removeChild(priceContainer.lastChild);
+            }
+
+            updateStatus(`Price update received: ${type}`, 'success');
+        }
+
+        // Auto-start testing when page loads
+        window.onload = function() {
+            updateStatus('Page loaded. Ready to test crypto price data flow.', 'success');
+
+            // Auto-test APIs first
+            setTimeout(testLivePrices, 1000);
+            setTimeout(testMarketData, 2000);
+        };
+    </script>
+</body>
+</html>

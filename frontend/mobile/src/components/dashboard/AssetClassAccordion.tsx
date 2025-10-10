@@ -12,6 +12,8 @@ import {
 import { AssetClassType, EnhancedSymbolDto, UnifiedMarketDataDto } from '../../types';
 import AssetCard from './AssetCard';
 import { MarketStatusBadge } from './MarketStatusIndicator';
+import { createTimingAnimation, runSafeAnimation } from '../../utils/animationUtils';
+import { useTheme } from '../../context/ThemeContext';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -32,7 +34,7 @@ interface AssetClassAccordionProps {
   symbols: EnhancedSymbolDto[];
   marketData: Record<string, UnifiedMarketDataDto>;
   summary?: AssetClassSummary;
-  marketStatus?: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+  marketStatus?: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
   nextChangeTime?: string;
   isExpanded?: boolean;
   defaultExpanded?: boolean;
@@ -51,9 +53,12 @@ interface AccordionHeaderProps {
   title: string;
   icon: string;
   summary?: AssetClassSummary;
-  marketStatus?: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET';
+  marketStatus?: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_MARKET' | 'POST_MARKET' | 'HOLIDAY';
   nextChangeTime?: string;
+  lastUpdateTime?: string;
   isExpanded: boolean;
+  isLoading?: boolean;
+  symbolsCount?: number;
   onPress: () => void;
 }
 
@@ -64,17 +69,22 @@ const AccordionHeader: React.FC<AccordionHeaderProps> = memo(({
   summary,
   marketStatus,
   nextChangeTime,
+  lastUpdateTime,
   isExpanded,
+  isLoading,
+  symbolsCount,
   onPress,
 }) => {
+  const { colors } = useTheme();
   const rotateAnim = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
 
   React.useEffect(() => {
-    Animated.timing(rotateAnim, {
+    const animation = createTimingAnimation(rotateAnim, {
       toValue: isExpanded ? 1 : 0,
       duration: 200,
       useNativeDriver: true,
-    }).start();
+    });
+    runSafeAnimation(animation);
   }, [isExpanded, rotateAnim]);
 
   const getSummaryColor = (change: number): string => {
@@ -83,8 +93,14 @@ const AccordionHeader: React.FC<AccordionHeaderProps> = memo(({
     return '#6b7280';
   };
 
-  const formatSummaryText = (): string => {
-    if (!summary || summary.totalSymbols === 0) return 'Veri yok';
+  const formatSummaryText = (isLoading?: boolean): string => {
+    if (isLoading) return 'Yükleniyor...';
+    if (!summary || (summary.totalSymbols === 0 && (!symbolsCount || symbolsCount === 0))) return 'Veri yok';
+
+    // If summary is invalid but we have symbols, show symbol count
+    if (summary.totalSymbols === 0 && symbolsCount && symbolsCount > 0) {
+      return `${symbolsCount} varlık`;
+    }
 
     const { gainers, losers, averageChange } = summary;
     const sign = averageChange >= 0 ? '+' : '';
@@ -93,23 +109,23 @@ const AccordionHeader: React.FC<AccordionHeaderProps> = memo(({
 
   return (
     <TouchableOpacity
-      style={styles.header}
+      style={[styles.header, { backgroundColor: colors.surface }]}
       onPress={onPress}
       activeOpacity={0.8}
     >
       <View style={styles.headerLeft}>
         <Text style={styles.headerIcon}>{icon}</Text>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>{title}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{title}</Text>
           <View style={styles.headerSummary}>
             <Text style={[
               styles.summaryText,
-              { color: getSummaryColor(summary?.averageChange || 0) }
+              { color: isLoading ? colors.textSecondary : getSummaryColor(summary?.averageChange || 0) }
             ]}>
-              {formatSummaryText()}
+              {formatSummaryText(isLoading)}
             </Text>
             {summary && summary.totalSymbols > 0 && (
-              <Text style={styles.symbolCount}>
+              <Text style={[styles.symbolCount, { color: colors.textTertiary }]}>
                 {summary.totalSymbols} varlık
               </Text>
             )}
@@ -123,7 +139,9 @@ const AccordionHeader: React.FC<AccordionHeaderProps> = memo(({
             assetClass={assetClass}
             status={marketStatus}
             nextChangeTime={nextChangeTime}
+            lastUpdateTime={lastUpdateTime}
             compact={true}
+            size="small"
           />
         )}
 
@@ -140,7 +158,7 @@ const AccordionHeader: React.FC<AccordionHeaderProps> = memo(({
             },
           ]}
         >
-          <Text style={styles.chevronText}>▼</Text>
+          <Text style={[styles.chevronText, { color: colors.textSecondary }]}>▼</Text>
         </Animated.View>
       </View>
     </TouchableOpacity>
@@ -167,10 +185,25 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
   onAddToWatchlist,
   onLoadMore,
 }) => {
+  const { colors } = useTheme();
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const [showAll, setShowAll] = useState(false);
 
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+
+  // Calculate most recent update time from market data
+  const lastUpdateTime = React.useMemo(() => {
+    const timestamps = Object.values(marketData)
+      .map((data: UnifiedMarketDataDto) => data?.timestamp || data?.lastUpdated)
+      .filter((ts): ts is string => Boolean(ts));
+
+    if (timestamps.length === 0) return undefined;
+
+    // Return the most recent timestamp
+    return timestamps.reduce((latest, current) => {
+      return new Date(current) > new Date(latest) ? current : latest;
+    });
+  }, [marketData]);
 
   const handleToggle = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -202,7 +235,39 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
   const hasMore = showLoadMore && symbols.length >= maxVisibleItems;
 
   const renderSymbolCard = useCallback((symbol: EnhancedSymbolDto, index: number) => {
-    const symbolMarketData = marketData[symbol.id] || marketData[symbol.symbol];
+    // Try comprehensive lookup strategies to find market data
+    // Priority order: exact ID -> symbol variations -> with USDT suffix
+    const lookupKeys = [
+      symbol.id,                                          // UUID
+      symbol.symbol,                                      // BTC
+      symbol.symbol?.toLowerCase(),                       // btc
+      symbol.symbol?.toUpperCase(),                       // BTC
+      `${symbol.symbol}USDT`,                            // BTCUSDT
+      `${symbol.symbol?.toLowerCase()}usdt`,             // btcusdt
+      `${symbol.symbol?.toUpperCase()}USDT`,             // BTCUSDT
+      symbol.baseCurrency,                               // BTC
+      symbol.baseCurrency?.toLowerCase(),                // btc
+      `${symbol.baseCurrency}${symbol.quoteCurrency}`,   // BTCUSDT
+      `${symbol.baseCurrency?.toLowerCase()}${symbol.quoteCurrency?.toLowerCase()}`, // btcusdt
+    ].filter(Boolean);
+
+    let symbolMarketData = undefined;
+    for (const key of lookupKeys) {
+      if (marketData[key as string]) {
+        symbolMarketData = marketData[key as string];
+        break;
+      }
+    }
+
+    // Debug: Log when market data is missing (only occasionally to reduce noise)
+    if (!symbolMarketData && __DEV__) {
+      console.warn(`[AssetClassAccordion] No market data found for symbol:`, {
+        id: symbol.id,
+        symbol: symbol.symbol,
+        triedKeys: lookupKeys.slice(0, 5),
+        availableKeys: Object.keys(marketData).slice(0, 5),
+      });
+    }
 
     return (
       <AssetCard
@@ -232,7 +297,7 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.card }]}>
       <AccordionHeader
         assetClass={assetClass}
         title={title}
@@ -240,7 +305,10 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
         summary={summary}
         marketStatus={marketStatus}
         nextChangeTime={nextChangeTime}
+        lastUpdateTime={lastUpdateTime}
         isExpanded={isExpanded}
+        isLoading={isLoading}
+        symbolsCount={symbols.length}
         onPress={handleToggle}
       />
 
@@ -251,7 +319,7 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
           ) : symbols.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyText}>Bu kategoride varlık bulunamadı</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Bu kategoride varlık bulunamadı</Text>
             </View>
           ) : (
             <>
@@ -259,17 +327,17 @@ const AssetClassAccordion: React.FC<AssetClassAccordionProps> = ({
 
               {(needsLoadMore || hasMore) && (
                 <TouchableOpacity
-                  style={styles.loadMoreButton}
+                  style={[styles.loadMoreButton, { backgroundColor: colors.surface }]}
                   onPress={handleShowMore}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.loadMoreText}>
+                  <Text style={[styles.loadMoreText, { color: colors.primary }]}>
                     {needsLoadMore
                       ? `${symbols.length - maxVisibleItems} tane daha göster`
                       : 'Daha fazla yükle'
                     }
                   </Text>
-                  <Text style={styles.loadMoreIcon}>↓</Text>
+                  <Text style={[styles.loadMoreIcon, { color: colors.primary }]}>↓</Text>
                 </TouchableOpacity>
               )}
             </>

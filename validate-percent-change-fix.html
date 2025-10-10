@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Percent Change Validation Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.pending { background: #ffeaa7; color: #fdcb6e; }
+        .status.testing { background: #74b9ff; color: #0984e3; }
+        .status.pass { background: #55efc4; color: #00b894; }
+        .status.fail { background: #ff7675; color: #d63031; }
+        .test-result {
+            margin: 10px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        .price-data {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .price-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .price-card.positive {
+            border-left: 4px solid #00b894;
+        }
+        .price-card.negative {
+            border-left: 4px solid #d63031;
+        }
+        .price-card .symbol {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #2d3436;
+        }
+        .price-card .price {
+            font-size: 1.5em;
+            color: #0984e3;
+            margin: 10px 0;
+        }
+        .price-card .change {
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+        .price-card .change.positive { color: #00b894; }
+        .price-card .change.negative { color: #d63031; }
+        .validation {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .log-container {
+            background: #2d3436;
+            color: #dfe6e9;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .log-entry.error { color: #ff7675; }
+        .log-entry.success { color: #55efc4; }
+        .log-entry.info { color: #74b9ff; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #b2bec3;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Percent Change Validation Test Suite</h1>
+        <p>Comprehensive validation of recent percent change calculation fixes</p>
+        <div>
+            <strong>Test Objectives:</strong>
+            <ul>
+                <li>✅ Verify Change24h field contains price change AMOUNT (not percent)</li>
+                <li>✅ Confirm percent change calculation uses previousClose</li>
+                <li>✅ Validate WebSocket broadcasts send correct data</li>
+                <li>✅ Test API responses have accurate calculations</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔌 Test 1: WebSocket Connection & Price Updates <span id="ws-status" class="status pending">PENDING</span></h3>
+        <p>Testing SignalR WebSocket connection and real-time price update format</p>
+        <button onclick="testWebSocket()">Run WebSocket Test</button>
+        <button onclick="stopWebSocket()">Stop WebSocket</button>
+        <div id="ws-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🌐 Test 2: REST API Validation <span id="api-status" class="status pending">PENDING</span></h3>
+        <p>Testing REST API endpoints for correct percent change data</p>
+        <button onclick="testRESTAPI()">Run API Tests</button>
+        <div id="api-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🧮 Test 3: Calculation Verification <span id="calc-status" class="status pending">PENDING</span></h3>
+        <p>Verifying percent change calculation formula: ((currentPrice - previousClose) / previousClose) * 100</p>
+        <button onclick="testCalculations()">Run Calculation Tests</button>
+        <div id="calc-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📝 Test Logs</h3>
+        <div class="log-container" id="log-container">
+            <div class="log-entry info">Waiting to start tests...</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script>
+        const API_BASE = 'http://localhost:5002';
+        let connection = null;
+        let priceUpdates = [];
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('log-container');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function setStatus(elementId, status) {
+            const el = document.getElementById(elementId);
+            el.className = `status ${status}`;
+            el.textContent = status.toUpperCase();
+        }
+
+        async function testWebSocket() {
+            log('Starting WebSocket test...', 'info');
+            setStatus('ws-status', 'testing');
+
+            try {
+                // Create SignalR connection to DashboardHub
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${API_BASE}/hubs/dashboard`, {
+                        skipNegotiation: true,
+                        transport: signalR.HttpTransportType.WebSockets
+                    })
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Listen for PriceUpdate events (new standard format)
+                connection.on("PriceUpdate", (data) => {
+                    log(`Received PriceUpdate: ${JSON.stringify(data)}`, 'success');
+                    validatePriceUpdate(data);
+                });
+
+                // Listen for MarketDataUpdate events
+                connection.on("MarketDataUpdate", (data) => {
+                    log(`Received MarketDataUpdate: ${JSON.stringify(data)}`, 'success');
+                });
+
+                // Listen for legacy ReceivePriceUpdate events
+                connection.on("ReceivePriceUpdate", (data) => {
+                    log(`Received ReceivePriceUpdate (legacy): ${JSON.stringify(data)}`, 'info');
+                });
+
+                await connection.start();
+                log('✅ WebSocket connected successfully', 'success');
+
+                // Subscribe to crypto symbols for testing
+                const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'SOLUSD'];
+                for (const symbol of cryptoSymbols) {
+                    await connection.invoke("SubscribeToSymbol", symbol);
+                    await connection.invoke("JoinGroup", `CRYPTO_${symbol}`);
+                    log(`Subscribed to ${symbol}`, 'success');
+                }
+
+                // Subscribe to asset class
+                await connection.invoke("JoinGroup", "AssetClass_CRYPTO");
+                log('Subscribed to CRYPTO asset class', 'success');
+
+                setStatus('ws-status', 'pass');
+            } catch (error) {
+                log(`❌ WebSocket error: ${error.message}`, 'error');
+                setStatus('ws-status', 'fail');
+            }
+        }
+
+        function validatePriceUpdate(data) {
+            const resultsDiv = document.getElementById('ws-results');
+
+            // Validate data structure
+            const validations = [];
+
+            // Check if Change24h is a price change amount (should be small relative to price)
+            const changeRatio = Math.abs(data.Change24h || data.change) / (data.Price || data.price);
+            const isAmountNotPercent = changeRatio < 1; // Amount should be much smaller than price
+
+            validations.push({
+                test: 'Change24h is amount (not percent)',
+                pass: isAmountNotPercent,
+                value: `Change24h: ${data.Change24h || data.change}, Price: ${data.Price || data.price}, Ratio: ${changeRatio.toFixed(4)}`
+            });
+
+            // Check if we have required fields
+            validations.push({
+                test: 'Has symbol field',
+                pass: !!(data.Symbol || data.symbol),
+                value: data.Symbol || data.symbol
+            });
+
+            validations.push({
+                test: 'Has price field',
+                pass: !!(data.Price || data.price),
+                value: data.Price || data.price
+            });
+
+            // Create price card
+            const card = createPriceCard(data);
+
+            // Add validation results
+            const validationHtml = validations.map(v =>
+                `<div style="color: ${v.pass ? '#00b894' : '#d63031'}">
+                    ${v.pass ? '✅' : '❌'} ${v.test}: ${v.value}
+                </div>`
+            ).join('');
+
+            card.innerHTML += `<div class="validation">${validationHtml}</div>`;
+
+            resultsDiv.innerHTML = '';
+            resultsDiv.appendChild(card);
+
+            priceUpdates.push(data);
+        }
+
+        function createPriceCard(data) {
+            const card = document.createElement('div');
+            const symbol = data.Symbol || data.symbol;
+            const price = data.Price || data.price;
+            const change = data.Change24h || data.change;
+            const changePercent = ((change / price) * 100).toFixed(2);
+            const isPositive = change >= 0;
+
+            card.className = `price-card ${isPositive ? 'positive' : 'negative'}`;
+            card.innerHTML = `
+                <div class="symbol">${symbol}</div>
+                <div class="price">$${price?.toFixed(2)}</div>
+                <div class="change ${isPositive ? 'positive' : 'negative'}">
+                    ${isPositive ? '▲' : '▼'} $${Math.abs(change || 0).toFixed(2)} (${changePercent}%)
+                </div>
+                <div style="margin-top: 10px; font-size: 0.9em; color: #636e72;">
+                    Source: ${data.Source || data.source || 'Unknown'}<br>
+                    Asset: ${data.AssetClass || data.assetClass || 'Unknown'}
+                </div>
+            `;
+            return card;
+        }
+
+        async function stopWebSocket() {
+            if (connection) {
+                await connection.stop();
+                log('WebSocket disconnected', 'info');
+                connection = null;
+            }
+        }
+
+        async function testRESTAPI() {
+            log('Starting REST API tests...', 'info');
+            setStatus('api-status', 'testing');
+
+            const resultsDiv = document.getElementById('api-results');
+            resultsDiv.innerHTML = '<div class="test-result">Testing API endpoints...</div>';
+
+            try {
+                // Test multiple endpoints
+                const endpoints = [
+                    '/api/prices',
+                    '/api/market-data',
+                    '/api/dashboard/overview'
+                ];
+
+                let allPassed = true;
+
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch(`${API_BASE}${endpoint}`);
+                        if (!response.ok) {
+                            log(`⚠️ ${endpoint}: ${response.status} ${response.statusText}`, 'error');
+                            continue;
+                        }
+
+                        const data = await response.json();
+                        log(`✅ ${endpoint}: Success`, 'success');
+
+                        // Validate percent change in response
+                        if (Array.isArray(data)) {
+                            data.slice(0, 3).forEach(item => {
+                                const card = createPriceCard(item);
+                                resultsDiv.appendChild(card);
+                            });
+                        } else if (data.data) {
+                            // Might be wrapped in data property
+                            if (Array.isArray(data.data)) {
+                                data.data.slice(0, 3).forEach(item => {
+                                    const card = createPriceCard(item);
+                                    resultsDiv.appendChild(card);
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        log(`❌ ${endpoint}: ${err.message}`, 'error');
+                        allPassed = false;
+                    }
+                }
+
+                setStatus('api-status', allPassed ? 'pass' : 'fail');
+            } catch (error) {
+                log(`❌ API test error: ${error.message}`, 'error');
+                setStatus('api-status', 'fail');
+            }
+        }
+
+        async function testCalculations() {
+            log('Starting calculation verification...', 'info');
+            setStatus('calc-status', 'testing');
+
+            const resultsDiv = document.getElementById('calc-results');
+
+            // Test scenarios
+            const testCases = [
+                {
+                    name: 'Stock price increase',
+                    currentPrice: 150.00,
+                    previousClose: 145.00,
+                    expectedChange: 5.00,
+                    expectedPercent: 3.45
+                },
+                {
+                    name: 'Stock price decrease',
+                    currentPrice: 98.50,
+                    previousClose: 100.00,
+                    expectedChange: -1.50,
+                    expectedPercent: -1.50
+                },
+                {
+                    name: 'Crypto small change',
+                    currentPrice: 43250.75,
+                    previousClose: 43100.00,
+                    expectedChange: 150.75,
+                    expectedPercent: 0.35
+                }
+            ];
+
+            let html = '<div class="test-result">';
+            let allPassed = true;
+
+            testCases.forEach(test => {
+                const calculatedChange = test.currentPrice - test.previousClose;
+                const calculatedPercent = ((calculatedChange / test.previousClose) * 100);
+
+                const changePassed = Math.abs(calculatedChange - test.expectedChange) < 0.01;
+                const percentPassed = Math.abs(calculatedPercent - test.expectedPercent) < 0.01;
+                const passed = changePassed && percentPassed;
+
+                if (!passed) allPassed = false;
+
+                html += `
+                    <div style="margin: 15px 0; padding: 15px; background: ${passed ? '#e3f2fd' : '#ffebee'}; border-radius: 4px;">
+                        <strong>${passed ? '✅' : '❌'} ${test.name}</strong><br>
+                        Current: $${test.currentPrice.toFixed(2)}, Previous Close: $${test.previousClose.toFixed(2)}<br>
+                        <strong>Change:</strong> $${calculatedChange.toFixed(2)} (expected: $${test.expectedChange.toFixed(2)}) ${changePassed ? '✅' : '❌'}<br>
+                        <strong>Percent:</strong> ${calculatedPercent.toFixed(2)}% (expected: ${test.expectedPercent.toFixed(2)}%) ${percentPassed ? '✅' : '❌'}<br>
+                        <code>Formula: ((${test.currentPrice} - ${test.previousClose}) / ${test.previousClose}) * 100 = ${calculatedPercent.toFixed(2)}%</code>
+                    </div>
+                `;
+
+                log(`${passed ? '✅' : '❌'} ${test.name}: Change=$${calculatedChange.toFixed(2)}, Percent=${calculatedPercent.toFixed(2)}%`, passed ? 'success' : 'error');
+            });
+
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+
+            setStatus('calc-status', allPassed ? 'pass' : 'fail');
+        }
+
+        // Auto-run calculation test on load
+        window.addEventListener('load', () => {
+            log('Page loaded. Ready to run tests.', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+{
+  "timestamp": "2025-09-28T14:53:11.932246",
+  "error_handling_tests": {
+    "Invalid Endpoint (404)": {
+      "passed": true,
+      "details": "Expected 404, got 404",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:11.938489"
+    },
+    "Malformed Request": {
+      "passed": false,
+      "details": "Returns appropriate error code: 401",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:11.946623"
+    },
+    "Large Payload Handling": {
+      "passed": false,
+      "details": "Handles large payload appropriately: 401",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:11.957234"
+    },
+    "Rate Limiting Protection": {
+      "passed": false,
+      "details": "Success rate: 1.00, Duration: 0.0s",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:11.999867"
+    },
+    "Frontend Accessibility": {
+      "passed": true,
+      "details": "Frontend loads, error handling present: False",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.023687"
+    },
+    "Frontend 404 Handling": {
+      "passed": true,
+      "details": "Response: 200",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.030572"
+    },
+    "Data Consistency Under Load": {
+      "passed": true,
+      "details": "Consistency rate: 1.00",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.043128"
+    },
+    "SQL Injection Prevention": {
+      "passed": true,
+      "details": "Malicious login attempt result: 401",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.121244"
+    },
+    "XSS Prevention": {
+      "passed": true,
+      "details": "XSS payload properly handled",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.122659"
+    }
+  },
+  "connection_resilience_tests": {
+    "Connection Timeout Handling": {
+      "passed": true,
+      "details": "Timeout handled in 0.0s",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.000391"
+    },
+    "Concurrent Request Handling": {
+      "passed": true,
+      "details": "Success rate: 1.00",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.012916"
+    },
+    "CORS Security": {
+      "passed": true,
+      "details": "CORS header: None",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.014045"
+    },
+    "WebSocket Endpoint Availability": {
+      "passed": true,
+      "details": "Response: 404",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.043832"
+    },
+    "SignalR Negotiate Endpoint": {
+      "passed": true,
+      "details": "Negotiate response: 404",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.044459"
+    },
+    "Database Connection Health": {
+      "passed": true,
+      "details": "Database status: Not reported",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.116442"
+    }
+  },
+  "recovery_tests": {
+    "Service Recovery Rate": {
+      "passed": true,
+      "details": "Recovery rate: 1.00",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:13.185804"
+    },
+    "Auto-Reconnection Capability": {
+      "passed": true,
+      "details": "Connection success: 5/5",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:13.200122"
+    }
+  },
+  "stress_tests": {
+    "Resource Management Under Load": {
+      "passed": true,
+      "details": "100/100 successful, 1403.4 req/s",
+      "error": null,
+      "timestamp": "2025-09-28T14:53:12.115754"
+    }
+  },
+  "total_tests": 18,
+  "passed_tests": 15,
+  "failed_tests": 3,
+  "critical_failures": [],
+  "resilience_score": 83.33333333333334
+}

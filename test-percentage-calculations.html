@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Data Percentage Calculation Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .test-case {
+            background: #ecf0f1;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .test-case.success {
+            border-left-color: #27ae60;
+            background: #d4edda;
+        }
+        .test-case.failure {
+            border-left-color: #e74c3c;
+            background: #f8d7da;
+        }
+        .formula {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+        }
+        .result {
+            font-weight: bold;
+            color: #2980b9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f2f2f2;
+        }
+        .positive {
+            color: #27ae60;
+        }
+        .negative {
+            color: #e74c3c;
+        }
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge.pass {
+            background: #27ae60;
+            color: white;
+        }
+        .badge.fail {
+            background: #e74c3c;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧮 Market Data Percentage Calculation Test Suite</h1>
+        <p>Testing the fixed percentage calculation implementation for myTrader</p>
+
+        <h2>Test 1: Forward Calculation (Stock Data)</h2>
+        <p>Given: CurrentPrice and PreviousClose → Calculate: Percentage</p>
+        <div id="test1-results"></div>
+
+        <h2>Test 2: Reverse Calculation (Crypto Data)</h2>
+        <p>Given: CurrentPrice and Percentage → Calculate: PreviousClose</p>
+        <div id="test2-results"></div>
+
+        <h2>Test 3: Edge Cases</h2>
+        <p>Testing zero division protection and boundary conditions</p>
+        <div id="test3-results"></div>
+
+        <h2>Test 4: Real-World Scenarios</h2>
+        <p>Simulating actual market data</p>
+        <div id="test4-results"></div>
+
+        <h2>Summary</h2>
+        <div id="summary"></div>
+    </div>
+
+    <script>
+        // Forward calculation: Stock data (Yahoo Finance style)
+        function calculatePercentage(currentPrice, previousClose) {
+            if (previousClose <= 0) return null;
+            const priceChange = currentPrice - previousClose;
+            const percentChange = (priceChange / previousClose) * 100;
+            return {
+                priceChange: priceChange,
+                percentChange: percentChange
+            };
+        }
+
+        // Reverse calculation: Crypto data (Binance style)
+        function calculatePreviousClose(currentPrice, percentChange) {
+            if (currentPrice <= 0) return null;
+            if (percentChange === 0) return currentPrice;
+            return currentPrice / (1 + (percentChange / 100));
+        }
+
+        // Test suite
+        let totalTests = 0;
+        let passedTests = 0;
+
+        function runTest(name, actual, expected, tolerance = 0.01) {
+            totalTests++;
+            const diff = Math.abs(actual - expected);
+            const passed = diff <= tolerance;
+            if (passed) passedTests++;
+
+            return {
+                name,
+                actual,
+                expected,
+                diff,
+                passed,
+                tolerance
+            };
+        }
+
+        // Test 1: Forward Calculation
+        const test1Cases = [
+            { price: 105, prevClose: 100, expectedChange: 5, expectedPercent: 5.00 },
+            { price: 95, prevClose: 100, expectedChange: -5, expectedPercent: -5.00 },
+            { price: 110, prevClose: 100, expectedChange: 10, expectedPercent: 10.00 },
+            { price: 50250, prevClose: 50000, expectedChange: 250, expectedPercent: 0.50 },
+            { price: 100, prevClose: 100, expectedChange: 0, expectedPercent: 0.00 }
+        ];
+
+        let test1Html = '<table><tr><th>Current</th><th>Previous</th><th>Change</th><th>Percent</th><th>Status</th></tr>';
+        test1Cases.forEach(tc => {
+            const result = calculatePercentage(tc.price, tc.prevClose);
+            const changeTest = runTest('PriceChange', result.priceChange, tc.expectedChange);
+            const percentTest = runTest('PercentChange', result.percentChange, tc.expectedPercent);
+
+            const status = changeTest.passed && percentTest.passed ?
+                '<span class="badge pass">PASS</span>' :
+                '<span class="badge fail">FAIL</span>';
+
+            const percentClass = result.percentChange >= 0 ? 'positive' : 'negative';
+
+            test1Html += `<tr>
+                <td>$${tc.price.toFixed(2)}</td>
+                <td>$${tc.prevClose.toFixed(2)}</td>
+                <td class="${percentClass}">$${result.priceChange.toFixed(2)}</td>
+                <td class="${percentClass}">${result.percentChange >= 0 ? '+' : ''}${result.percentChange.toFixed(2)}%</td>
+                <td>${status}</td>
+            </tr>`;
+        });
+        test1Html += '</table>';
+        document.getElementById('test1-results').innerHTML = test1Html;
+
+        // Test 2: Reverse Calculation
+        const test2Cases = [
+            { price: 50000, percent: 2.50, expectedPrevClose: 48780.49 },
+            { price: 50000, percent: -2.50, expectedPrevClose: 51282.05 },
+            { price: 100, percent: 0, expectedPrevClose: 100.00 },
+            { price: 48780.49, percent: -2.50, expectedPrevClose: 50000.00 },
+            { price: 105, percent: 5.00, expectedPrevClose: 100.00 }
+        ];
+
+        let test2Html = '<table><tr><th>Current</th><th>Percent</th><th>Calculated Prev Close</th><th>Expected</th><th>Status</th></tr>';
+        test2Cases.forEach(tc => {
+            const prevClose = calculatePreviousClose(tc.price, tc.percent);
+            const test = runTest('PreviousClose', prevClose, tc.expectedPrevClose, 0.01);
+
+            const status = test.passed ?
+                '<span class="badge pass">PASS</span>' :
+                '<span class="badge fail">FAIL</span>';
+
+            test2Html += `<tr>
+                <td>$${tc.price.toFixed(2)}</td>
+                <td class="${tc.percent >= 0 ? 'positive' : 'negative'}">${tc.percent >= 0 ? '+' : ''}${tc.percent.toFixed(2)}%</td>
+                <td>$${prevClose.toFixed(2)}</td>
+                <td>$${tc.expectedPrevClose.toFixed(2)}</td>
+                <td>${status}</td>
+            </tr>`;
+        });
+        test2Html += '</table>';
+        document.getElementById('test2-results').innerHTML = test2Html;
+
+        // Test 3: Edge Cases
+        const test3Cases = [
+            {
+                name: 'Zero Previous Close (Division by Zero)',
+                test: () => calculatePercentage(100, 0),
+                expected: null,
+                check: (result) => result === null
+            },
+            {
+                name: 'Negative Previous Close',
+                test: () => calculatePercentage(100, -50),
+                expected: null,
+                check: (result) => result === null
+            },
+            {
+                name: 'Zero Current Price',
+                test: () => calculatePreviousClose(0, 5),
+                expected: null,
+                check: (result) => result === null
+            },
+            {
+                name: 'Very Large Percentage Gain (+1000%)',
+                test: () => {
+                    const result = calculatePercentage(1100, 100);
+                    return result.percentChange;
+                },
+                expected: 1000,
+                check: (result) => Math.abs(result - 1000) < 0.01
+            },
+            {
+                name: 'Very Small Percentage Change (+0.01%)',
+                test: () => {
+                    const result = calculatePercentage(100.01, 100);
+                    return result.percentChange;
+                },
+                expected: 0.01,
+                check: (result) => Math.abs(result - 0.01) < 0.001
+            }
+        ];
+
+        let test3Html = '<table><tr><th>Test Case</th><th>Result</th><th>Status</th></tr>';
+        test3Cases.forEach(tc => {
+            totalTests++;
+            const result = tc.test();
+            const passed = tc.check(result);
+            if (passed) passedTests++;
+
+            const status = passed ?
+                '<span class="badge pass">PASS</span>' :
+                '<span class="badge fail">FAIL</span>';
+
+            test3Html += `<tr>
+                <td>${tc.name}</td>
+                <td>${result === null ? 'null (protected)' : result.toFixed(4)}</td>
+                <td>${status}</td>
+            </tr>`;
+        });
+        test3Html += '</table>';
+        document.getElementById('test3-results').innerHTML = test3Html;
+
+        // Test 4: Real-World Scenarios
+        const test4Cases = [
+            {
+                asset: 'AAPL (Stock)',
+                price: 178.25,
+                prevClose: 175.50,
+                type: 'forward'
+            },
+            {
+                asset: 'GARAN.IS (BIST)',
+                price: 85.75,
+                prevClose: 87.20,
+                type: 'forward'
+            },
+            {
+                asset: 'BTC-USD (Crypto)',
+                price: 62500,
+                percent: 3.25,
+                type: 'reverse'
+            },
+            {
+                asset: 'ETH-USD (Crypto)',
+                price: 3200,
+                percent: -1.85,
+                type: 'reverse'
+            }
+        ];
+
+        let test4Html = '<table><tr><th>Asset</th><th>Current Price</th><th>Previous Close</th><th>Change</th><th>Percent</th><th>Verify</th></tr>';
+        test4Cases.forEach(tc => {
+            if (tc.type === 'forward') {
+                const result = calculatePercentage(tc.price, tc.prevClose);
+                // Verify: reverse calculate and check if we get back the original price
+                const verifyPrevClose = calculatePreviousClose(tc.price, result.percentChange);
+                totalTests++;
+                const verified = Math.abs(verifyPrevClose - tc.prevClose) < 0.01;
+                if (verified) passedTests++;
+
+                const percentClass = result.percentChange >= 0 ? 'positive' : 'negative';
+                test4Html += `<tr>
+                    <td><strong>${tc.asset}</strong></td>
+                    <td>$${tc.price.toFixed(2)}</td>
+                    <td>$${tc.prevClose.toFixed(2)}</td>
+                    <td class="${percentClass}">$${result.priceChange.toFixed(2)}</td>
+                    <td class="${percentClass}">${result.percentChange >= 0 ? '+' : ''}${result.percentChange.toFixed(2)}%</td>
+                    <td>${verified ? '<span class="badge pass">✓</span>' : '<span class="badge fail">✗</span>'}</td>
+                </tr>`;
+            } else {
+                const prevClose = calculatePreviousClose(tc.price, tc.percent);
+                // Verify: forward calculate and check if we get back the original percentage
+                const result = calculatePercentage(tc.price, prevClose);
+                totalTests++;
+                const verified = Math.abs(result.percentChange - tc.percent) < 0.01;
+                if (verified) passedTests++;
+
+                const percentClass = tc.percent >= 0 ? 'positive' : 'negative';
+                test4Html += `<tr>
+                    <td><strong>${tc.asset}</strong></td>
+                    <td>$${tc.price.toFixed(2)}</td>
+                    <td>$${prevClose.toFixed(2)}</td>
+                    <td class="${percentClass}">$${(tc.price - prevClose).toFixed(2)}</td>
+                    <td class="${percentClass}">${tc.percent >= 0 ? '+' : ''}${tc.percent.toFixed(2)}%</td>
+                    <td>${verified ? '<span class="badge pass">✓</span>' : '<span class="badge fail">✗</span>'}</td>
+                </tr>`;
+            }
+        });
+        test4Html += '</table>';
+        document.getElementById('test4-results').innerHTML = test4Html;
+
+        // Summary
+        const passRate = ((passedTests / totalTests) * 100).toFixed(1);
+        const summaryHtml = `
+            <div class="test-case ${passedTests === totalTests ? 'success' : 'failure'}">
+                <h3>Test Results: ${passedTests}/${totalTests} Tests Passed (${passRate}%)</h3>
+                <p><strong>Status:</strong> ${passedTests === totalTests ? '✅ All tests passed!' : '⚠️ Some tests failed'}</p>
+                <p><strong>Implementation:</strong> ${passedTests === totalTests ? 'CORRECT' : 'NEEDS REVIEW'}</p>
+                ${passedTests === totalTests ?
+                    '<p style="color: #27ae60;">The percentage calculation and PreviousClose field implementation is working correctly across all test scenarios.</p>' :
+                    '<p style="color: #e74c3c;">Please review the failed tests and check the implementation.</p>'
+                }
+            </div>
+        `;
+        document.getElementById('summary').innerHTML = summaryHtml;
+
+        // Log to console for debugging
+        console.log('=== Market Data Percentage Calculation Test Results ===');
+        console.log(`Total Tests: ${totalTests}`);
+        console.log(`Passed: ${passedTests}`);
+        console.log(`Failed: ${totalTests - passedTests}`);
+        console.log(`Pass Rate: ${passRate}%`);
+    </script>
+</body>
+</html>

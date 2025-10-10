@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+
+const WebSocket = require('ws');
+
+const checkWebSocket = async () => {
+  const url = process.env.WS_URL || 'ws://localhost:5002/hubs/market-data';
+  const startTime = Date.now();
+  
+  try {
+    const ws = new WebSocket(url);
+    
+    await new Promise((resolve, reject) => {
+      ws.on('open', () => {
+        const duration = Date.now() - startTime;
+        console.log(`✅ WebSocket connected in ${duration}ms`);
+        
+        if (duration > 3000) {
+          console.warn(`⚠️ Connection slower than 3s threshold`);
+        }
+        
+        ws.close();
+        resolve();
+      });
+      
+      ws.on('error', reject);
+      setTimeout(() => reject(new Error('Connection timeout')), 3500);
+    });
+    
+    process.exit(0);
+  } catch (error) {
+    console.error(`❌ WebSocket check failed: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+checkWebSocket();

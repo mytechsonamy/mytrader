@@ -36,6 +36,7 @@ import {
 import { EnhancedNewsPreview } from '../components/news';
 import EnhancedNewsScreen from './EnhancedNewsScreen';
 import { usePerformanceOptimization } from '../hooks/usePerformanceOptimization';
+import { getMarketStatus, formatNextChangeTime } from '../utils/marketHours';
 
 type DashboardNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -166,6 +167,39 @@ const DashboardScreen: React.FC = () => {
       if (priceData && symbol.id) {
         data[symbol.id] = priceData; // Map UUID → price data
       }
+    });
+
+    // Enrich market data with client-side calculated market status
+    // This ensures AssetCard components display correct OPEN/CLOSED status
+    allSymbols.forEach(symbol => {
+      // Determine market based on symbol's marketName or market field
+      const marketValue = (symbol?.marketName || symbol?.market || '').toUpperCase();
+      let marketInfo;
+
+      if (marketValue === 'BIST') {
+        marketInfo = getMarketStatus('BIST');
+      } else if (marketValue === 'NASDAQ') {
+        marketInfo = getMarketStatus('NASDAQ');
+      } else if (marketValue === 'NYSE') {
+        marketInfo = getMarketStatus('NYSE');
+      } else if (symbol.assetClass === 'CRYPTO') {
+        marketInfo = getMarketStatus('CRYPTO');
+      } else {
+        // Default to crypto (always open) if unknown
+        marketInfo = getMarketStatus('CRYPTO');
+      }
+
+      // Inject marketStatus into all indexed entries for this symbol
+      const keysToUpdate = [symbol.id, symbol.symbol, symbol.symbolId].filter(k => k && data[k]);
+
+      keysToUpdate.forEach(key => {
+        if (data[key]) {
+          data[key] = {
+            ...data[key],
+            marketStatus: marketInfo.status,
+          };
+        }
+      });
     });
 
     return data;
@@ -362,6 +396,7 @@ const DashboardScreen: React.FC = () => {
     navigation.navigate('StrategyTest', {
       symbol: symbol.symbol,
       displayName: symbol.displayName,
+      assetClass: symbol.assetClassId as any, // Pass asset class for price subscription
     });
   }, [navigation]);
 
@@ -419,30 +454,32 @@ const DashboardScreen: React.FC = () => {
     navigation.navigate('MainTabs', { screen: 'Gamification' });
   }, [user, navigation]);
 
-  // Get market status for specific asset class
-  const getMarketStatusForAssetClass = useCallback((assetClass: AssetClassType): MarketStatusDto | undefined => {
-    if (!state.marketStatuses || !Array.isArray(state.marketStatuses)) {
-      return undefined;
+  // Get market status for specific section (using client-side calculation)
+  const getMarketStatusForSection = useCallback((sectionType: string) => {
+    let marketInfo;
+    switch (sectionType) {
+      case 'bist':
+        marketInfo = getMarketStatus('BIST');
+        break;
+      case 'nasdaq':
+      case 'nyse':
+        marketInfo = getMarketStatus('NASDAQ');
+        break;
+      case 'crypto':
+        marketInfo = getMarketStatus('CRYPTO');
+        break;
+      default:
+        return undefined;
     }
-    return state.marketStatuses.find(status => {
-      // Add null/undefined checks for marketName
-      if (!status || !status.marketName || typeof status.marketName !== 'string') {
-        return false;
-      }
 
-      const marketNameLower = status.marketName.toLowerCase();
-      switch (assetClass) {
-        case 'CRYPTO':
-          return marketNameLower.includes('crypto');
-        case 'STOCK':
-          return marketNameLower.includes('stock') ||
-                 marketNameLower.includes('bist') ||
-                 marketNameLower.includes('nasdaq');
-        default:
-          return false;
-      }
-    });
-  }, [state.marketStatuses]);
+    return {
+      status: marketInfo.status,
+      nextOpen: marketInfo.nextOpenTime?.toISOString(),
+      nextClose: marketInfo.nextCloseTime?.toISOString(),
+      isWeekend: marketInfo.isWeekend,
+      isHoliday: marketInfo.isHoliday,
+    };
+  }, []);
 
   // Get symbols for specific section
   const getSymbolsForSection = useCallback((sectionType: string): EnhancedSymbolDto[] => {
@@ -494,9 +531,8 @@ const DashboardScreen: React.FC = () => {
     ];
 
     return sections.map((section) => {
-      console.log('marketDataBySymbol', marketDataBySymbol);
       const summary = assetClassSummary[section.assetClass];
-      const marketStatus = getMarketStatusForAssetClass(section.assetClass);
+      const marketStatus = getMarketStatusForSection(section.type);
 
       return (
         <AccordionErrorBoundary
@@ -553,7 +589,58 @@ const DashboardScreen: React.FC = () => {
         <AccordionErrorBoundary sectionName="Genel Bakış">
           <SmartOverviewHeader
             portfolio={state.portfolio}
-            marketStatuses={state.marketStatuses || []}
+            marketStatuses={useMemo(() => {
+              // Client-side market status calculation
+              const bistStatus = getMarketStatus('BIST');
+              const nasdaqStatus = getMarketStatus('NASDAQ');
+              const nyseStatus = getMarketStatus('NYSE');
+              const cryptoStatus = getMarketStatus('CRYPTO');
+
+              return [
+                {
+                  marketId: 'bist',
+                  marketName: 'BIST',
+                  status: bistStatus.status,
+                  nextOpen: bistStatus.nextOpenTime?.toISOString(),
+                  nextClose: bistStatus.nextCloseTime?.toISOString(),
+                  timeZone: 'Europe/Istanbul',
+                  currentTime: new Date().toISOString(),
+                  tradingDay: new Date().toISOString().split('T')[0],
+                  isHoliday: bistStatus.isHoliday,
+                },
+                {
+                  marketId: 'nasdaq',
+                  marketName: 'NASDAQ',
+                  status: nasdaqStatus.status,
+                  nextOpen: nasdaqStatus.nextOpenTime?.toISOString(),
+                  nextClose: nasdaqStatus.nextCloseTime?.toISOString(),
+                  timeZone: 'America/New_York',
+                  currentTime: new Date().toISOString(),
+                  tradingDay: new Date().toISOString().split('T')[0],
+                  isHoliday: nasdaqStatus.isHoliday,
+                },
+                {
+                  marketId: 'nyse',
+                  marketName: 'NYSE',
+                  status: nyseStatus.status,
+                  nextOpen: nyseStatus.nextOpenTime?.toISOString(),
+                  nextClose: nyseStatus.nextCloseTime?.toISOString(),
+                  timeZone: 'America/New_York',
+                  currentTime: new Date().toISOString(),
+                  tradingDay: new Date().toISOString().split('T')[0],
+                  isHoliday: nyseStatus.isHoliday,
+                },
+                {
+                  marketId: 'crypto',
+                  marketName: 'CRYPTO',
+                  status: cryptoStatus.status,
+                  timeZone: 'UTC',
+                  currentTime: new Date().toISOString(),
+                  tradingDay: new Date().toISOString().split('T')[0],
+                  isHoliday: false,
+                },
+              ];
+            }, [])}
             userRanking={state.userRanking}
             isLoading={state.isLoading}
             onProfilePress={handleProfilePress}

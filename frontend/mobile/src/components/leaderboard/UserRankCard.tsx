@@ -87,13 +87,15 @@ const UserRankCard: React.FC<UserRankCardProps> = ({
   const { nextTier, progress, pointsNeeded } = getNextTierProgress();
 
   // Format numbers
-  const formatScore = (score: number): string => {
+  const formatScore = (score: number | undefined | null): string => {
+    if (score === undefined || score === null || isNaN(score)) return '0';
     if (score >= 1000000) return `${(score / 1000000).toFixed(1)}M`;
     if (score >= 1000) return `${(score / 1000).toFixed(1)}K`;
     return score.toString();
   };
 
-  const formatPercentage = (percent: number): string => {
+  const formatPercentage = (percent: number | undefined | null): string => {
+    if (percent === undefined || percent === null || isNaN(percent)) return '0.0%';
     const sign = percent >= 0 ? '+' : '';
     return `${sign}${percent.toFixed(1)}%`;
   };
@@ -213,7 +215,7 @@ const UserRankCard: React.FC<UserRankCardProps> = ({
             {formatPercentage(userRanking.returnPercent)}
           </Text>
           <Text style={styles.compactPercentile}>
-            En iyi %{userRanking.percentile.toFixed(1)}
+            En iyi %{userRanking.percentile ? userRanking.percentile.toFixed(1) : '0.0'}
           </Text>
         </View>
       </View>
@@ -262,7 +264,7 @@ const UserRankCard: React.FC<UserRankCardProps> = ({
           <Text style={styles.statLabel}>Getiri</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>%{userRanking.percentile.toFixed(1)}</Text>
+          <Text style={styles.statValue}>%{userRanking.percentile ? userRanking.percentile.toFixed(1) : '0.0'}</Text>
           <Text style={styles.statLabel}>Dilim</Text>
         </View>
         <View style={styles.statItem}>

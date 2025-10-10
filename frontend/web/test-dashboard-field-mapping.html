@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Field Mapping Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 40px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f7fafc;
+        }
+        .test-section h2 {
+            color: #2d3748;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pending { background: #fef5e7; color: #f39c12; }
+        .status-running { background: #ebf8ff; color: #3182ce; }
+        .status-success { background: #f0fff4; color: #38a169; }
+        .status-error { background: #fff5f5; color: #e53e3e; }
+        .endpoint {
+            background: #edf2f7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .result-box {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .field-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .field-check.pass { background: #f0fff4; }
+        .field-check.fail { background: #fff5f5; }
+        .icon { font-size: 18px; }
+        .icon.pass { color: #38a169; }
+        .icon.fail { color: #e53e3e; }
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        .stat-label {
+            color: #718096;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #3182ce;
+        }
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+        .summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        .summary h3 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Dashboard Field Mapping Test Suite</h1>
+        <p class="subtitle">Testing backend API field consistency for React web frontend dashboard</p>
+
+        <button id="runTests" onclick="runAllTests()">Run All Tests</button>
+
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5002';
+
+        const results = {
+            mainEndpoint: null,
+            assetClassEndpoint: null,
+            exchangeFilter: null,
+            fieldConsistency: null
+        };
+
+        async function runAllTests() {
+            const button = document.getElementById('runTests');
+            button.disabled = true;
+            button.textContent = 'Running Tests...';
+
+            const container = document.getElementById('testResults');
+            container.innerHTML = '';
+
+            try {
+                await testMainSymbolsEndpoint();
+                await testAssetClassEndpoint();
+                await testExchangeFilterEndpoint();
+                await testFieldConsistency();
+                await displaySummary();
+            } catch (error) {
+                console.error('Test suite error:', error);
+            }
+
+            button.disabled = false;
+            button.textContent = 'Run All Tests Again';
+        }
+
+        async function testMainSymbolsEndpoint() {
+            const section = createTestSection('Test 1: Main Symbols Endpoint', 'running');
+            document.getElementById('testResults').appendChild(section);
+
+            const endpoint = `${API_BASE_URL}/api/symbols`;
+            section.querySelector('.endpoint').textContent = endpoint;
+
+            try {
+                const response = await fetch(endpoint);
+                const data = await response.json();
+
+                const resultBox = section.querySelector('.result-box');
+
+                if (data.symbols) {
+                    const symbolKeys = Object.keys(data.symbols);
+                    const firstSymbol = data.symbols[symbolKeys[0]];
+
+                    const checks = [
+                        { field: 'market', value: firstSymbol.market },
+                        { field: 'marketName', value: firstSymbol.marketName },
+                        { field: 'venue', value: firstSymbol.venue },
+                        { field: 'display_name', value: firstSymbol.display_name },
+                        { field: 'symbol', value: firstSymbol.symbol }
+                    ];
+
+                    let allPass = true;
+                    checks.forEach(check => {
+                        const div = document.createElement('div');
+                        div.className = `field-check ${check.value ? 'pass' : 'fail'}`;
+                        div.innerHTML = `
+                            <span class="icon ${check.value ? 'pass' : 'fail'}">${check.value ? '✓' : '✗'}</span>
+                            <strong>${check.field}:</strong> ${check.value || 'MISSING'}
+                        `;
+                        resultBox.appendChild(div);
+                        if (!check.value && check.field !== 'display_name') allPass = false;
+                    });
+
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(firstSymbol, null, 2);
+                    resultBox.appendChild(pre);
+
+                    updateSectionStatus(section, allPass ? 'success' : 'error');
+                    results.mainEndpoint = { success: allPass, data: firstSymbol };
+                } else {
+                    resultBox.innerHTML = '<div class="field-check fail">No symbols returned</div>';
+                    updateSectionStatus(section, 'error');
+                    results.mainEndpoint = { success: false, error: 'No symbols' };
+                }
+            } catch (error) {
+                section.querySelector('.result-box').innerHTML =
+                    `<div class="field-check fail">Error: ${error.message}</div>`;
+                updateSectionStatus(section, 'error');
+                results.mainEndpoint = { success: false, error: error.message };
+            }
+        }
+
+        async function testAssetClassEndpoint() {
+            const section = createTestSection('Test 2: Asset Class Endpoint (STOCK)', 'running');
+            document.getElementById('testResults').appendChild(section);
+
+            const endpoint = `${API_BASE_URL}/api/v1/symbols/by-asset-class/STOCK`;
+            section.querySelector('.endpoint').textContent = endpoint;
+
+            try {
+                const response = await fetch(endpoint);
+                const data = await response.json();
+
+                const resultBox = section.querySelector('.result-box');
+
+                if (Array.isArray(data) && data.length > 0) {
+                    const firstSymbol = data[0];
+
+                    const checks = [
+                        { field: 'market', value: firstSymbol.market },
+                        { field: 'marketName', value: firstSymbol.marketName },
+                        { field: 'venue', value: firstSymbol.venue },
+                        { field: 'name', value: firstSymbol.name },
+                        { field: 'displayName', value: firstSymbol.displayName },
+                        { field: 'symbol', value: firstSymbol.symbol }
+                    ];
+
+                    let allPass = true;
+                    checks.forEach(check => {
+                        const div = document.createElement('div');
+                        div.className = `field-check ${check.value ? 'pass' : 'fail'}`;
+                        div.innerHTML = `
+                            <span class="icon ${check.value ? 'pass' : 'fail'}">${check.value ? '✓' : '✗'}</span>
+                            <strong>${check.field}:</strong> ${check.value || 'MISSING'}
+                        `;
+                        resultBox.appendChild(div);
+                        if (!check.value) allPass = false;
+                    });
+
+                    // Group by market
+                    const grouped = data.reduce((acc, symbol) => {
+                        const market = symbol.market || symbol.marketName || symbol.venue || 'UNKNOWN';
+                        acc[market] = (acc[market] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    const groupDiv = document.createElement('div');
+                    groupDiv.style.marginTop = '15px';
+                    groupDiv.innerHTML = '<strong>Symbols by Market:</strong>';
+                    Object.entries(grouped).forEach(([market, count]) => {
+                        const div = document.createElement('div');
+                        div.className = 'field-check pass';
+                        div.innerHTML = `<span class="icon pass">📊</span> ${market}: ${count} symbols`;
+                        groupDiv.appendChild(div);
+                    });
+                    resultBox.appendChild(groupDiv);
+
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(firstSymbol, null, 2);
+                    resultBox.appendChild(pre);
+
+                    updateSectionStatus(section, allPass ? 'success' : 'error');
+                    results.assetClassEndpoint = { success: allPass, data: firstSymbol, grouped };
+                } else {
+                    resultBox.innerHTML = '<div class="field-check fail">No symbols returned</div>';
+                    updateSectionStatus(section, 'error');
+                    results.assetClassEndpoint = { success: false, error: 'No symbols' };
+                }
+            } catch (error) {
+                section.querySelector('.result-box').innerHTML =
+                    `<div class="field-check fail">Error: ${error.message}</div>`;
+                updateSectionStatus(section, 'error');
+                results.assetClassEndpoint = { success: false, error: error.message };
+            }
+        }
+
+        async function testExchangeFilterEndpoint() {
+            const section = createTestSection('Test 3: Exchange Filter Endpoint', 'running');
+            document.getElementById('testResults').appendChild(section);
+
+            const exchanges = ['BIST', 'NASDAQ', 'NYSE', 'BINANCE'];
+            const resultBox = section.querySelector('.result-box');
+
+            let allPass = true;
+            for (const exchange of exchanges) {
+                const endpoint = `${API_BASE_URL}/api/symbols?exchange=${exchange}`;
+
+                try {
+                    const response = await fetch(endpoint);
+                    const data = await response.json();
+
+                    const symbolCount = data.symbols ? Object.keys(data.symbols).length : 0;
+
+                    const div = document.createElement('div');
+                    div.className = `field-check ${symbolCount > 0 ? 'pass' : 'fail'}`;
+                    div.innerHTML = `
+                        <span class="icon ${symbolCount > 0 ? 'pass' : 'fail'}">${symbolCount > 0 ? '✓' : '✗'}</span>
+                        <strong>${exchange}:</strong> ${symbolCount} symbols
+                    `;
+                    resultBox.appendChild(div);
+
+                    if (symbolCount === 0 && exchange !== 'NYSE') allPass = false;
+                } catch (error) {
+                    const div = document.createElement('div');
+                    div.className = 'field-check fail';
+                    div.innerHTML = `
+                        <span class="icon fail">✗</span>
+                        <strong>${exchange}:</strong> Error - ${error.message}
+                    `;
+                    resultBox.appendChild(div);
+                    allPass = false;
+                }
+            }
+
+            updateSectionStatus(section, allPass ? 'success' : 'error');
+            results.exchangeFilter = { success: allPass };
+        }
+
+        async function testFieldConsistency() {
+            const section = createTestSection('Test 4: Field Consistency Check', 'running');
+            document.getElementById('testResults').appendChild(section);
+
+            const resultBox = section.querySelector('.result-box');
+
+            if (results.mainEndpoint?.data && results.assetClassEndpoint?.data) {
+                const mainFields = Object.keys(results.mainEndpoint.data);
+                const assetFields = Object.keys(results.assetClassEndpoint.data);
+
+                const criticalFields = ['market', 'marketName', 'venue', 'symbol'];
+
+                let allPass = true;
+                criticalFields.forEach(field => {
+                    const inMain = mainFields.includes(field);
+                    const inAsset = assetFields.includes(field);
+                    const consistent = inMain && inAsset;
+
+                    const div = document.createElement('div');
+                    div.className = `field-check ${consistent ? 'pass' : 'fail'}`;
+                    div.innerHTML = `
+                        <span class="icon ${consistent ? 'pass' : 'fail'}">${consistent ? '✓' : '✗'}</span>
+                        <strong>${field}:</strong> Main: ${inMain ? '✓' : '✗'}, Asset Class: ${inAsset ? '✓' : '✗'}
+                    `;
+                    resultBox.appendChild(div);
+
+                    if (!consistent) allPass = false;
+                });
+
+                updateSectionStatus(section, allPass ? 'success' : 'error');
+                results.fieldConsistency = { success: allPass };
+            } else {
+                resultBox.innerHTML = '<div class="field-check fail">Cannot compare - previous tests failed</div>';
+                updateSectionStatus(section, 'error');
+                results.fieldConsistency = { success: false, error: 'Missing data' };
+            }
+        }
+
+        async function displaySummary() {
+            const container = document.getElementById('testResults');
+
+            const totalTests = Object.keys(results).length;
+            const passedTests = Object.values(results).filter(r => r?.success).length;
+            const failedTests = totalTests - passedTests;
+
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            summary.innerHTML = `
+                <h3>📊 Test Summary</h3>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${totalTests}</div>
+                        <div class="stat-label">Total Tests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #38a169;">${passedTests}</div>
+                        <div class="stat-label">Passed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #e53e3e;">${failedTests}</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${Math.round((passedTests / totalTests) * 100)}%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                </div>
+                <p style="margin-top: 20px;">
+                    ${passedTests === totalTests
+                        ? '✅ All tests passed! The dashboard field mapping fix is working correctly.'
+                        : '⚠️ Some tests failed. Please review the results above and check the backend API.'}
+                </p>
+            `;
+
+            container.appendChild(summary);
+        }
+
+        function createTestSection(title, status) {
+            const section = document.createElement('div');
+            section.className = 'test-section';
+            section.innerHTML = `
+                <h2>
+                    ${title}
+                    <span class="status-badge status-${status}">${status.toUpperCase()}</span>
+                </h2>
+                <div class="endpoint"></div>
+                <div class="result-box"></div>
+            `;
+            return section;
+        }
+
+        function updateSectionStatus(section, status) {
+            const badge = section.querySelector('.status-badge');
+            badge.className = `status-badge status-${status}`;
+            badge.textContent = status.toUpperCase();
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            console.log('Page loaded. Click "Run All Tests" to begin testing.');
+        });
+    </script>
+</body>
+</html>

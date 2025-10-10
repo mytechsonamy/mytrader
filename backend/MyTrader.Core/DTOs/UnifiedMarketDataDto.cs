@@ -315,3 +315,22 @@ public class MarketStatisticsDto
     /// </summary>
     public DateTime LastUpdated { get; set; }
 }
+
+/// <summary>
+/// Volume leader DTO for displaying top volume symbols per asset class
+/// </summary>
+public class VolumeLeaderDto
+{
+    public Guid SymbolId { get; set; }
+    public string Ticker { get; set; } = string.Empty;
+    public string Display { get; set; } = string.Empty;
+    public string AssetClass { get; set; } = string.Empty;
+    public string Market { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal PriceChange { get; set; }
+    public decimal PriceChangePercent { get; set; }
+    public long Volume { get; set; }
+    public decimal? VolumeQuote { get; set; }
+    public DateTime LastUpdated { get; set; }
+    public string Currency { get; set; } = "USD";
+}

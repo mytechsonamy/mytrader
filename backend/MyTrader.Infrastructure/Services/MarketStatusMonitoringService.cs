@@ -433,18 +433,10 @@ public class MarketStatusMonitoringService : IHostedService, IDisposable
         return lastWeekday;
     }
 
-    private static Core.Models.MarketStatus ConvertMarketStatus(Core.Enums.MarketStatus enumStatus)
+    private static Core.Enums.MarketStatus ConvertMarketStatus(Core.Enums.MarketStatus enumStatus)
     {
-        return enumStatus switch
-        {
-            Core.Enums.MarketStatus.OPEN => Core.Models.MarketStatus.OPEN,
-            Core.Enums.MarketStatus.CLOSED => Core.Models.MarketStatus.CLOSED,
-            Core.Enums.MarketStatus.PRE_MARKET => Core.Models.MarketStatus.PRE_MARKET,
-            Core.Enums.MarketStatus.AFTER_HOURS => Core.Models.MarketStatus.AFTER_HOURS,
-            Core.Enums.MarketStatus.HALTED => Core.Models.MarketStatus.MAINTENANCE,
-            Core.Enums.MarketStatus.UNKNOWN => Core.Models.MarketStatus.UNKNOWN,
-            _ => Core.Models.MarketStatus.UNKNOWN
-        };
+        // MarketStatusUpdate.Status expects Enums.MarketStatus, so just return as-is
+        return enumStatus;
     }
 
     public void Dispose()

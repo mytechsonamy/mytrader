@@ -25,19 +25,31 @@ const StrategyTestScreen: React.FC = () => {
   const route = useRoute<StrategyTestRouteProp>();
   const navigation = useNavigation<StrategyTestNavigationProp>();
   const { user } = useAuth();
-  const { getPrice, isConnected } = usePrices();
-  const { symbol, displayName } = route.params;
+  const { getPriceBySymbol, connectionStatus } = usePrices();
+  const { symbol, displayName, assetClass, templateId, strategyName: templateStrategyName, bestFor, defaultParameters } = route.params;
+  
+  // Determine asset class - default to CRYPTO if not provided for backward compatibility
+  const symbolAssetClass = assetClass || 'CRYPTO';
 
-  // Strategy parameters - more compact
-  const [parameters, setParameters] = useState({
-    bb_period: '20',
-    bb_std: '2.0',
-    macd_fast: '12',
-    macd_slow: '26',
-    macd_signal: '9',
-    rsi_period: '14',
-    rsi_overbought: '70',
-    rsi_oversold: '30',
+  // Helper to check if connected
+  const isConnected = connectionStatus === 'connected';
+
+  // Strategy parameters - use defaultParameters if provided from template, otherwise fall back to generic defaults
+  const [parameters, setParameters] = useState(() => {
+    if (defaultParameters) {
+      return defaultParameters;
+    }
+    // Fallback defaults
+    return {
+      bb_period: '20',
+      bb_std: '2.0',
+      macd_fast: '12',
+      macd_slow: '26',
+      macd_signal: '9',
+      rsi_period: '14',
+      rsi_overbought: '70',
+      rsi_oversold: '30',
+    };
   });
   
   // Save modal state
@@ -45,21 +57,36 @@ const StrategyTestScreen: React.FC = () => {
   const [strategyName, setStrategyName] = useState('');
   const [description, setDescription] = useState('');
   const [isStrategyNameInitialized, setIsStrategyNameInitialized] = useState(false);
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [priceChange24h, setPriceChange24h] = useState<number>(0);
 
+  // Strategy info state
+  const [showStrategyInfo, setShowStrategyInfo] = useState(false);
+
+  // Helper function to get entry conditions based on strategy template
+  const getEntryConditions = (templateId: string): string => {
+    const conditions: Record<string, string> = {
+      'bb_macd': '• Fiyat alt BB bandına dokunur\n• MACD yukarı keser\n• RSI < 40',
+      'rsi_ema': '• EMA(9) EMA(21)\'i yukarı keser\n• 40 < RSI < 70\n• Volume > 1.2x ortalama',
+      'volume_breakout': '• Fiyat 20 günlük yüksek kırılımı\n• Volume > 2x ortalama\n• RSI > 50',
+      'trend_following': '• EMA(21) > EMA(50) > EMA(200)\n• Fiyat > EMA(21)\n• ADX > 25',
+    };
+    return conditions[templateId] || 'Giriş koşulları yükleniyor...';
+  };
+
   // Get real-time price data from dashboard WebSocket
   const updatePriceFromDashboard = () => {
-    const priceData = getPrice(symbol);
-    
+    // Use the correct PriceContext API with the symbol's asset class
+    const priceData = getPriceBySymbol(symbol, symbolAssetClass);
+
     if (priceData && priceData.price > 0) {
       // Use real-time data from dashboard
       setCurrentPrice(priceData.price);
-      setPriceChange24h(priceData.change);
-      console.log(`Updated ${symbol} price from dashboard: $${priceData.price}, change: ${priceData.change}%`);
+      setPriceChange24h(priceData.changePercent || 0);
+      console.log(`Updated ${symbol} price from dashboard: $${priceData.price}, change: ${priceData.changePercent}%`);
     } else if (!isConnected) {
       // Only use external API if dashboard connection is not available
       console.log(`Dashboard not connected for ${symbol}, trying external API...`);
@@ -96,9 +123,9 @@ const StrategyTestScreen: React.FC = () => {
 
     // Update price every 5 seconds from dashboard or fallback
     const priceInterval = setInterval(updatePriceFromDashboard, 5000);
-    
+
     return () => clearInterval(priceInterval);
-  }, [symbol, displayName, getPrice, isConnected]);
+  }, [symbol, displayName, getPriceBySymbol, isConnected]);
 
   const updateParameter = (key: string, value: string) => {
     setParameters(prev => ({ ...prev, [key]: value }));
@@ -165,10 +192,12 @@ const StrategyTestScreen: React.FC = () => {
       };
       
       // Save strategy via API
-      console.log('Saving strategy:', strategyConfig);
+      console.log('🎯 StrategyTestScreen: Saving strategy:', strategyConfig);
       const result = await apiService.createStrategy(strategyConfig, symbol);
-      
+      console.log('📊 StrategyTestScreen: Create strategy result:', result);
+
       if (result.success) {
+        console.log('✅ StrategyTestScreen: Strategy created successfully, showing success alert');
         Alert.alert('Başarılı', 'Strateji başarıyla kaydedildi', [
           { text: 'Geri Dön', onPress: () => {
             setShowSaveModal(false);
@@ -180,6 +209,7 @@ const StrategyTestScreen: React.FC = () => {
           }}
         ]);
       } else {
+        console.log('❌ StrategyTestScreen: Strategy creation failed:', result.message);
         Alert.alert('Hata', result.message || 'Strateji kaydedilemedi');
       }
     } catch (error) {
@@ -255,6 +285,41 @@ const StrategyTestScreen: React.FC = () => {
             {isConnected ? '🟢 Dashboard Connected' : '🔴 Dashboard Offline'}
           </Text>
         </View>
+
+        {/* Strategy Info Section */}
+        {templateId && bestFor && (
+          <View style={styles.strategyInfoCard}>
+            <View style={styles.strategyInfoHeader}>
+              <Text style={styles.strategyInfoTitle}>📋 Strateji Bilgisi</Text>
+            </View>
+            <View style={styles.strategyInfoContent}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Strateji:</Text>
+                <Text style={styles.infoValue}>{templateStrategyName || 'Özel Strateji'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>En İyi:</Text>
+                <Text style={styles.infoValue}>{bestFor}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.expandButton}
+                onPress={() => setShowStrategyInfo(!showStrategyInfo)}
+              >
+                <Text style={styles.expandButtonText}>
+                  {showStrategyInfo ? '▼ Giriş Koşulları' : '▶ Giriş Koşulları'}
+                </Text>
+              </TouchableOpacity>
+              {showStrategyInfo && (
+                <View style={styles.entryConditions}>
+                  <Text style={styles.conditionsTitle}>Alım Sinyali:</Text>
+                  <Text style={styles.conditionsText}>
+                    {getEntryConditions(templateId || '')}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Compact Parameters */}
         <View style={styles.section}>
@@ -352,7 +417,7 @@ const StrategyTestScreen: React.FC = () => {
           {isLoading ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.testButtonText}>🧪 Test Stratejisi</Text>
+            <Text style={styles.testButtonText}>🧪 Test Et</Text>
           )}
         </TouchableOpacity>
 
@@ -725,6 +790,73 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Strategy Info Card Styles
+  strategyInfoCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+  },
+  strategyInfoHeader: {
+    marginBottom: 12,
+  },
+  strategyInfoTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  strategyInfoContent: {
+    gap: 10,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+  },
+  expandButton: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  expandButtonText: {
+    fontSize: 14,
+    color: '#667eea',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  entryConditions: {
+    backgroundColor: '#f0f4ff',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  conditionsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+  },
+  conditionsText: {
+    fontSize: 12,
+    color: '#555',
+    lineHeight: 18,
   },
 });
 

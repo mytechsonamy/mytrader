@@ -12,19 +12,23 @@ namespace MyTrader.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/market-data")]
+[Route("api/v1/market-data")] // New API versioning route
 public class MarketDataController : ControllerBase
 {
     private readonly IMultiAssetDataService _multiAssetDataService;
     private readonly IDataProviderOrchestrator _dataProviderOrchestrator;
+    private readonly MyTrader.Infrastructure.Services.IEnhancedDbConnectionManager _dbConnectionManager;
     private readonly ILogger<MarketDataController> _logger;
 
     public MarketDataController(
         IMultiAssetDataService multiAssetDataService,
         IDataProviderOrchestrator dataProviderOrchestrator,
+        MyTrader.Infrastructure.Services.IEnhancedDbConnectionManager dbConnectionManager,
         ILogger<MarketDataController> logger)
     {
         _multiAssetDataService = multiAssetDataService;
         _dataProviderOrchestrator = dataProviderOrchestrator;
+        _dbConnectionManager = dbConnectionManager;
         _logger = logger;
     }
 
@@ -45,7 +49,11 @@ public class MarketDataController : ControllerBase
         {
             _logger.LogInformation("Getting real-time market data for symbol: {SymbolId}", symbolId);
 
-            var marketData = await _multiAssetDataService.GetMarketDataAsync(symbolId);
+            // Use Enhanced Database Connection Manager for database operations
+            var marketData = await _dbConnectionManager.ExecuteWithRetryAsync(async () =>
+            {
+                return await _multiAssetDataService.GetMarketDataAsync(symbolId);
+            });
 
             if (marketData == null)
             {
@@ -244,6 +252,37 @@ public class MarketDataController : ControllerBase
     }
 
     /// <summary>
+    /// Get top symbols by volume per asset class for market leaders dashboard
+    /// High-performance endpoint with <100ms response time requirement
+    /// </summary>
+    /// <param name="perClass">Number of symbols to return per asset class (default: 8)</param>
+    /// <returns>Volume leaders grouped by asset class</returns>
+    [HttpGet("top-by-volume")]
+    [AllowAnonymous] // Allow public access for volume leaders
+    [ProducesResponseType(typeof(ApiResponse<List<VolumeLeaderDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<VolumeLeaderDto>>>> GetTopByVolumePerAssetClass(
+        [FromQuery] int perClass = 8)
+    {
+        try
+        {
+            _logger.LogInformation("Getting top {PerClass} symbols by volume per asset class", perClass);
+
+            var volumeLeaders = await _multiAssetDataService.GetTopByVolumePerAssetClassAsync(perClass);
+
+            return Ok(ApiResponse<List<VolumeLeaderDto>>.SuccessResult(
+                volumeLeaders,
+                $"Retrieved {volumeLeaders.Count} volume leaders across asset classes"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting volume leaders");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve volume leaders", 500));
+        }
+    }
+
+    /// <summary>
     /// Get popular symbols across all asset classes
     /// </summary>
     /// <param name="limit">Number of results to return</param>
@@ -364,6 +403,114 @@ public class MarketDataController : ControllerBase
     }
 
     /// <summary>
+    /// Get symbols for frontend (simplified format)
+    /// </summary>
+    /// <returns>List of symbols in frontend format</returns>
+    [HttpGet("symbols")]
+    [AllowAnonymous] // Allow public access for symbols
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(typeof(object), 500)]
+    public async Task<ActionResult> GetSymbols()
+    {
+        try
+        {
+            _logger.LogInformation("Getting symbols for frontend");
+
+            // Use popular symbols as the basis for frontend display
+            var popularSymbols = await _multiAssetDataService.GetPopularSymbolsAsync(20);
+
+            var symbols = popularSymbols.ToDictionary(
+                s => s.Ticker.Replace("-USD", "").Replace("USDT", ""), // Clean symbol name
+                s => new
+                {
+                    symbol = s.Ticker,
+                    display_name = s.Display ?? s.Ticker,
+                    precision = 2,
+                    strategy_type = "quality_over_quantity"
+                }
+            );
+
+            return Ok(new { symbols, interval = "1m" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting symbols for frontend");
+            // Return fallback mock data
+            var mockSymbols = new Dictionary<string, object>
+            {
+                ["BTC"] = new { symbol = "BTC-USD", display_name = "Bitcoin", precision = 2, strategy_type = "quality_over_quantity" },
+                ["ETH"] = new { symbol = "ETH-USD", display_name = "Ethereum", precision = 2, strategy_type = "quality_over_quantity" },
+                ["SOL"] = new { symbol = "SOL-USD", display_name = "Solana", precision = 2, strategy_type = "quality_over_quantity" },
+                ["AVAX"] = new { symbol = "AVAX-USD", display_name = "Avalanche", precision = 2, strategy_type = "quality_over_quantity" },
+                ["LINK"] = new { symbol = "LINK-USD", display_name = "Chainlink", precision = 2, strategy_type = "quality_over_quantity" }
+            };
+
+            return Ok(new { symbols = mockSymbols, interval = "1m" });
+        }
+    }
+
+    /// <summary>
+    /// Get database connection health status
+    /// </summary>
+    /// <returns>Database connection health information</returns>
+    [HttpGet("database/health")]
+    [Authorize] // Require authentication for database health
+    [ProducesResponseType(typeof(ApiResponse<MyTrader.Infrastructure.Services.ConnectionHealthStatus>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<MyTrader.Infrastructure.Services.ConnectionHealthStatus>>> GetDatabaseHealth()
+    {
+        try
+        {
+            _logger.LogInformation("Getting database connection health status");
+
+            var healthStatus = _dbConnectionManager.GetHealthStatus();
+
+            return Ok(ApiResponse<MyTrader.Infrastructure.Services.ConnectionHealthStatus>.SuccessResult(
+                healthStatus,
+                $"Database connection is {healthStatus.Status}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting database health status");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve database health status", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get database migration status
+    /// </summary>
+    /// <returns>Database migration status information</returns>
+    [HttpGet("database/migrations")]
+    [Authorize] // Require authentication for migration status
+    [ProducesResponseType(typeof(ApiResponse<MyTrader.Infrastructure.Services.MigrationStatus>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<MyTrader.Infrastructure.Services.MigrationStatus>>> GetMigrationStatus()
+    {
+        try
+        {
+            _logger.LogInformation("Getting database migration status");
+
+            var migrationManager = HttpContext.RequestServices.GetRequiredService<MyTrader.Infrastructure.Services.IDatabaseMigrationManager>();
+            var migrationStatus = await migrationManager.GetMigrationStatusAsync();
+
+            return Ok(ApiResponse<MyTrader.Infrastructure.Services.MigrationStatus>.SuccessResult(
+                migrationStatus,
+                $"Database has {migrationStatus.AppliedMigrationsCount} applied migrations and {migrationStatus.PendingMigrationsCount} pending"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting database migration status");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve database migration status", 500));
+        }
+    }
+
+    // NOTE: WebSocket health/metrics/reconnect endpoints temporarily disabled
+    // Reason: IEnhancedBinanceWebSocketService interface not implemented
+    // TODO: Implement IEnhancedBinanceWebSocketService or refactor to use IBinanceWebSocketService
+
+    /// <summary>
     /// Get available data providers
     /// </summary>
     /// <returns>List of available data providers</returns>
@@ -397,6 +544,514 @@ public class MarketDataController : ControllerBase
             _logger.LogError(ex, "Error getting available data providers");
             return StatusCode(500, ApiResponse<object>.ErrorResult(
                 "Failed to retrieve data providers", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get live cryptocurrency market data from Alpaca
+    /// </summary>
+    /// <param name="symbols">Optional comma-separated list of crypto symbols (e.g., BTCUSD,ETHUSD)</param>
+    /// <returns>Live crypto market data</returns>
+    [HttpGet("crypto")]
+    [AllowAnonymous] // Allow public access for crypto data
+    [ProducesResponseType(typeof(ApiResponse<List<MarketDataDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<MarketDataDto>>>> GetCryptoMarketData(
+        [FromQuery] string? symbols = null)
+    {
+        try
+        {
+            _logger.LogInformation("Getting crypto market data for symbols: {Symbols}", symbols ?? "default");
+
+            var symbolList = string.IsNullOrEmpty(symbols)
+                ? null
+                : symbols.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim().ToUpper()).ToList();
+
+            var alpacaService = HttpContext.RequestServices.GetRequiredService<IAlpacaMarketDataService>();
+            var cryptoData = await alpacaService.GetUnifiedMarketDataAsync(symbolList, "CRYPTO");
+
+            return Ok(ApiResponse<List<MarketDataDto>>.SuccessResult(
+                cryptoData,
+                $"Retrieved {cryptoData.Count} crypto symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting crypto market data");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve crypto market data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get live NASDAQ stock market data from Alpaca
+    /// </summary>
+    /// <param name="symbols">Optional comma-separated list of stock symbols (e.g., AAPL,GOOGL,MSFT)</param>
+    /// <returns>Live NASDAQ stock market data</returns>
+    [HttpGet("nasdaq")]
+    [AllowAnonymous] // Allow public access for stock data
+    [ProducesResponseType(typeof(ApiResponse<List<MarketDataDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<MarketDataDto>>>> GetNasdaqMarketData(
+        [FromQuery] string? symbols = null)
+    {
+        try
+        {
+            _logger.LogInformation("Getting NASDAQ market data for symbols: {Symbols}", symbols ?? "default");
+
+            var symbolList = string.IsNullOrEmpty(symbols)
+                ? null
+                : symbols.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim().ToUpper()).ToList();
+
+            var alpacaService = HttpContext.RequestServices.GetRequiredService<IAlpacaMarketDataService>();
+            var stockData = await alpacaService.GetUnifiedMarketDataAsync(symbolList, "STOCK");
+
+            return Ok(ApiResponse<List<MarketDataDto>>.SuccessResult(
+                stockData,
+                $"Retrieved {stockData.Count} stock symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting NASDAQ market data");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve NASDAQ market data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get Alpaca API health status and connection information
+    /// </summary>
+    /// <returns>Alpaca API health status</returns>
+    [HttpGet("alpaca/health")]
+    [AllowAnonymous] // Allow public access for health check to support web frontend status indicators
+    [ProducesResponseType(typeof(ApiResponse<AlpacaHealthStatus>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<AlpacaHealthStatus>>> GetAlpacaHealthStatus()
+    {
+        try
+        {
+            _logger.LogInformation("Getting Alpaca API health status");
+
+            var alpacaService = HttpContext.RequestServices.GetRequiredService<IAlpacaMarketDataService>();
+            var healthStatus = await alpacaService.GetHealthStatusAsync();
+
+            return Ok(ApiResponse<AlpacaHealthStatus>.SuccessResult(
+                healthStatus,
+                $"Alpaca API is {healthStatus.Status}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Alpaca health status");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve Alpaca health status", 500));
+        }
+    }
+
+    /// <summary>
+    /// Test Alpaca API connectivity
+    /// </summary>
+    /// <returns>Connection test result</returns>
+    [HttpGet("alpaca/test")]
+    [Authorize] // Require authentication for connection test
+    [ProducesResponseType(typeof(ApiResponse<bool>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<bool>>> TestAlpacaConnection()
+    {
+        try
+        {
+            _logger.LogInformation("Testing Alpaca API connection");
+
+            var alpacaService = HttpContext.RequestServices.GetRequiredService<IAlpacaMarketDataService>();
+            var isConnected = await alpacaService.TestConnectionAsync();
+
+            return Ok(ApiResponse<bool>.SuccessResult(
+                isConnected,
+                isConnected ? "Alpaca API connection successful" : "Alpaca API connection failed"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error testing Alpaca connection");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to test Alpaca connection", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get available symbols from Alpaca
+    /// </summary>
+    /// <param name="assetClass">Optional asset class filter (CRYPTO, STOCK)</param>
+    /// <returns>List of available symbols</returns>
+    [HttpGet("alpaca/symbols")]
+    [AllowAnonymous] // Allow public access for symbols
+    [ProducesResponseType(typeof(ApiResponse<List<string>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<string>>>> GetAlpacaSymbols(
+        [FromQuery] string? assetClass = null)
+    {
+        try
+        {
+            _logger.LogInformation("Getting Alpaca symbols for asset class: {AssetClass}", assetClass ?? "all");
+
+            var alpacaService = HttpContext.RequestServices.GetRequiredService<IAlpacaMarketDataService>();
+            var symbols = await alpacaService.GetAvailableSymbolsAsync(assetClass);
+
+            return Ok(ApiResponse<List<string>>.SuccessResult(
+                symbols,
+                $"Retrieved {symbols.Count} symbols"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Alpaca symbols");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve Alpaca symbols", 500));
+        }
+    }
+
+    // === BIST MARKET DATA ENDPOINTS ===
+
+    /// <summary>
+    /// Get BIST (Borsa Istanbul) market data for Turkish stocks
+    /// Optimized for sub-100ms response times with intelligent caching
+    /// </summary>
+    /// <param name="symbols">Optional comma-separated list of BIST symbols (e.g., THYAO,AKBNK,ISCTR)</param>
+    /// <param name="limit">Maximum number of stocks to return (default: 50)</param>
+    /// <returns>BIST market data in unified format</returns>
+    [HttpGet("bist")]
+    [AllowAnonymous] // Allow public access for BIST data
+    [ProducesResponseType(typeof(ApiResponse<List<MarketDataDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<MarketDataDto>>>> GetBistMarketData(
+        [FromQuery] string? symbols = null,
+        [FromQuery] int limit = 50)
+    {
+        try
+        {
+            _logger.LogInformation("Getting BIST market data for symbols: {Symbols}", symbols ?? "all");
+
+            var symbolList = string.IsNullOrEmpty(symbols)
+                ? null
+                : symbols.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => s.Trim().ToUpper())
+                        .ToList();
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var bistData = await bistService.GetBistMarketDataAsync(symbolList, limit);
+
+            return Ok(ApiResponse<List<MarketDataDto>>.SuccessResult(
+                bistData,
+                $"Retrieved {bistData.Count} BIST stocks"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST market data");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST market data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get individual BIST stock data
+    /// Ultra-fast endpoint with <10ms target response time
+    /// </summary>
+    /// <param name="symbol">BIST stock symbol (e.g., THYAO, AKBNK)</param>
+    /// <returns>Individual stock market data</returns>
+    [HttpGet("bist/{symbol}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<MarketDataDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 404)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<MarketDataDto>>> GetBistStockData(string symbol)
+    {
+        try
+        {
+            _logger.LogDebug("Getting BIST stock data for: {Symbol}", symbol);
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var stockData = await bistService.GetBistStockDataAsync(symbol.ToUpper());
+
+            if (stockData == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResult(
+                    $"BIST stock {symbol} not found", 404));
+            }
+
+            return Ok(ApiResponse<MarketDataDto>.SuccessResult(
+                stockData,
+                $"Retrieved BIST stock data for {symbol}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST stock data for {Symbol}", symbol);
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST stock data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST market overview for dashboard
+    /// Includes market statistics, volume, and performance metrics
+    /// </summary>
+    /// <returns>BIST market overview</returns>
+    [HttpGet("bist/overview")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<BistMarketOverviewDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistMarketOverviewDto>>> GetBistMarketOverview()
+    {
+        try
+        {
+            _logger.LogInformation("Getting BIST market overview");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var overview = await bistService.GetBistMarketOverviewAsync();
+
+            return Ok(ApiResponse<BistMarketOverviewDto>.SuccessResult(
+                overview,
+                $"BIST overview: {overview.TotalStocks} stocks, {overview.GainersCount} gainers, {overview.LosersCount} losers"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST market overview");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST market overview", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST top movers (gainers, losers, most active)
+    /// High-performance endpoint for dashboard widgets
+    /// </summary>
+    /// <returns>BIST top movers data</returns>
+    [HttpGet("bist/top-movers")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<BistTopMoversDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistTopMoversDto>>> GetBistTopMovers()
+    {
+        try
+        {
+            _logger.LogInformation("Getting BIST top movers");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var topMovers = await bistService.GetBistTopMoversAsync();
+
+            return Ok(ApiResponse<BistTopMoversDto>.SuccessResult(
+                topMovers,
+                $"Retrieved {topMovers.Gainers.Count} gainers, {topMovers.Losers.Count} losers, {topMovers.MostActive.Count} most active"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST top movers");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST top movers", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST sector performance analysis
+    /// Shows performance by industry sectors
+    /// </summary>
+    /// <returns>BIST sector performance data</returns>
+    [HttpGet("bist/sectors")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<List<BistSectorPerformanceDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<BistSectorPerformanceDto>>>> GetBistSectorPerformance()
+    {
+        try
+        {
+            _logger.LogInformation("Getting BIST sector performance");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var sectors = await bistService.GetBistSectorPerformanceAsync();
+
+            return Ok(ApiResponse<List<BistSectorPerformanceDto>>.SuccessResult(
+                sectors,
+                $"Retrieved performance data for {sectors.Count} sectors"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST sector performance");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST sector performance", 500));
+        }
+    }
+
+    /// <summary>
+    /// Search BIST stocks by symbol or company name
+    /// Supports fuzzy matching and Turkish characters
+    /// </summary>
+    /// <param name="q">Search query (minimum 2 characters)</param>
+    /// <param name="limit">Maximum results to return</param>
+    /// <returns>BIST stock search results</returns>
+    [HttpGet("bist/search")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<List<BistStockSearchResultDto>>), 200)]
+    [ProducesResponseType(typeof(ValidationErrorResponse), 400)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<List<BistStockSearchResultDto>>>> SearchBistStocks(
+        [FromQuery] string q,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Invalid search query",
+                    Errors = { ["query"] = new List<string> { "Search query must be at least 2 characters long" } }
+                });
+            }
+
+            _logger.LogDebug("Searching BIST stocks for: {Query}", q);
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var searchResults = await bistService.SearchBistStocksAsync(q, limit);
+
+            return Ok(ApiResponse<List<BistStockSearchResultDto>>.SuccessResult(
+                searchResults,
+                $"Found {searchResults.Count} BIST stocks matching '{q}'"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching BIST stocks for query: {Query}", q);
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to search BIST stocks", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST historical data for a stock
+    /// Supports multiple time periods and intervals
+    /// </summary>
+    /// <param name="symbol">BIST stock symbol</param>
+    /// <param name="period">Time period (1d, 5d, 1m, 3m, 6m, 1y, 2y, 5y)</param>
+    /// <param name="interval">Data interval (1d, 1w, 1m)</param>
+    /// <returns>Historical price data</returns>
+    [HttpGet("bist/{symbol}/history")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<BistHistoricalDataDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 404)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistHistoricalDataDto>>> GetBistHistoricalData(
+        string symbol,
+        [FromQuery] string period = "1m",
+        [FromQuery] string interval = "1d")
+    {
+        try
+        {
+            _logger.LogDebug("Getting BIST historical data for {Symbol} ({Period}/{Interval})",
+                symbol, period, interval);
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var historicalData = await bistService.GetBistHistoricalDataAsync(symbol.ToUpper(), period, interval);
+
+            if (historicalData == null)
+            {
+                return NotFound(ApiResponse<object>.ErrorResult(
+                    $"Historical data not available for BIST stock {symbol}", 404));
+            }
+
+            return Ok(ApiResponse<BistHistoricalDataDto>.SuccessResult(
+                historicalData,
+                $"Retrieved {historicalData.CandleCount} candles for {symbol}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST historical data for {Symbol}", symbol);
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST historical data", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST market status (open/closed)
+    /// Returns current market hours and trading status
+    /// </summary>
+    /// <returns>BIST market status</returns>
+    [HttpGet("bist/status")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<BistMarketStatusDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistMarketStatusDto>>> GetBistMarketStatus()
+    {
+        try
+        {
+            _logger.LogDebug("Getting BIST market status");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var marketStatus = await bistService.GetBistMarketStatusAsync();
+
+            return Ok(ApiResponse<BistMarketStatusDto>.SuccessResult(
+                marketStatus,
+                $"BIST market is {marketStatus.Status}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST market status");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST market status", 500));
+        }
+    }
+
+    /// <summary>
+    /// Get BIST service health and performance metrics
+    /// </summary>
+    /// <returns>BIST service health status</returns>
+    [HttpGet("bist/health")]
+    [Authorize] // Require authentication for health check
+    [ProducesResponseType(typeof(ApiResponse<BistCacheHealthDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistCacheHealthDto>>> GetBistHealthStatus()
+    {
+        try
+        {
+            _logger.LogInformation("Getting BIST service health status");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var healthStatus = await bistService.GetCacheHealthAsync();
+
+            return Ok(ApiResponse<BistCacheHealthDto>.SuccessResult(
+                healthStatus,
+                $"BIST service is {(healthStatus.IsHealthy ? "healthy" : "unhealthy")}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting BIST health status");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to retrieve BIST health status", 500));
+        }
+    }
+
+    /// <summary>
+    /// Manually refresh BIST cache data
+    /// Should be used sparingly as it can impact performance
+    /// </summary>
+    /// <returns>Cache refresh result</returns>
+    [HttpPost("bist/refresh")]
+    [Authorize] // Require authentication for cache refresh
+    [ProducesResponseType(typeof(ApiResponse<BistCacheRefreshResultDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 500)]
+    public async Task<ActionResult<ApiResponse<BistCacheRefreshResultDto>>> RefreshBistData()
+    {
+        try
+        {
+            _logger.LogInformation("Manual BIST cache refresh requested");
+
+            var bistService = HttpContext.RequestServices.GetRequiredService<IBistMarketDataService>();
+            var refreshResult = await bistService.RefreshBistDataAsync();
+
+            return Ok(ApiResponse<BistCacheRefreshResultDto>.SuccessResult(
+                refreshResult,
+                refreshResult.Success
+                    ? $"BIST cache refreshed: {refreshResult.SymbolsUpdated} symbols updated in {refreshResult.RefreshDuration.TotalMilliseconds}ms"
+                    : $"BIST cache refresh failed: {refreshResult.Message}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing BIST cache");
+            return StatusCode(500, ApiResponse<object>.ErrorResult(
+                "Failed to refresh BIST cache", 500));
         }
     }
 }

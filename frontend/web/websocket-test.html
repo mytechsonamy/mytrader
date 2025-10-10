@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <h2>WebSocket Connection Test</h2>
+    <div id="status">Disconnected</div>
+    <div id="messages"></div>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5002/hubs/market-data")
+            .build();
+
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+
+        function addMessage(message) {
+            messagesDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+
+        connection.start().then(() => {
+            statusDiv.textContent = 'Connected';
+            addMessage('SignalR Connected');
+
+            // Subscribe to crypto price updates
+            connection.invoke("SubscribeToPriceUpdates", "CRYPTO", ["BTCUSDT", "ETHUSDT"]);
+            addMessage('Subscribed to BTCUSDT and ETHUSDT');
+        }).catch((error) => {
+            statusDiv.textContent = 'Connection Failed';
+            addMessage('Connection failed: ' + error.toString());
+        });
+
+        connection.on("PriceUpdate", (data) => {
+            addMessage('Received price update: ' + JSON.stringify(data));
+        });
+
+        connection.onclose((error) => {
+            statusDiv.textContent = 'Disconnected';
+            addMessage('Connection closed: ' + (error || 'No error'));
+        });
+    </script>
+</body>
+</html>

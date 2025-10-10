@@ -1,0 +1,417 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+  CACHE_KEY_PREFIX: 'node-modules'
+
+jobs:
+  # Unit and Integration Tests
+  unit-tests:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Run linting
+        working-directory: frontend/web
+        run: npm run lint
+
+      - name: Run type checking
+        working-directory: frontend/web
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        working-directory: frontend/web
+        run: npm run test -- --reporter=verbose --coverage
+        env:
+          CI: true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: frontend/web/coverage/lcov.info
+          flags: unit-tests
+          name: unit-tests-${{ matrix.node-version }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-${{ matrix.node-version }}
+          path: |
+            frontend/web/coverage/
+            frontend/web/test-results/
+
+  # Component and Integration Tests
+  component-tests:
+    name: Component Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Run component tests
+        working-directory: frontend/web
+        run: npm run test -- --coverage --run src/components/
+        env:
+          CI: true
+
+      - name: Run integration tests
+        working-directory: frontend/web
+        run: npm run test:integration
+        env:
+          CI: true
+          NODE_ENV: test
+
+      - name: Upload component test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: component-test-results
+          path: frontend/web/test-results/
+
+  # End-to-End Tests
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend/web
+        run: npx playwright install ${{ matrix.browser }} --with-deps
+
+      - name: Build application
+        working-directory: frontend/web
+        run: npm run build
+
+      - name: Run E2E tests
+        working-directory: frontend/web
+        run: npx playwright test --project=${{ matrix.browser }}
+        env:
+          CI: true
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results-${{ matrix.browser }}
+          path: |
+            frontend/web/test-results/
+            frontend/web/playwright-report/
+
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-artifacts-${{ matrix.browser }}
+          path: |
+            frontend/web/test-results/e2e-artifacts/
+            frontend/web/test-results/*.webm
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Run performance tests
+        working-directory: frontend/web
+        run: npm run test -- --run src/test-utils/performance.test.ts
+        env:
+          CI: true
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-test-results
+          path: frontend/web/test-results/
+
+  # Security and Code Quality
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Run security audit
+        working-directory: frontend/web
+        run: npm audit --audit-level=moderate
+
+      - name: Run dependency check
+        working-directory: frontend/web
+        run: |
+          npx depcheck --json > dependency-report.json || true
+          cat dependency-report.json
+
+      - name: Upload security audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit-results
+          path: frontend/web/dependency-report.json
+
+  # Build Verification
+  build-verification:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        build-mode: [development, production]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Build application (development)
+        if: matrix.build-mode == 'development'
+        working-directory: frontend/web
+        run: npm run build
+        env:
+          NODE_ENV: development
+
+      - name: Build application (production)
+        if: matrix.build-mode == 'production'
+        working-directory: frontend/web
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Verify build output
+        working-directory: frontend/web
+        run: |
+          ls -la dist/
+          [ -f dist/index.html ] || exit 1
+          [ -f dist/assets/index.*.js ] || exit 1
+          [ -f dist/assets/index.*.css ] || exit 1
+
+      - name: Test build size
+        working-directory: frontend/web
+        run: |
+          BUILD_SIZE=$(du -sh dist/ | cut -f1)
+          echo "Build size: $BUILD_SIZE"
+          # Add build size checks here
+          find dist/ -name "*.js" -exec wc -c {} + | tail -1
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.build-mode }}
+          path: frontend/web/dist/
+
+  # Cross-browser Compatibility
+  cross-browser-tests:
+    name: Cross-browser Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [unit-tests, component-tests]
+
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+        viewport: [desktop, mobile]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/web/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: frontend/web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend/web
+        run: npx playwright install ${{ matrix.browser }} --with-deps
+
+      - name: Run cross-browser tests
+        working-directory: frontend/web
+        run: |
+          if [ "${{ matrix.viewport }}" = "mobile" ]; then
+            npx playwright test --project="Mobile ${{ matrix.browser }}"
+          else
+            npx playwright test --project=${{ matrix.browser }}
+          fi
+        env:
+          CI: true
+
+      - name: Upload cross-browser results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-browser-${{ matrix.browser }}-${{ matrix.viewport }}
+          path: |
+            frontend/web/test-results/
+            frontend/web/playwright-report/
+
+  # Test Summary and Notification
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, component-tests, e2e-tests, performance-tests, security-audit, build-verification]
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+
+      - name: Generate test summary
+        run: |
+          echo "# Test Suite Summary" > test-summary.md
+          echo "" >> test-summary.md
+          echo "## Job Results:" >> test-summary.md
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> test-summary.md
+          echo "- Component Tests: ${{ needs.component-tests.result }}" >> test-summary.md
+          echo "- E2E Tests: ${{ needs.e2e-tests.result }}" >> test-summary.md
+          echo "- Performance Tests: ${{ needs.performance-tests.result }}" >> test-summary.md
+          echo "- Security Audit: ${{ needs.security-audit.result }}" >> test-summary.md
+          echo "- Build Verification: ${{ needs.build-verification.result }}" >> test-summary.md
+          echo "" >> test-summary.md
+          echo "## Artifacts Generated:" >> test-summary.md
+          find test-results -name "*.xml" -o -name "*.json" -o -name "*.html" | wc -l | xargs echo "- Test result files:"
+          echo "" >> test-summary.md
+          echo "Generated at: $(date)" >> test-summary.md
+
+      - name: Upload test summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary.md
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('test-summary.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: Set final status
+        run: |
+          if [[ "${{ needs.unit-tests.result }}" == "failure" ||
+                "${{ needs.component-tests.result }}" == "failure" ||
+                "${{ needs.e2e-tests.result }}" == "failure" ]]; then
+            echo "Critical tests failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.performance-tests.result }}" == "failure" ||
+                "${{ needs.security-audit.result }}" == "failure" ]]; then
+            echo "Warning: Non-critical tests failed"
+            # Don't exit with failure for non-critical tests
+          fi
+
+          echo "All critical tests passed"

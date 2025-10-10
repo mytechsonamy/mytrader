@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Price Format Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+        }
+        .price-display {
+            padding: 10px;
+            margin: 10px 0;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h2>myTrader Price Format Diagnostic</h2>
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="subscribeToCrypto()">Subscribe to Crypto</button>
+    <div id="status"></div>
+    <div id="messages"></div>
+
+    <script>
+        let connection;
+        const statusDiv = document.getElementById("status");
+        const messagesDiv = document.getElementById("messages");
+
+        function log(message, type = 'info') {
+            const div = document.createElement("div");
+            div.className = type;
+            div.textContent = `[${new Date().toISOString()}] ${message}`;
+            messagesDiv.appendChild(div);
+            console.log(message);
+        }
+
+        function analyzePrice(data) {
+            const analysis = {
+                raw: data,
+                price: data.price,
+                priceType: typeof data.price,
+                priceValue: Number(data.price),
+                isInteger: Number.isInteger(data.price),
+                decimalPlaces: data.price ? data.price.toString().split('.')[1]?.length || 0 : 0,
+                formatted: {
+                    asIs: data.price,
+                    divided100: data.price / 100,
+                    divided10000: data.price / 10000,
+                    divided1000000: data.price / 1000000,
+                    divided100000000: data.price / 100000000
+                }
+            };
+
+            log(`PRICE ANALYSIS for ${data.symbol || data.ticker}:`, 'warning');
+            log(`  Raw value: ${analysis.price} (type: ${analysis.priceType})`, 'info');
+            log(`  Is Integer: ${analysis.isInteger}`, 'info');
+            log(`  Decimal places: ${analysis.decimalPlaces}`, 'info');
+            log(`  Possible formats:`, 'info');
+            log(`    As-is: $${analysis.formatted.asIs}`, 'info');
+            log(`    ÷100: $${analysis.formatted.divided100.toFixed(2)}`, 'info');
+            log(`    ÷10,000: $${analysis.formatted.divided10000.toFixed(4)}`, 'info');
+            log(`    ÷1,000,000: $${analysis.formatted.divided1000000.toFixed(6)}`, 'info');
+            log(`    ÷100,000,000: $${analysis.formatted.divided100000000.toFixed(8)}`, 'info');
+
+            // Guess the most likely format based on the value
+            if (analysis.price > 1000000) {
+                log(`  LIKELY FORMAT: Price needs division (possibly by 10^6 or 10^8 for crypto)`, 'error');
+            } else if (analysis.price > 10000) {
+                log(`  LIKELY FORMAT: Price might need division by 100 (cents to dollars)`, 'warning');
+            } else {
+                log(`  LIKELY FORMAT: Price appears to be in correct decimal format`, 'success');
+            }
+
+            return analysis;
+        }
+
+        async function testConnection() {
+            try {
+                statusDiv.textContent = "Connecting...";
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/marketdata")
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Debug)
+                    .build();
+
+                // Set up all possible event listeners
+                connection.on("PriceUpdate", (data) => {
+                    log("=== PriceUpdate Event ===", 'success');
+                    analyzePrice(data);
+                });
+
+                connection.on("ReceivePriceUpdate", (data) => {
+                    log("=== ReceivePriceUpdate Event ===", 'success');
+                    analyzePrice(data);
+                });
+
+                connection.on("MarketDataUpdate", (data) => {
+                    log("=== MarketDataUpdate Event ===", 'success');
+                    analyzePrice(data);
+                });
+
+                connection.on("ReceiveBatchPriceUpdate", (dataArray) => {
+                    log(`=== Batch Update: ${dataArray.length} items ===`, 'success');
+                    dataArray.forEach(data => analyzePrice(data));
+                });
+
+                connection.onclose(() => {
+                    statusDiv.textContent = "Disconnected";
+                    log("Connection closed", 'error');
+                });
+
+                connection.onreconnecting(() => {
+                    statusDiv.textContent = "Reconnecting...";
+                    log("Attempting to reconnect...", 'warning');
+                });
+
+                connection.onreconnected(() => {
+                    statusDiv.textContent = "Connected";
+                    log("Reconnected successfully", 'success');
+                });
+
+                await connection.start();
+                statusDiv.textContent = "Connected";
+                log("Connected to SignalR hub", 'success');
+
+            } catch (err) {
+                statusDiv.textContent = "Connection failed";
+                log(`Connection failed: ${err.toString()}`, 'error');
+            }
+        }
+
+        async function subscribeToCrypto() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log("Not connected. Please connect first.", 'error');
+                return;
+            }
+
+            try {
+                const symbols = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'];
+                log(`Subscribing to crypto symbols: ${symbols.join(', ')}`, 'info');
+
+                await connection.invoke('SubscribeToPriceUpdates', 'CRYPTO', symbols);
+                log("Subscription request sent", 'success');
+
+            } catch (err) {
+                log(`Subscription failed: ${err.toString()}`, 'error');
+            }
+        }
+
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            testConnection();
+        });
+    </script>
+</body>
+</html>

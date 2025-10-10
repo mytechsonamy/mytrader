@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FINAL previousClose Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+    <h1>FINAL previousClose Test - Stock Data</h1>
+    <div id="log"></div>
+    <script>
+        const log = (msg) => {
+            document.getElementById('log').innerHTML += '<p>' + msg + '</p>';
+            console.log(msg);
+        };
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5002/hubs/dashboard")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        connection.on("ReceivePriceUpdate", (data) => {
+            log('========================================');
+            log(`Symbol: ${data.symbol || 'N/A'}`);
+            log(`AssetClass: ${data.assetClass || 'N/A'}`);
+            log(`Price: ${data.price || 'N/A'}`);
+            log(`PreviousClose: ${data.previousClose !== undefined ? data.previousClose : 'MISSING'}`);
+            log(`Change: ${data.change || 'N/A'}`);
+            log(`Change24h: ${data.change24h || 'N/A'}`);
+            log(`All fields: ${JSON.stringify(Object.keys(data))}`);
+            log('========================================');
+        });
+
+        connection.start()
+            .then(() => {
+                log('✅ Connected to SignalR hub');
+                log('Waiting for stock price updates...');
+            })
+            .catch(err => log('❌ Connection failed: ' + err.toString()));
+    </script>
+</body>
+</html>

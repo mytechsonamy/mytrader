@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Dimensions } from 'react-native';
+import { createTimingAnimation, runSafeAnimation } from '../utils/animationUtils';
 
 interface ErrorNotificationProps {
   message: string;
@@ -22,18 +23,19 @@ const ErrorNotification: React.FC<ErrorNotificationProps> = ({
   useEffect(() => {
     if (visible) {
       // Animate in
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
+      const animateIn = Animated.parallel([
+        createTimingAnimation(fadeAnim, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }),
-        Animated.timing(slideAnim, {
+        createTimingAnimation(slideAnim, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      runSafeAnimation(animateIn);
 
       // Auto-dismiss after duration
       const timer = setTimeout(() => {
@@ -43,34 +45,36 @@ const ErrorNotification: React.FC<ErrorNotificationProps> = ({
       return () => clearTimeout(timer);
     } else {
       // Animate out
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
+      const animateOut = Animated.parallel([
+        createTimingAnimation(fadeAnim, {
           toValue: 0,
           duration: 200,
           useNativeDriver: true,
         }),
-        Animated.timing(slideAnim, {
+        createTimingAnimation(slideAnim, {
           toValue: 50,
           duration: 200,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      runSafeAnimation(animateOut);
     }
   }, [visible, duration, fadeAnim, slideAnim]);
 
   const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
+    const dismissAnimation = Animated.parallel([
+      createTimingAnimation(fadeAnim, {
         toValue: 0,
         duration: 200,
         useNativeDriver: true,
       }),
-      Animated.timing(slideAnim, {
+      createTimingAnimation(slideAnim, {
         toValue: 50,
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]);
+    runSafeAnimation(dismissAnimation, () => {
       onDismiss?.();
     });
   };

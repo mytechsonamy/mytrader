@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTrader Web Frontend API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { margin: 5px; padding: 10px 15px; cursor: pointer; }
+        .test-result { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>MyTrader Web Frontend API Integration Test</h1>
+    <p>Testing backend API endpoints for web frontend compatibility.</p>
+
+    <div class="section">
+        <h2>Configuration</h2>
+        <label>API Base URL: <input type="text" id="apiUrl" value="http://localhost:5002" style="width: 200px;"></label>
+        <button onclick="updateApiUrl()">Update</button>
+    </div>
+
+    <div class="section">
+        <h2>Test Controls</h2>
+        <button onclick="runAllTests()">Run All Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div class="section">
+        <h2>API Endpoint Tests</h2>
+
+        <div class="test-section">
+            <h3>1. Basic API Info</h3>
+            <button onclick="testApiInfo()">Test GET /</button>
+            <div id="apiInfoResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Health Check</h3>
+            <button onclick="testHealthCheck()">Test GET /health</button>
+            <div id="healthResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Live Prices (Public)</h3>
+            <button onclick="testLivePrices()">Test GET /api/prices/live</button>
+            <div id="livePricesResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. Symbols (Public)</h3>
+            <button onclick="testSymbols()">Test GET /api/symbols</button>
+            <div id="symbolsResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>5. Market Data Overview (Public)</h3>
+            <button onclick="testMarketDataOverview()">Test GET /api/market-data/overview</button>
+            <div id="marketDataResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>6. Dashboard Public Data</h3>
+            <button onclick="testDashboardPublicData()">Test GET /api/dashboard/public-data</button>
+            <div id="dashboardResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>7. Competition Leaderboard (Public)</h3>
+            <button onclick="testLeaderboard()">Test GET /api/v1/competition/leaderboard</button>
+            <div id="leaderboardResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>8. Available Assets (Public)</h3>
+            <button onclick="testAvailableAssets()">Test GET /api/dashboard/available-assets</button>
+            <div id="availableAssetsResult" class="test-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>9. CORS Test</h3>
+            <button onclick="testCors()">Test CORS Headers</button>
+            <div id="corsResult" class="test-result"></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Test Summary</h2>
+        <div id="testSummary"></div>
+    </div>
+
+    <script>
+        let apiBaseUrl = 'http://localhost:5002';
+        let testResults = {};
+
+        function updateApiUrl() {
+            apiBaseUrl = document.getElementById('apiUrl').value;
+            console.log('API URL updated to:', apiBaseUrl);
+        }
+
+        function setTestResult(testName, success, data, error = null) {
+            testResults[testName] = { success, data, error, timestamp: new Date() };
+            updateTestSummary();
+        }
+
+        function updateTestSummary() {
+            const total = Object.keys(testResults).length;
+            const passed = Object.values(testResults).filter(r => r.success).length;
+            const failed = total - passed;
+
+            document.getElementById('testSummary').innerHTML = `
+                <h3>Results: ${passed}/${total} tests passed</h3>
+                <p><strong>Passed:</strong> ${passed} | <strong>Failed:</strong> ${failed}</p>
+                <p><em>Last updated: ${new Date().toLocaleTimeString()}</em></p>
+            `;
+        }
+
+        function showResult(elementId, success, data, error = null) {
+            const element = document.getElementById(elementId);
+            element.className = `test-result ${success ? 'success' : 'error'}`;
+
+            if (success) {
+                element.innerHTML = `
+                    <strong>✅ Success</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } else {
+                element.innerHTML = `
+                    <strong>❌ Failed</strong>
+                    <p>${error}</p>
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                `;
+            }
+        }
+
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.className = 'test-result loading';
+            element.innerHTML = '<strong>🔄 Testing...</strong>';
+        }
+
+        async function fetchWithTimeout(url, options = {}, timeout = 5000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                clearTimeout(timeoutId);
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                throw error;
+            }
+        }
+
+        async function testApiInfo() {
+            showLoading('apiInfoResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    setTestResult('apiInfo', true, data);
+                    showResult('apiInfoResult', true, data);
+                } else {
+                    setTestResult('apiInfo', false, data, `HTTP ${response.status}`);
+                    showResult('apiInfoResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('apiInfo', false, null, error.message);
+                showResult('apiInfoResult', false, null, error.message);
+            }
+        }
+
+        async function testHealthCheck() {
+            showLoading('healthResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/health`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    setTestResult('health', true, data);
+                    showResult('healthResult', true, data);
+                } else {
+                    setTestResult('health', false, data, `HTTP ${response.status}`);
+                    showResult('healthResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('health', false, null, error.message);
+                showResult('healthResult', false, null, error.message);
+            }
+        }
+
+        async function testLivePrices() {
+            showLoading('livePricesResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/prices/live`);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    setTestResult('livePrices', true, data);
+                    showResult('livePricesResult', true, data);
+                } else {
+                    setTestResult('livePrices', false, data, `HTTP ${response.status}`);
+                    showResult('livePricesResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('livePrices', false, null, error.message);
+                showResult('livePricesResult', false, null, error.message);
+            }
+        }
+
+        async function testSymbols() {
+            showLoading('symbolsResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/symbols`);
+                const data = await response.json();
+
+                if (response.ok && data.symbols) {
+                    setTestResult('symbols', true, data);
+                    showResult('symbolsResult', true, data);
+                } else {
+                    setTestResult('symbols', false, data, `HTTP ${response.status}`);
+                    showResult('symbolsResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('symbols', false, null, error.message);
+                showResult('symbolsResult', false, null, error.message);
+            }
+        }
+
+        async function testMarketDataOverview() {
+            showLoading('marketDataResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/market-data/overview`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    setTestResult('marketData', true, data);
+                    showResult('marketDataResult', true, data);
+                } else {
+                    setTestResult('marketData', false, data, `HTTP ${response.status}`);
+                    showResult('marketDataResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('marketData', false, null, error.message);
+                showResult('marketDataResult', false, null, error.message);
+            }
+        }
+
+        async function testDashboardPublicData() {
+            showLoading('dashboardResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/dashboard/public-data`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    setTestResult('dashboard', true, data);
+                    showResult('dashboardResult', true, data);
+                } else {
+                    setTestResult('dashboard', false, data, `HTTP ${response.status}`);
+                    showResult('dashboardResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('dashboard', false, null, error.message);
+                showResult('dashboardResult', false, null, error.message);
+            }
+        }
+
+        async function testLeaderboard() {
+            showLoading('leaderboardResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/v1/competition/leaderboard`);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    setTestResult('leaderboard', true, data);
+                    showResult('leaderboardResult', true, data);
+                } else {
+                    setTestResult('leaderboard', false, data, `HTTP ${response.status}`);
+                    showResult('leaderboardResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('leaderboard', false, null, error.message);
+                showResult('leaderboardResult', false, null, error.message);
+            }
+        }
+
+        async function testAvailableAssets() {
+            showLoading('availableAssetsResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/api/dashboard/available-assets`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    setTestResult('availableAssets', true, data);
+                    showResult('availableAssetsResult', true, data);
+                } else {
+                    setTestResult('availableAssets', false, data, `HTTP ${response.status}`);
+                    showResult('availableAssetsResult', false, data, `HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                setTestResult('availableAssets', false, null, error.message);
+                showResult('availableAssetsResult', false, null, error.message);
+            }
+        }
+
+        async function testCors() {
+            showLoading('corsResult');
+            try {
+                const response = await fetchWithTimeout(`${apiBaseUrl}/health`, {
+                    method: 'OPTIONS'
+                });
+
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
+                    'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
+                };
+
+                const corsWorking = corsHeaders['Access-Control-Allow-Origin'] !== null;
+                setTestResult('cors', corsWorking, corsHeaders);
+                showResult('corsResult', corsWorking, corsHeaders, corsWorking ? null : 'CORS headers not found');
+            } catch (error) {
+                setTestResult('cors', false, null, error.message);
+                showResult('corsResult', false, null, error.message);
+            }
+        }
+
+        async function runAllTests() {
+            console.log('Running all tests...');
+            clearResults();
+
+            // Run tests sequentially to avoid overwhelming the API
+            await testApiInfo();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testHealthCheck();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testLivePrices();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testSymbols();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testMarketDataOverview();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testDashboardPublicData();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testLeaderboard();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testAvailableAssets();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            await testCors();
+
+            console.log('All tests completed');
+        }
+
+        function clearResults() {
+            testResults = {};
+            const resultElements = document.querySelectorAll('.test-result');
+            resultElements.forEach(element => {
+                element.className = 'test-result';
+                element.innerHTML = '';
+            });
+            updateTestSummary();
+        }
+
+        // Initialize
+        updateTestSummary();
+    </script>
+</body>
+</html>

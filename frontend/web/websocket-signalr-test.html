@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyTrader WebSocket SignalR Integration Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.connecting { background: #fff3cd; color: #856404; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.error { background: #f8d7da; color: #721c24; }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .btn.primary { background: #007bff; color: white; }
+        .btn.primary:hover { background: #0056b3; }
+        .btn.success { background: #28a745; color: white; }
+        .btn.success:hover { background: #1e7e34; }
+        .btn.warning { background: #ffc107; color: #212529; }
+        .btn.warning:hover { background: #e0a800; }
+        .btn.danger { background: #dc3545; color: white; }
+        .btn.danger:hover { background: #c82333; }
+
+        .log {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        .log-entry.error { color: #fed7d7; }
+        .log-entry.success { color: #c6f6d5; }
+        .log-entry.info { color: #bee3f8; }
+        .log-entry.warning { color: #fefcbf; }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .metric {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .data-item {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .data-item h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .data-item .price {
+            font-size: 18px;
+            font-weight: bold;
+            color: #27ae60;
+        }
+        .data-item .change {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .data-item .change.positive { color: #27ae60; }
+        .data-item .change.negative { color: #e74c3c; }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-details {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 MyTrader WebSocket SignalR Integration Test</h1>
+            <p>Testing real-time connectivity to MarketDataHub and DashboardHub</p>
+            <div>
+                <strong>Backend URL:</strong> <span id="backendUrl">http://localhost:5002</span>
+                <button class="btn primary" onclick="changeBackendUrl()">Change URL</button>
+            </div>
+        </div>
+
+        <!-- Market Data Hub Testing -->
+        <div class="test-section">
+            <h3>
+                📈 Market Data Hub (SignalR)
+                <span id="marketStatus" class="status disconnected">Disconnected</span>
+            </h3>
+
+            <div class="controls">
+                <button class="btn primary" onclick="connectMarketHub()">Connect</button>
+                <button class="btn danger" onclick="disconnectMarketHub()">Disconnect</button>
+                <button class="btn success" onclick="subscribeToAssetClass()">Subscribe to CRYPTO</button>
+                <button class="btn warning" onclick="testMarketConnection()">Test Connection</button>
+                <button class="btn primary" onclick="getMarketStatus()">Get Market Status</button>
+            </div>
+
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-value" id="marketConnectionAttempts">0</div>
+                    <div class="metric-label">Connection Attempts</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="marketMessagesReceived">0</div>
+                    <div class="metric-label">Messages Received</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="marketPriceUpdates">0</div>
+                    <div class="metric-label">Price Updates</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="marketLastUpdate">Never</div>
+                    <div class="metric-label">Last Update</div>
+                </div>
+            </div>
+
+            <div id="marketDataGrid" class="data-grid">
+                <!-- Real-time market data will appear here -->
+            </div>
+
+            <div class="log" id="marketLog"></div>
+        </div>
+
+        <!-- Dashboard Hub Testing -->
+        <div class="test-section">
+            <h3>
+                📊 Dashboard Hub (SignalR)
+                <span id="dashboardStatus" class="status disconnected">Disconnected</span>
+            </h3>
+
+            <div class="controls">
+                <button class="btn primary" onclick="connectDashboardHub()">Connect</button>
+                <button class="btn danger" onclick="disconnectDashboardHub()">Disconnect</button>
+                <button class="btn success" onclick="subscribeToDashboardData()">Subscribe to Portfolio</button>
+                <button class="btn warning" onclick="testDashboardConnection()">Test Connection</button>
+                <button class="btn primary" onclick="requestDashboardUpdate()">Request Update</button>
+            </div>
+
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-value" id="dashboardConnectionAttempts">0</div>
+                    <div class="metric-label">Connection Attempts</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="dashboardMessagesReceived">0</div>
+                    <div class="metric-label">Messages Received</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="dashboardSignals">0</div>
+                    <div class="metric-label">Trading Signals</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="dashboardLastUpdate">Never</div>
+                    <div class="metric-label">Last Update</div>
+                </div>
+            </div>
+
+            <div id="dashboardDataGrid" class="data-grid">
+                <!-- Real-time dashboard data will appear here -->
+            </div>
+
+            <div class="log" id="dashboardLog"></div>
+        </div>
+
+        <!-- Overall System Status -->
+        <div class="test-section">
+            <h3>
+                🔄 System Health Check
+                <span id="systemStatus" class="status disconnected">Checking...</span>
+            </h3>
+
+            <div class="controls">
+                <button class="btn primary" onclick="runFullHealthCheck()">Run Full Health Check</button>
+                <button class="btn success" onclick="runStressTest()">Stress Test (10 msgs/sec)</button>
+                <button class="btn danger" onclick="clearAllLogs()">Clear All Logs</button>
+            </div>
+
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-value" id="totalConnections">0</div>
+                    <div class="metric-label">Active Connections</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="totalMessages">0</div>
+                    <div class="metric-label">Total Messages</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="averageLatency">0ms</div>
+                    <div class="metric-label">Average Latency</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="errorCount">0</div>
+                    <div class="metric-label">Errors</div>
+                </div>
+            </div>
+
+            <div class="log" id="systemLog"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script>
+        // Global state
+        let marketConnection = null;
+        let dashboardConnection = null;
+        let backendUrl = 'http://localhost:5002';
+        let metrics = {
+            marketConnectionAttempts: 0,
+            marketMessagesReceived: 0,
+            marketPriceUpdates: 0,
+            dashboardConnectionAttempts: 0,
+            dashboardMessagesReceived: 0,
+            dashboardSignals: 0,
+            totalMessages: 0,
+            errorCount: 0,
+            latencyMeasurements: []
+        };
+
+        // Logging functions
+        function logToSection(section, message, type = 'info') {
+            const log = document.getElementById(`${section}Log`);
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<span style="color: #4a5568;">[${new Date().toLocaleTimeString()}]</span> ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateStatus(section, status, text = null) {
+            const statusEl = document.getElementById(`${section}Status`);
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = text || status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function updateMetric(metricId, value) {
+            const el = document.getElementById(metricId);
+            if (el) el.textContent = value;
+        }
+
+        function updateMetrics() {
+            updateMetric('marketConnectionAttempts', metrics.marketConnectionAttempts);
+            updateMetric('marketMessagesReceived', metrics.marketMessagesReceived);
+            updateMetric('marketPriceUpdates', metrics.marketPriceUpdates);
+            updateMetric('dashboardConnectionAttempts', metrics.dashboardConnectionAttempts);
+            updateMetric('dashboardMessagesReceived', metrics.dashboardMessagesReceived);
+            updateMetric('dashboardSignals', metrics.dashboardSignals);
+            updateMetric('totalMessages', metrics.totalMessages);
+            updateMetric('errorCount', metrics.errorCount);
+
+            // Calculate active connections
+            let activeConnections = 0;
+            if (marketConnection && marketConnection.state === signalR.HubConnectionState.Connected) activeConnections++;
+            if (dashboardConnection && dashboardConnection.state === signalR.HubConnectionState.Connected) activeConnections++;
+            updateMetric('totalConnections', activeConnections);
+
+            // Calculate average latency
+            if (metrics.latencyMeasurements.length > 0) {
+                const avg = metrics.latencyMeasurements.reduce((a, b) => a + b, 0) / metrics.latencyMeasurements.length;
+                updateMetric('averageLatency', `${avg.toFixed(0)}ms`);
+            }
+        }
+
+        // Market Data Hub functions
+        async function connectMarketHub() {
+            try {
+                updateStatus('market', 'connecting');
+                logToSection('market', 'Attempting to connect to Market Data Hub...', 'info');
+                metrics.marketConnectionAttempts++;
+
+                if (marketConnection) {
+                    await marketConnection.stop();
+                }
+
+                marketConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${backendUrl}/hubs/marketdata`)
+                    .withAutomaticReconnect({
+                        nextRetryDelayInMilliseconds: (retryContext) => {
+                            if (retryContext.previousRetryCount < 5) {
+                                return 1000 * Math.pow(2, retryContext.previousRetryCount);
+                            }
+                            return 30000;
+                        }
+                    })
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Set up event handlers
+                marketConnection.on('PriceUpdate', (data) => {
+                    metrics.marketMessagesReceived++;
+                    metrics.marketPriceUpdates++;
+                    metrics.totalMessages++;
+                    updateMetric('marketLastUpdate', new Date().toLocaleTimeString());
+
+                    logToSection('market', `Price Update: ${JSON.stringify(data)}`, 'success');
+                    displayMarketData(data);
+                    updateMetrics();
+                });
+
+                marketConnection.on('ConnectionStatus', (status) => {
+                    logToSection('market', `Connection Status: ${JSON.stringify(status)}`, 'info');
+                    metrics.marketMessagesReceived++;
+                    metrics.totalMessages++;
+                    updateMetrics();
+                });
+
+                marketConnection.on('SubscriptionConfirmed', (data) => {
+                    logToSection('market', `Subscription Confirmed: ${JSON.stringify(data)}`, 'success');
+                    metrics.marketMessagesReceived++;
+                    metrics.totalMessages++;
+                    updateMetrics();
+                });
+
+                marketConnection.on('SubscriptionError', (error) => {
+                    logToSection('market', `Subscription Error: ${JSON.stringify(error)}`, 'error');
+                    metrics.errorCount++;
+                    updateMetrics();
+                });
+
+                marketConnection.on('Heartbeat', (data) => {
+                    logToSection('market', `Heartbeat: ${JSON.stringify(data)}`, 'info');
+                    metrics.marketMessagesReceived++;
+                    metrics.totalMessages++;
+                    updateMetrics();
+                });
+
+                marketConnection.on('Pong', (data) => {
+                    const latency = Date.now() - data.timestamp;
+                    metrics.latencyMeasurements.push(latency);
+                    if (metrics.latencyMeasurements.length > 10) {
+                        metrics.latencyMeasurements.shift();
+                    }
+                    logToSection('market', `Pong received (latency: ${latency}ms)`, 'info');
+                    updateMetrics();
+                });
+
+                marketConnection.onreconnecting(() => {
+                    updateStatus('market', 'connecting', 'Reconnecting...');
+                    logToSection('market', 'Connection lost, attempting to reconnect...', 'warning');
+                });
+
+                marketConnection.onreconnected(() => {
+                    updateStatus('market', 'connected', 'Reconnected');
+                    logToSection('market', 'Reconnected successfully', 'success');
+                });
+
+                marketConnection.onclose((error) => {
+                    updateStatus('market', 'disconnected');
+                    if (error) {
+                        logToSection('market', `Connection closed with error: ${error}`, 'error');
+                        metrics.errorCount++;
+                    } else {
+                        logToSection('market', 'Connection closed', 'info');
+                    }
+                    updateMetrics();
+                });
+
+                await marketConnection.start();
+                updateStatus('market', 'connected');
+                logToSection('market', 'Connected to Market Data Hub successfully!', 'success');
+                updateMetrics();
+
+            } catch (error) {
+                updateStatus('market', 'error');
+                logToSection('market', `Connection failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function disconnectMarketHub() {
+            if (marketConnection) {
+                await marketConnection.stop();
+                marketConnection = null;
+                updateStatus('market', 'disconnected');
+                logToSection('market', 'Disconnected from Market Data Hub', 'info');
+                document.getElementById('marketDataGrid').innerHTML = '';
+                updateMetrics();
+            }
+        }
+
+        async function subscribeToAssetClass() {
+            if (!marketConnection || marketConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('market', 'Not connected to Market Data Hub', 'error');
+                return;
+            }
+
+            try {
+                await marketConnection.invoke('SubscribeToAssetClass', 'CRYPTO');
+                logToSection('market', 'Subscribed to CRYPTO asset class', 'success');
+            } catch (error) {
+                logToSection('market', `Failed to subscribe: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function testMarketConnection() {
+            if (!marketConnection || marketConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('market', 'Not connected to Market Data Hub', 'error');
+                return;
+            }
+
+            try {
+                const startTime = Date.now();
+                await marketConnection.invoke('TestConnection');
+                const latency = Date.now() - startTime;
+                metrics.latencyMeasurements.push(latency);
+                if (metrics.latencyMeasurements.length > 10) {
+                    metrics.latencyMeasurements.shift();
+                }
+                logToSection('market', `Connection test successful (${latency}ms)`, 'success');
+                updateMetrics();
+            } catch (error) {
+                logToSection('market', `Connection test failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function getMarketStatus() {
+            if (!marketConnection || marketConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('market', 'Not connected to Market Data Hub', 'error');
+                return;
+            }
+
+            try {
+                await marketConnection.invoke('GetMarketStatus');
+                logToSection('market', 'Market status requested', 'success');
+            } catch (error) {
+                logToSection('market', `Failed to get market status: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        function displayMarketData(data) {
+            const grid = document.getElementById('marketDataGrid');
+            const symbol = data.Symbol || data.symbol || 'Unknown';
+
+            let item = document.getElementById(`market-${symbol}`);
+            if (!item) {
+                item = document.createElement('div');
+                item.className = 'data-item';
+                item.id = `market-${symbol}`;
+                grid.appendChild(item);
+            }
+
+            const price = parseFloat(data.Price || data.price || 0);
+            const change = parseFloat(data.Change24h || data.changePercent || 0);
+
+            item.innerHTML = `
+                <h4>${symbol}</h4>
+                <div class="price">$${price.toFixed(6)}</div>
+                <div class="change ${change >= 0 ? 'positive' : 'negative'}">
+                    ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    ${new Date().toLocaleTimeString()}
+                </div>
+            `;
+        }
+
+        // Dashboard Hub functions
+        async function connectDashboardHub() {
+            try {
+                updateStatus('dashboard', 'connecting');
+                logToSection('dashboard', 'Attempting to connect to Dashboard Hub...', 'info');
+                metrics.dashboardConnectionAttempts++;
+
+                if (dashboardConnection) {
+                    await dashboardConnection.stop();
+                }
+
+                dashboardConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${backendUrl}/hubs/dashboard`)
+                    .withAutomaticReconnect()
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                // Set up event handlers
+                dashboardConnection.on('DashboardSnapshot', (data) => {
+                    metrics.dashboardMessagesReceived++;
+                    metrics.totalMessages++;
+                    updateMetric('dashboardLastUpdate', new Date().toLocaleTimeString());
+
+                    logToSection('dashboard', `Dashboard Snapshot: ${JSON.stringify(data)}`, 'success');
+                    displayDashboardData('snapshot', data);
+                    updateMetrics();
+                });
+
+                dashboardConnection.on('PortfolioUpdate', (data) => {
+                    metrics.dashboardMessagesReceived++;
+                    metrics.totalMessages++;
+
+                    logToSection('dashboard', `Portfolio Update: ${JSON.stringify(data)}`, 'success');
+                    displayDashboardData('portfolio', data);
+                    updateMetrics();
+                });
+
+                dashboardConnection.on('SignalAlert', (data) => {
+                    metrics.dashboardMessagesReceived++;
+                    metrics.dashboardSignals++;
+                    metrics.totalMessages++;
+
+                    logToSection('dashboard', `Signal Alert: ${JSON.stringify(data)}`, 'success');
+                    displayDashboardData('signal', data);
+                    updateMetrics();
+                });
+
+                dashboardConnection.on('IndicatorUpdate', (data) => {
+                    metrics.dashboardMessagesReceived++;
+                    metrics.totalMessages++;
+
+                    logToSection('dashboard', `Indicator Update: ${JSON.stringify(data)}`, 'info');
+                    displayDashboardData('indicator', data);
+                    updateMetrics();
+                });
+
+                dashboardConnection.on('Error', (error) => {
+                    logToSection('dashboard', `Dashboard Error: ${error}`, 'error');
+                    metrics.errorCount++;
+                    updateMetrics();
+                });
+
+                dashboardConnection.onreconnecting(() => {
+                    updateStatus('dashboard', 'connecting', 'Reconnecting...');
+                    logToSection('dashboard', 'Connection lost, attempting to reconnect...', 'warning');
+                });
+
+                dashboardConnection.onreconnected(() => {
+                    updateStatus('dashboard', 'connected', 'Reconnected');
+                    logToSection('dashboard', 'Reconnected successfully', 'success');
+                });
+
+                dashboardConnection.onclose((error) => {
+                    updateStatus('dashboard', 'disconnected');
+                    if (error) {
+                        logToSection('dashboard', `Connection closed with error: ${error}`, 'error');
+                        metrics.errorCount++;
+                    } else {
+                        logToSection('dashboard', 'Connection closed', 'info');
+                    }
+                    updateMetrics();
+                });
+
+                await dashboardConnection.start();
+                updateStatus('dashboard', 'connected');
+                logToSection('dashboard', 'Connected to Dashboard Hub successfully!', 'success');
+                updateMetrics();
+
+            } catch (error) {
+                updateStatus('dashboard', 'error');
+                logToSection('dashboard', `Connection failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function disconnectDashboardHub() {
+            if (dashboardConnection) {
+                await dashboardConnection.stop();
+                dashboardConnection = null;
+                updateStatus('dashboard', 'disconnected');
+                logToSection('dashboard', 'Disconnected from Dashboard Hub', 'info');
+                document.getElementById('dashboardDataGrid').innerHTML = '';
+                updateMetrics();
+            }
+        }
+
+        async function subscribeToDashboardData() {
+            if (!dashboardConnection || dashboardConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('dashboard', 'Not connected to Dashboard Hub', 'error');
+                return;
+            }
+
+            try {
+                await dashboardConnection.invoke('SubscribeToPortfolio');
+                logToSection('dashboard', 'Subscribed to portfolio updates', 'success');
+
+                await dashboardConnection.invoke('SubscribeToSignals', ['BTCUSD', 'ETHUSD'], 70);
+                logToSection('dashboard', 'Subscribed to trading signals', 'success');
+
+                await dashboardConnection.invoke('SubscribeToIndicators', ['BTCUSD', 'ETHUSD'], ['1h', '4h']);
+                logToSection('dashboard', 'Subscribed to indicators', 'success');
+            } catch (error) {
+                logToSection('dashboard', `Failed to subscribe: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function testDashboardConnection() {
+            if (!dashboardConnection || dashboardConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('dashboard', 'Not connected to Dashboard Hub', 'error');
+                return;
+            }
+
+            try {
+                const startTime = Date.now();
+                await dashboardConnection.invoke('RequestUpdate', 'dashboard');
+                const latency = Date.now() - startTime;
+                metrics.latencyMeasurements.push(latency);
+                if (metrics.latencyMeasurements.length > 10) {
+                    metrics.latencyMeasurements.shift();
+                }
+                logToSection('dashboard', `Dashboard update requested (${latency}ms)`, 'success');
+                updateMetrics();
+            } catch (error) {
+                logToSection('dashboard', `Connection test failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        async function requestDashboardUpdate() {
+            if (!dashboardConnection || dashboardConnection.state !== signalR.HubConnectionState.Connected) {
+                logToSection('dashboard', 'Not connected to Dashboard Hub', 'error');
+                return;
+            }
+
+            try {
+                await dashboardConnection.invoke('RequestUpdate', 'portfolio');
+                logToSection('dashboard', 'Portfolio update requested', 'success');
+            } catch (error) {
+                logToSection('dashboard', `Failed to request update: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        function displayDashboardData(type, data) {
+            const grid = document.getElementById('dashboardDataGrid');
+            const id = `dashboard-${type}-${Date.now()}`;
+
+            const item = document.createElement('div');
+            item.className = 'data-item';
+            item.id = id;
+
+            let content = '';
+            switch (type) {
+                case 'portfolio':
+                    content = `
+                        <h4>💼 Portfolio</h4>
+                        <div class="price">$${(data.totalValue || 0).toFixed(2)}</div>
+                        <div class="change ${(data.dayChangePercent || 0) >= 0 ? 'positive' : 'negative'}">
+                            ${(data.dayChangePercent || 0) >= 0 ? '+' : ''}${(data.dayChangePercent || 0).toFixed(2)}%
+                        </div>
+                    `;
+                    break;
+                case 'signal':
+                    content = `
+                        <h4>🎯 ${data.symbol}</h4>
+                        <div class="price">${data.type} Signal</div>
+                        <div class="change">Confidence: ${(data.confidence || 0).toFixed(0)}%</div>
+                    `;
+                    break;
+                case 'indicator':
+                    content = `
+                        <h4>📈 ${data.symbol}</h4>
+                        <div class="price">$${(data.price || 0).toFixed(6)}</div>
+                        <div class="change">${data.timeframe}</div>
+                    `;
+                    break;
+                default:
+                    content = `
+                        <h4>📊 Snapshot</h4>
+                        <div class="price">Dashboard Data</div>
+                        <div class="change">${new Date(data.timestamp).toLocaleTimeString()}</div>
+                    `;
+            }
+
+            item.innerHTML = `
+                ${content}
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    ${new Date().toLocaleTimeString()}
+                </div>
+            `;
+
+            grid.appendChild(item);
+
+            // Keep only last 10 items
+            while (grid.children.length > 10) {
+                grid.removeChild(grid.firstChild);
+            }
+        }
+
+        // System functions
+        async function runFullHealthCheck() {
+            updateStatus('system', 'connecting', 'Running Health Check...');
+            logToSection('system', 'Starting full health check...', 'info');
+
+            // Test backend availability
+            try {
+                const response = await fetch(`${backendUrl}/health`);
+                const healthData = await response.json();
+                logToSection('system', `Backend Health: ${JSON.stringify(healthData)}`, 'success');
+            } catch (error) {
+                logToSection('system', `Backend health check failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+            }
+
+            // Test both hubs
+            await connectMarketHub();
+            await connectDashboardHub();
+
+            updateStatus('system', 'connected', 'Health Check Complete');
+            updateMetrics();
+        }
+
+        async function runStressTest() {
+            logToSection('system', 'Starting stress test - sending 100 requests...', 'warning');
+
+            const promises = [];
+            for (let i = 0; i < 100; i++) {
+                if (marketConnection && marketConnection.state === signalR.HubConnectionState.Connected) {
+                    promises.push(marketConnection.invoke('Ping'));
+                }
+                if (dashboardConnection && dashboardConnection.state === signalR.HubConnectionState.Connected) {
+                    promises.push(dashboardConnection.invoke('RequestUpdate', 'dashboard'));
+                }
+            }
+
+            try {
+                await Promise.all(promises);
+                logToSection('system', 'Stress test completed successfully!', 'success');
+            } catch (error) {
+                logToSection('system', `Stress test failed: ${error.message}`, 'error');
+                metrics.errorCount++;
+                updateMetrics();
+            }
+        }
+
+        function clearAllLogs() {
+            document.getElementById('marketLog').innerHTML = '';
+            document.getElementById('dashboardLog').innerHTML = '';
+            document.getElementById('systemLog').innerHTML = '';
+            document.getElementById('marketDataGrid').innerHTML = '';
+            document.getElementById('dashboardDataGrid').innerHTML = '';
+
+            // Reset metrics
+            metrics = {
+                marketConnectionAttempts: 0,
+                marketMessagesReceived: 0,
+                marketPriceUpdates: 0,
+                dashboardConnectionAttempts: 0,
+                dashboardMessagesReceived: 0,
+                dashboardSignals: 0,
+                totalMessages: 0,
+                errorCount: 0,
+                latencyMeasurements: []
+            };
+            updateMetrics();
+
+            logToSection('system', 'All logs and metrics cleared', 'info');
+        }
+
+        function changeBackendUrl() {
+            const newUrl = prompt('Enter new backend URL:', backendUrl);
+            if (newUrl && newUrl !== backendUrl) {
+                backendUrl = newUrl;
+                document.getElementById('backendUrl').textContent = backendUrl;
+                logToSection('system', `Backend URL changed to: ${backendUrl}`, 'info');
+
+                // Disconnect existing connections
+                disconnectMarketHub();
+                disconnectDashboardHub();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMetrics();
+            logToSection('system', 'MyTrader WebSocket SignalR Test initialized', 'info');
+            logToSection('system', `Backend URL: ${backendUrl}`, 'info');
+
+            // Auto health check on load
+            setTimeout(runFullHealthCheck, 1000);
+        });
+
+        // Update metrics every second
+        setInterval(updateMetrics, 1000);
+    </script>
+</body>
+</html>

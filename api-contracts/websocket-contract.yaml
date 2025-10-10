@@ -1,0 +1,621 @@
+websocket_contract_version: "1.1.0"
+effective_date: "2024-09-24"
+priority: "Phase 1 - Critical WebSocket Standardization"
+
+# ====================================================================
+# WEBSOCKET HUB CONTRACT STANDARDIZATION
+# ====================================================================
+contract_name: "MyTrader WebSocket Hub Contract"
+description: |
+  Standardized WebSocket contract for real-time data distribution across
+  the MyTrader platform. Addresses critical event naming mismatches and
+  port configuration issues.
+
+# ====================================================================
+# CRITICAL FIXES ADDRESSED
+# ====================================================================
+critical_fixes:
+  port_standardization:
+    issue: "Web frontend connects to port 8080, backend runs on 5002"
+    solution: "Unified port 5002 for all WebSocket connections"
+    priority: "RICE Score 576 - Immediate"
+
+  event_naming_mismatch:
+    issue: "Backend publishes 'PriceUpdate', mobile expects 'ReceivePriceUpdate'"
+    solution: "Standardized event names without 'Receive' prefixes"
+    priority: "RICE Score 432 - Phase 1"
+
+  hub_consolidation:
+    issue: "Multiple hub endpoints causing confusion"
+    solution: "Single unified /hubs/market-data hub"
+    priority: "Phase 1"
+
+# ====================================================================
+# HUB ENDPOINTS
+# ====================================================================
+hubs:
+  market_data:
+    path: "/hubs/market-data"
+    description: "Unified hub for all real-time market data distribution"
+    authentication: "Optional (Bearer token for authenticated features)"
+    transports: ["WebSocket", "ServerSentEvents", "LongPolling"]
+    connection_settings:
+      keep_alive_interval: "15 seconds"
+      client_timeout: "60 seconds"
+      max_message_size: "1MB"
+      reconnect_policy: "Exponential backoff: [0, 2s, 5s, 10s, 30s]"
+
+  trading:
+    path: "/hubs/trading"
+    description: "DEPRECATED - Use /hubs/market-data instead"
+    status: "deprecated"
+    deprecation_date: "2024-09-24"
+    removal_date: "2024-12-24"
+    migration_note: "All functionality moved to /hubs/market-data"
+
+  portfolio:
+    path: "/hubs/portfolio"
+    description: "User portfolio and position updates (authenticated only)"
+    authentication: "Required (Bearer token)"
+    status: "active"
+
+# ====================================================================
+# STANDARDIZED EVENT NAMING
+# ====================================================================
+event_naming_convention:
+  pattern: "{EventType}"
+  rules:
+    - "No 'Receive' prefixes in event names"
+    - "PascalCase naming convention"
+    - "Descriptive but concise names"
+    - "Consistent across all hubs"
+
+# ====================================================================
+# MARKET DATA HUB EVENTS
+# ====================================================================
+events:
+  # Connection Events
+  connection_status:
+    event_name: "ConnectionStatus"
+    description: "Connection status updates and capabilities"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      required: ["status", "timestamp"]
+      properties:
+        status:
+          type: "string"
+          enum: ["connected", "disconnected", "reconnecting", "error"]
+        message:
+          type: "string"
+        timestamp:
+          type: "string"
+          format: "date-time"
+        connectionId:
+          type: "string"
+        supportedAssetClasses:
+          type: "array"
+          items:
+            type: "string"
+            enum: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+    example:
+      status: "connected"
+      message: "Connected to multi-asset real-time market data"
+      timestamp: "2024-09-24T10:30:00.000Z"
+      connectionId: "abc123-def456-ghi789"
+      supportedAssetClasses: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ"]
+
+  # Price Update Events (STANDARDIZED)
+  price_update:
+    event_name: "PriceUpdate"
+    legacy_names: ["ReceivePriceUpdate", "MarketDataUpdate"]
+    description: "Individual symbol price update"
+    direction: "server_to_client"
+    authentication: "none"
+    frequency: "Real-time (as data becomes available)"
+    payload_schema:
+      type: "object"
+      required: ["symbolId", "ticker", "price", "timestamp"]
+      properties:
+        symbolId:
+          type: "string"
+          format: "uuid"
+        ticker:
+          type: "string"
+        assetClass:
+          type: "string"
+          enum: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+        price:
+          type: "number"
+          format: "decimal"
+        priceChange:
+          type: "number"
+          format: "decimal"
+        priceChangePercent:
+          type: "number"
+          format: "decimal"
+        volume:
+          type: "number"
+          format: "decimal"
+        volume24h:
+          type: "number"
+          format: "decimal"
+        high24h:
+          type: "number"
+          format: "decimal"
+        low24h:
+          type: "number"
+          format: "decimal"
+        timestamp:
+          type: "string"
+          format: "date-time"
+        dataProvider:
+          type: "string"
+        isRealTime:
+          type: "boolean"
+        marketStatus:
+          type: "string"
+          enum: ["OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS", "HOLIDAY"]
+    example:
+      symbolId: "550e8400-e29b-41d4-a716-446655440001"
+      ticker: "BTC-USD"
+      assetClass: "CRYPTO"
+      price: 43250.50
+      priceChange: 1250.30
+      priceChangePercent: 2.98
+      volume: 1250000.00
+      volume24h: 45000000.00
+      high24h: 43500.00
+      low24h: 42000.00
+      timestamp: "2024-09-24T10:30:15.123Z"
+      dataProvider: "Binance"
+      isRealTime: true
+      marketStatus: "OPEN"
+
+  batch_price_update:
+    event_name: "BatchPriceUpdate"
+    legacy_names: ["ReceiveBatchPriceUpdate", "ReceiveMarketData"]
+    description: "Multiple symbol price updates in single event"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      required: ["updates", "timestamp"]
+      properties:
+        updates:
+          type: "array"
+          items:
+            $ref: "#/events/price_update/payload_schema"
+        timestamp:
+          type: "string"
+          format: "date-time"
+        batchSize:
+          type: "integer"
+        assetClassFilter:
+          type: "string"
+
+  # Market Status Events
+  market_status_update:
+    event_name: "MarketStatusUpdate"
+    legacy_names: ["ReceiveMarketStatusUpdate"]
+    description: "Market opening/closing status changes"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      required: ["market", "status", "timestamp"]
+      properties:
+        market:
+          type: "string"
+          enum: ["CRYPTO", "BIST", "NASDAQ", "FOREX"]
+        status:
+          type: "string"
+          enum: ["OPEN", "CLOSED", "PRE_MARKET", "AFTER_HOURS", "HOLIDAY"]
+        nextOpen:
+          type: "string"
+          format: "date-time"
+        nextClose:
+          type: "string"
+          format: "date-time"
+        timezone:
+          type: "string"
+        timestamp:
+          type: "string"
+          format: "date-time"
+
+  # Subscription Management Events
+  subscription_confirmed:
+    event_name: "SubscriptionConfirmed"
+    legacy_names: ["ReceiveSubscriptionConfirmed"]
+    description: "Confirmation of successful subscription"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      required: ["subscriptionId", "assetClass", "symbols"]
+      properties:
+        subscriptionId:
+          type: "string"
+          format: "uuid"
+        assetClass:
+          type: "string"
+          enum: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+        symbols:
+          type: "array"
+          items:
+            type: "string"
+        timestamp:
+          type: "string"
+          format: "date-time"
+
+  subscription_error:
+    event_name: "SubscriptionError"
+    legacy_names: ["ReceiveSubscriptionError"]
+    description: "Subscription failure notification"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      required: ["error", "message"]
+      properties:
+        error:
+          type: "string"
+          enum: ["InvalidAssetClass", "NoSymbols", "RateLimit", "InternalError"]
+        message:
+          type: "string"
+        subscriptionType:
+          type: "string"
+        supportedClasses:
+          type: "array"
+          items:
+            type: "string"
+
+  unsubscription_confirmed:
+    event_name: "UnsubscriptionConfirmed"
+    description: "Confirmation of successful unsubscription"
+    direction: "server_to_client"
+    authentication: "none"
+    payload_schema:
+      type: "object"
+      properties:
+        subscriptionId:
+          type: "string"
+          format: "uuid"
+        assetClass:
+          type: "string"
+        symbols:
+          type: "array"
+          items:
+            type: "string"
+        timestamp:
+          type: "string"
+          format: "date-time"
+
+  # Heartbeat and Health
+  heartbeat:
+    event_name: "Heartbeat"
+    description: "Periodic heartbeat for connection health monitoring"
+    direction: "bidirectional"
+    authentication: "none"
+    frequency: "Every 30 seconds"
+    payload_schema:
+      type: "object"
+      required: ["timestamp"]
+      properties:
+        timestamp:
+          type: "string"
+          format: "date-time"
+        serverTime:
+          type: "string"
+          format: "date-time"
+        connectionHealth:
+          type: "string"
+          enum: ["excellent", "good", "fair", "poor"]
+
+# ====================================================================
+# CLIENT METHODS (Client-to-Server)
+# ====================================================================
+client_methods:
+  # Subscription Methods
+  subscribe_to_price_updates:
+    method_name: "SubscribeToPriceUpdates"
+    description: "Subscribe to price updates for specific symbols within an asset class"
+    authentication: "optional"
+    parameters:
+      - name: "assetClass"
+        type: "string"
+        required: true
+        enum: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+      - name: "symbols"
+        type: "array"
+        required: true
+        items:
+          type: "string"
+        minItems: 1
+        maxItems: 100
+    responses:
+      - "SubscriptionConfirmed"
+      - "SubscriptionError"
+    example:
+      assetClass: "CRYPTO"
+      symbols: ["BTC-USD", "ETH-USD", "ADA-USD"]
+
+  subscribe_to_asset_class:
+    method_name: "SubscribeToAssetClass"
+    description: "Subscribe to all symbols within an asset class"
+    authentication: "optional"
+    parameters:
+      - name: "assetClass"
+        type: "string"
+        required: true
+        enum: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+    responses:
+      - "SubscriptionConfirmed"
+      - "SubscriptionError"
+
+  unsubscribe_from_price_updates:
+    method_name: "UnsubscribeFromPriceUpdates"
+    description: "Unsubscribe from specific symbols"
+    authentication: "optional"
+    parameters:
+      - name: "assetClass"
+        type: "string"
+        required: true
+      - name: "symbols"
+        type: "array"
+        required: true
+        items:
+          type: "string"
+    responses:
+      - "UnsubscriptionConfirmed"
+
+  subscribe_to_market_status:
+    method_name: "SubscribeToMarketStatus"
+    description: "Subscribe to market status updates"
+    authentication: "optional"
+    parameters:
+      - name: "markets"
+        type: "array"
+        required: true
+        items:
+          type: "string"
+          enum: ["CRYPTO", "BIST", "NASDAQ", "FOREX"]
+    responses:
+      - "MarketStatusSubscriptionConfirmed"
+
+  get_market_status:
+    method_name: "GetMarketStatus"
+    description: "Get current market status for all tracked markets"
+    authentication: "none"
+    parameters: []
+    responses:
+      - "CurrentMarketStatus"
+
+  # Heartbeat
+  ping:
+    method_name: "Ping"
+    description: "Send heartbeat ping to server"
+    authentication: "none"
+    parameters: []
+    responses:
+      - "Heartbeat"
+
+  # Legacy Methods (Deprecated)
+  subscribe_to_crypto:
+    method_name: "SubscribeToCrypto"
+    description: "DEPRECATED - Use SubscribeToPriceUpdates with CRYPTO asset class"
+    status: "deprecated"
+    deprecation_date: "2024-09-24"
+    authentication: "optional"
+    parameters:
+      - name: "symbols"
+        type: "array"
+        items:
+          type: "string"
+    migration_note: "Use SubscribeToPriceUpdates('CRYPTO', symbols)"
+
+# ====================================================================
+# CONNECTION GROUPS AND ROUTING
+# ====================================================================
+connection_groups:
+  asset_class_groups:
+    pattern: "AssetClass_{AssetClassName}"
+    description: "Groups for asset class-wide broadcasts"
+    examples:
+      - "AssetClass_CRYPTO"
+      - "AssetClass_STOCK_BIST"
+      - "AssetClass_STOCK_NASDAQ"
+
+  symbol_groups:
+    pattern: "{AssetClassName}_{SymbolTicker}"
+    description: "Groups for individual symbol updates"
+    examples:
+      - "CRYPTO_BTC-USD"
+      - "STOCK_BIST_THYAO"
+      - "STOCK_NASDAQ_AAPL"
+
+  market_status_groups:
+    pattern: "MarketStatus_{MarketName}"
+    description: "Groups for market status updates"
+    examples:
+      - "MarketStatus_CRYPTO"
+      - "MarketStatus_BIST"
+      - "MarketStatus_NASDAQ"
+
+  user_groups:
+    pattern: "User_{UserId}"
+    description: "Authenticated user-specific groups"
+    authentication: "required"
+    examples:
+      - "User_550e8400-e29b-41d4-a716-446655440001"
+
+# ====================================================================
+# BACKWARD COMPATIBILITY MAPPING
+# ====================================================================
+backward_compatibility:
+  legacy_event_mapping:
+    "ReceivePriceUpdate": "PriceUpdate"
+    "ReceiveBatchPriceUpdate": "BatchPriceUpdate"
+    "ReceiveMarketData": "BatchPriceUpdate"
+    "ReceiveMarketStatusUpdate": "MarketStatusUpdate"
+    "ReceiveSignalUpdate": "SignalUpdate"  # To be deprecated
+    "ReceiveSubscriptionConfirmed": "SubscriptionConfirmed"
+    "ReceiveSubscriptionError": "SubscriptionError"
+
+  migration_period:
+    start_date: "2024-09-24"
+    end_date: "2024-12-24"
+    strategy: "Dual emission - both old and new event names"
+    warning_headers: true
+
+# ====================================================================
+# ERROR HANDLING
+# ====================================================================
+error_handling:
+  connection_errors:
+    authentication_failed:
+      code: "AUTH_FAILED"
+      message: "Invalid or expired authentication token"
+      action: "Reconnect with valid token"
+
+    rate_limit_exceeded:
+      code: "RATE_LIMIT"
+      message: "Too many subscription requests"
+      action: "Wait before retrying"
+      retry_after: "30 seconds"
+
+  subscription_errors:
+    invalid_asset_class:
+      code: "INVALID_ASSET_CLASS"
+      message: "Unsupported asset class"
+      supported_classes: ["CRYPTO", "STOCK_BIST", "STOCK_NASDAQ", "FOREX"]
+
+    symbol_not_found:
+      code: "SYMBOL_NOT_FOUND"
+      message: "One or more symbols not found"
+      action: "Check symbol availability"
+
+    max_subscriptions_exceeded:
+      code: "MAX_SUBSCRIPTIONS"
+      message: "Maximum number of subscriptions reached"
+      limit: 100
+
+# ====================================================================
+# PERFORMANCE AND SCALING
+# ====================================================================
+performance:
+  message_throughput:
+    target: "10,000 messages/second per hub"
+    measurement: "95th percentile latency < 100ms"
+
+  connection_limits:
+    per_server: "10,000 concurrent connections"
+    per_user: "10 concurrent connections"
+    total_subscriptions: "100 per connection"
+
+  caching_strategy:
+    price_data: "In-memory cache, 1-second TTL"
+    market_status: "In-memory cache, 30-second TTL"
+    symbol_metadata: "Redis cache, 1-hour TTL"
+
+# ====================================================================
+# MONITORING AND OBSERVABILITY
+# ====================================================================
+monitoring:
+  metrics:
+    - "websocket_connections_total"
+    - "websocket_messages_sent_total"
+    - "websocket_messages_received_total"
+    - "websocket_subscription_errors_total"
+    - "websocket_connection_duration_seconds"
+    - "websocket_message_latency_seconds"
+
+  health_checks:
+    - "Hub connectivity"
+    - "Data provider connectivity"
+    - "Message queue health"
+    - "Database connectivity"
+
+  logging:
+    connection_events: "INFO level"
+    subscription_events: "INFO level"
+    errors: "ERROR level"
+    performance_issues: "WARN level"
+
+# ====================================================================
+# TESTING STRATEGY
+# ====================================================================
+testing:
+  unit_tests:
+    - "Event serialization/deserialization"
+    - "Connection group management"
+    - "Authentication validation"
+    - "Rate limiting"
+
+  integration_tests:
+    - "End-to-end subscription flow"
+    - "Cross-asset class subscriptions"
+    - "Error scenario handling"
+    - "Backward compatibility"
+
+  load_tests:
+    - "Connection scaling (1k, 5k, 10k connections)"
+    - "Message throughput (1k, 5k, 10k messages/sec)"
+    - "Memory usage under load"
+    - "Failover scenarios"
+
+  compatibility_tests:
+    - "Web frontend compatibility"
+    - "Mobile app compatibility"
+    - "Legacy client support"
+    - "Event name mapping validation"
+
+# ====================================================================
+# DEPLOYMENT CONFIGURATION
+# ====================================================================
+deployment:
+  development:
+    url: "ws://localhost:5002/hubs/market-data"
+    authentication: "optional"
+    logging_level: "DEBUG"
+
+  staging:
+    url: "wss://staging-api.mytrader.com/hubs/market-data"
+    authentication: "required"
+    logging_level: "INFO"
+
+  production:
+    url: "wss://api.mytrader.com/hubs/market-data"
+    authentication: "required"
+    logging_level: "WARN"
+    load_balancing: "sticky sessions"
+    ssl_termination: "load balancer"
+
+# ====================================================================
+# MIGRATION TIMELINE
+# ====================================================================
+migration_timeline:
+  phase_1_immediate:
+    duration: "1 week"
+    priority: "Critical (RICE 576)"
+    tasks:
+      - "Fix port configuration to 5002"
+      - "Deploy unified event naming"
+      - "Enable dual emission for backward compatibility"
+
+  phase_2_standardization:
+    duration: "2 weeks"
+    priority: "High (RICE 432)"
+    tasks:
+      - "Update frontend clients to use new event names"
+      - "Implement volume leaders endpoint integration"
+      - "Complete hub consolidation"
+
+  phase_3_cleanup:
+    duration: "90 days"
+    priority: "Medium"
+    tasks:
+      - "Remove legacy event names"
+      - "Deprecate old hub endpoints"
+      - "Update client documentation"

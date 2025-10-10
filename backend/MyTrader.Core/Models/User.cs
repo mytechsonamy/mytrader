@@ -50,4 +50,5 @@ public class User
     public ICollection<BacktestResults> BacktestResults { get; set; } = new List<BacktestResults>();
     public ICollection<TradeHistory> TradeHistory { get; set; } = new List<TradeHistory>();
     public ICollection<PasswordReset> PasswordResets { get; set; } = new List<PasswordReset>();
+    public ICollection<UserDashboardPreferences> DashboardPreferences { get; set; } = new List<UserDashboardPreferences>();
 }

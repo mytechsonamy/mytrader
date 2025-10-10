@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL
+  ? `${import.meta.env.VITE_BACKEND_URL}/api/${import.meta.env.VITE_API_VERSION || 'v1'}`
+  : 'http://localhost:5002/api/v1';
 
 export interface LoginRequest {
   email: string;
@@ -15,21 +17,39 @@ export interface RegisterRequest {
   phone: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-  };
+export interface UserResponse {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  telegramId?: string;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  lastLogin?: string;
+  createdAt: string;
+  updatedAt: string;
+  plan: string;
+}
+
+export interface UserSessionResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: UserResponse;
+  accessTokenExpiresAt: string;
+  refreshTokenExpiresAt: string;
+  tokenType: string;
+  jwtId: string;
+  sessionId: string;
 }
 
 class AuthService {
   private token: string | null = null;
+  private refreshToken: string | null = null;
 
   constructor() {
     this.token = localStorage.getItem('authToken');
+    this.refreshToken = localStorage.getItem('refreshToken');
     if (this.token) {
       this.setAuthHeader(this.token);
     }
@@ -43,18 +63,22 @@ class AuthService {
     delete axios.defaults.headers.common['Authorization'];
   }
 
-  async login(credentials: LoginRequest): Promise<AuthResponse> {
+  private storeTokens(sessionResponse: UserSessionResponse) {
+    this.token = sessionResponse.accessToken;
+    this.refreshToken = sessionResponse.refreshToken;
+    localStorage.setItem('authToken', sessionResponse.accessToken);
+    localStorage.setItem('refreshToken', sessionResponse.refreshToken);
+    localStorage.setItem('sessionId', sessionResponse.sessionId);
+    localStorage.setItem('user', JSON.stringify(sessionResponse.user));
+    this.setAuthHeader(sessionResponse.accessToken);
+  }
+
+  async login(credentials: LoginRequest): Promise<UserSessionResponse> {
     try {
       console.log('Attempting login with:', credentials.email);
       const response = await axios.post(`${API_BASE_URL}/auth/login`, credentials);
-      
-      const token = response.data.token;
-      if (token) {
-        this.token = token;
-        localStorage.setItem('authToken', token);
-        this.setAuthHeader(token);
-      }
-      
+
+      this.storeTokens(response.data);
       return response.data;
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);
@@ -62,18 +86,12 @@ class AuthService {
     }
   }
 
-  async register(userData: RegisterRequest): Promise<AuthResponse> {
+  async register(userData: RegisterRequest): Promise<UserSessionResponse> {
     try {
       console.log('Attempting registration with:', userData.email);
       const response = await axios.post(`${API_BASE_URL}/auth/register`, userData);
-      
-      const token = response.data.token;
-      if (token) {
-        this.token = token;
-        localStorage.setItem('authToken', token);
-        this.setAuthHeader(token);
-      }
-      
+
+      this.storeTokens(response.data);
       return response.data;
     } catch (error: any) {
       console.error('Registration error:', error.response?.data || error.message);
@@ -83,7 +101,11 @@ class AuthService {
 
   logout() {
     this.token = null;
+    this.refreshToken = null;
     localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('sessionId');
+    localStorage.removeItem('user');
     this.removeAuthHeader();
   }
 
@@ -95,9 +117,25 @@ class AuthService {
     return this.token;
   }
 
+  getRefreshToken(): string | null {
+    return this.refreshToken;
+  }
+
+  getStoredUser(): UserResponse | null {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        return JSON.parse(userStr);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
   async checkHealth(): Promise<any> {
     try {
-      const response = await axios.get(`http://localhost:8080/health`);
+      const response = await axios.get('/health');
       return response.data;
     } catch (error: any) {
       console.error('Health check failed:', error.message);

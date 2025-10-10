@@ -12,7 +12,21 @@
     "install:mobile": "cd frontend/mobile && npm install",
     "start:mobile": "cd frontend/mobile && npm start",
     "build:backend": "cd backend && dotnet build",
-    "test:integration": "./scripts/integration-test.sh"
+    "ci:validate": "npm run quality-gate && npm run test:critical",
+    "ci:pr": "npm run lint:hooks && npm run test:smoke",
+    "ci:main": "npm run test:all",
+    "health:websocket": "node scripts/websocket-health-check.js",
+    "test:integration": "./scripts/integration-test.sh",
+    "test:all": "npm run test:backend && npm run test:web && npm run test:mobile",
+    "test:backend": "cd backend && dotnet test",
+    "test:web": "cd frontend/web && npm test",
+    "test:mobile": "cd frontend/mobile && npm test",
+    "test:critical": "cd frontend/web && npm run test:critical",
+    "test:smoke": "npm run test:smoke:web && npm run test:smoke:mobile",
+    "test:smoke:web": "cd frontend/web && npm run test:smoke",
+    "test:smoke:mobile": "cd frontend/mobile && npm run test:smoke",
+    "test:e2e": "cd frontend/web && npm run test:e2e",
+    "test:websocket": "cd frontend/web && npm run test:websocket"
   },
   "devDependencies": {
     "husky": "^8.0.3",

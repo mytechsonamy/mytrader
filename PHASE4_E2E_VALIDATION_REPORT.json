@@ -1,0 +1,67 @@
+{
+  "success": false,
+  "testResults": {
+    "total": 5,
+    "passed": 2,
+    "failed": 3,
+    "errors": [
+      {
+        "error": "NoSymbols",
+        "message": "No valid symbols provided for subscription",
+        "timestamp": "2025-10-07T20:28:23.487Z"
+      },
+      {
+        "error": "NoSymbols",
+        "message": "No valid symbols provided for subscription",
+        "timestamp": "2025-10-07T20:28:27.496Z"
+      },
+      {
+        "error": "NoSymbols",
+        "message": "No valid symbols provided for subscription",
+        "timestamp": "2025-10-07T20:28:31.506Z"
+      },
+      {
+        "error": "NoSymbols",
+        "message": "No valid symbols provided for subscription",
+        "timestamp": "2025-10-07T20:28:35.512Z"
+      },
+      {
+        "error": "NoSymbols",
+        "message": "No valid symbols provided for subscription",
+        "timestamp": "2025-10-07T20:28:39.517Z"
+      }
+    ],
+    "subscriptions": [],
+    "priceUpdates": [],
+    "startTime": 1759868901426,
+    "endTime": 1759868934517
+  },
+  "metrics": {
+    "priceUpdateCount": 0,
+    "subscriptionCount": 0,
+    "errorCount": 5,
+    "connectionAttempts": 1
+  },
+  "criteria": [
+    {
+      "name": "Array subscriptions work (object[] handling)",
+      "passed": false
+    },
+    {
+      "name": "No \"NoSymbols\" errors for valid arrays",
+      "passed": true
+    },
+    {
+      "name": "Price updates received",
+      "passed": false
+    },
+    {
+      "name": "Error handling works correctly",
+      "passed": true
+    },
+    {
+      "name": "Subscription confirmations received",
+      "passed": false
+    }
+  ]
+}

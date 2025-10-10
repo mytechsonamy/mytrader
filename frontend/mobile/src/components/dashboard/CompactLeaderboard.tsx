@@ -70,7 +70,8 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = memo(({
     }
   };
 
-  const formatCurrency = (amount: number): string => {
+  const formatCurrency = (amount: number | undefined | null): string => {
+    if (amount === undefined || amount === null || isNaN(amount)) return '$0';
     if (amount >= 1000000) {
       return `$${(amount / 1000000).toFixed(1)}M`;
     } else if (amount >= 1000) {
@@ -79,7 +80,8 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = memo(({
     return `$${amount.toFixed(0)}`;
   };
 
-  const formatPercentage = (percent: number): string => {
+  const formatPercentage = (percent: number | undefined | null): string => {
+    if (percent === undefined || percent === null || isNaN(percent)) return '0.0%';
     const sign = percent >= 0 ? '+' : '';
     return `${sign}${percent.toFixed(1)}%`;
   };
@@ -143,7 +145,7 @@ const LeaderboardRow: React.FC<LeaderboardRowProps> = memo(({
       </View>
 
       <View style={styles.metricsSection}>
-        <Text style={styles.winRate}>{entry.winRate.toFixed(0)}%</Text>
+        <Text style={styles.winRate}>{entry.winRate ? entry.winRate.toFixed(0) : '0'}%</Text>
         <Text style={styles.trades}>{entry.totalTrades} işlem</Text>
       </View>
     </TouchableOpacity>
@@ -457,12 +459,12 @@ const CompactLeaderboard: React.FC<CompactLeaderboardProps> = ({
                   styles.userReturn,
                   { color: userRanking.returnPercent >= 0 ? '#10b981' : '#ef4444' }
                 ]}>
-                  {userRanking.returnPercent >= 0 ? '+' : ''}{userRanking.returnPercent.toFixed(1)}%
+                  {userRanking.returnPercent >= 0 ? '+' : ''}{userRanking.returnPercent ? userRanking.returnPercent.toFixed(1) : '0.0'}%
                 </Text>
               </View>
               <View style={styles.userStatsRow}>
                 <Text style={styles.userPercentile}>
-                  En iyi %{userRanking.percentile.toFixed(1)} dilimde
+                  En iyi %{userRanking.percentile ? userRanking.percentile.toFixed(1) : '0.0'} dilimde
                 </Text>
                 <Text style={styles.userEligibility}>
                   {userRanking.isEligible ? '✅ Uygun' : '❌ Uygun değil'}

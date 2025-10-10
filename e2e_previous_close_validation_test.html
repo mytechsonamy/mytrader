@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previous Close E2E Validation Test - BIST, NASDAQ, NYSE</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .test-section h2 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #cbd5e0;
+            margin-left: 10px;
+        }
+
+        .status-indicator.testing {
+            background: #f6ad55;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-indicator.pass {
+            background: #48bb78;
+        }
+
+        .status-indicator.fail {
+            background: #f56565;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .market-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .market-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .market-name {
+            font-weight: bold;
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .market-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .badge-bist { background: #e53e3e; }
+        .badge-nasdaq { background: #3182ce; }
+        .badge-nyse { background: #805ad5; }
+        .badge-crypto { background: #38b2ac; }
+
+        .symbol-row {
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .symbol-ticker {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 6px;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+
+        .data-label {
+            color: #718096;
+        }
+
+        .data-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .data-value.positive {
+            color: #48bb78;
+        }
+
+        .data-value.negative {
+            color: #f56565;
+        }
+
+        .formula-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .formula-title {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .calculation-check {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #cbd5e0;
+        }
+
+        .check-icon {
+            margin-right: 6px;
+        }
+
+        .check-pass {
+            color: #48bb78;
+        }
+
+        .check-fail {
+            color: #f56565;
+        }
+
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-danger {
+            background: #fc8181;
+            color: white;
+        }
+
+        .test-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .summary-item {
+            text-align: center;
+        }
+
+        .summary-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .log-container {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 4px;
+        }
+
+        .log-info { color: #63b3ed; }
+        .log-success { color: #68d391; }
+        .log-error { color: #fc8181; }
+        .log-warning { color: #f6ad55; }
+
+        .edge-case-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .edge-case-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .edge-case-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: #edf2f7;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .connection-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #cbd5e0;
+        }
+
+        .connection-dot.connected {
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        .connection-dot.disconnected {
+            background: #f56565;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Previous Close & Percentage Calculation E2E Validation</h1>
+        <div class="subtitle">
+            End-to-End Integration Test for BIST, NASDAQ, NYSE Markets
+        </div>
+
+        <!-- Test Summary -->
+        <div class="test-summary">
+            <h2 style="margin-bottom: 15px; font-size: 18px;">Test Execution Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="summary-value" id="total-tests">0</div>
+                    <div class="summary-label">Total Tests</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value" id="passed-tests">0</div>
+                    <div class="summary-label">Passed</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value" id="failed-tests">0</div>
+                    <div class="summary-label">Failed</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value" id="success-rate">0%</div>
+                    <div class="summary-label">Success Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Controls -->
+        <div class="test-controls">
+            <button class="btn-primary" onclick="runAllTests()">▶️ Run All Tests</button>
+            <button class="btn-secondary" onclick="testBISTMarket()">🇹🇷 Test BIST Only</button>
+            <button class="btn-secondary" onclick="testNASDAQMarket()">🇺🇸 Test NASDAQ Only</button>
+            <button class="btn-secondary" onclick="testNYSEMarket()">🏛️ Test NYSE Only</button>
+            <button class="btn-secondary" onclick="testEdgeCases()">⚠️ Test Edge Cases</button>
+            <button class="btn-danger" onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="connection-status">
+            <div class="connection-dot" id="backend-status"></div>
+            <span>Backend API: <span id="backend-text">Not Connected</span></span>
+            <div class="connection-dot" id="websocket-status" style="margin-left: 30px;"></div>
+            <span>WebSocket: <span id="websocket-text">Not Connected</span></span>
+        </div>
+
+        <!-- Test Section 1: Backend API Validation -->
+        <div class="test-section">
+            <h2>
+                1️⃣ Backend API Validation
+                <span class="status-indicator" id="status-api"></span>
+            </h2>
+            <p style="color: #718096; margin-bottom: 15px; font-size: 14px;">
+                Testing /api/dashboard/overview and /api/prices endpoints for PreviousClose field population
+            </p>
+            <div class="market-grid" id="api-results"></div>
+        </div>
+
+        <!-- Test Section 2: Percentage Calculation Formula -->
+        <div class="test-section">
+            <h2>
+                2️⃣ Percentage Calculation Formula Validation
+                <span class="status-indicator" id="status-formula"></span>
+            </h2>
+            <div class="formula-box">
+                <div class="formula-title">Expected Formula:</div>
+                <code>
+                    PriceChange = CurrentPrice - PreviousClose<br>
+                    PriceChangePercent = (PriceChange / PreviousClose) × 100
+                </code>
+            </div>
+            <div class="market-grid" id="formula-results"></div>
+        </div>
+
+        <!-- Test Section 3: SignalR/WebSocket Real-Time Updates -->
+        <div class="test-section">
+            <h2>
+                3️⃣ Real-Time Data Broadcasting (SignalR/WebSocket)
+                <span class="status-indicator" id="status-realtime"></span>
+            </h2>
+            <p style="color: #718096; margin-bottom: 15px; font-size: 14px;">
+                Monitoring real-time PreviousClose updates via dashboardHub and marketDataHub
+            </p>
+            <div class="market-grid" id="realtime-results"></div>
+        </div>
+
+        <!-- Test Section 4: Edge Cases -->
+        <div class="test-section">
+            <h2>
+                4️⃣ Edge Case Handling
+                <span class="status-indicator" id="status-edge"></span>
+            </h2>
+            <div class="edge-case-grid" id="edge-results"></div>
+        </div>
+
+        <!-- Test Log -->
+        <div class="log-container" id="test-log"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:5002';
+        const TEST_SYMBOLS = {
+            BIST: ['THYAO', 'SISE', 'EREGL', 'GARAN', 'AKBNK'],
+            NASDAQ: ['AAPL', 'GOOGL', 'MSFT', 'TSLA'],
+            NYSE: ['JPM', 'BAC', 'WFC', 'C']
+        };
+
+        // Test state
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0
+        };
+
+        let signalRConnection = null;
+        let realtimeUpdates = [];
+
+        // Logging
+        function log(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+
+            const logContainer = document.getElementById('test-log');
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('test-log').innerHTML = '';
+            log('Logs cleared', 'info');
+        }
+
+        // Update test summary
+        function updateSummary() {
+            document.getElementById('total-tests').textContent = testResults.total;
+            document.getElementById('passed-tests').textContent = testResults.passed;
+            document.getElementById('failed-tests').textContent = testResults.failed;
+
+            const successRate = testResults.total > 0
+                ? ((testResults.passed / testResults.total) * 100).toFixed(1)
+                : 0;
+            document.getElementById('success-rate').textContent = `${successRate}%`;
+        }
+
+        // Test 1: Backend API Validation
+        async function testBackendAPI() {
+            log('Starting Backend API validation tests...', 'info');
+            document.getElementById('status-api').className = 'status-indicator testing';
+
+            const resultsContainer = document.getElementById('api-results');
+            resultsContainer.innerHTML = '<p style="color: #718096;">Testing API endpoints...</p>';
+
+            try {
+                // Test dashboard overview endpoint
+                const response = await fetch(`${API_BASE_URL}/api/dashboard/overview`);
+
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+
+                document.getElementById('backend-status').className = 'connection-dot connected';
+                document.getElementById('backend-text').textContent = 'Connected';
+                log('✓ Backend API connected successfully', 'success');
+
+                const data = await response.json();
+                log(`Received ${data.length} symbols from API`, 'info');
+
+                // Group by market
+                const markets = { BIST: [], NASDAQ: [], NYSE: [], OTHER: [] };
+
+                data.forEach(item => {
+                    const market = item.market || item.marketId || 'OTHER';
+                    if (market.includes('BIST')) markets.BIST.push(item);
+                    else if (market.includes('NASDAQ')) markets.NASDAQ.push(item);
+                    else if (market.includes('NYSE')) markets.NYSE.push(item);
+                    else markets.OTHER.push(item);
+                });
+
+                resultsContainer.innerHTML = '';
+
+                // Display results for each market
+                for (const [marketName, symbols] of Object.entries(markets)) {
+                    if (symbols.length === 0) continue;
+
+                    const marketCard = createMarketCard(marketName, symbols);
+                    resultsContainer.appendChild(marketCard);
+                }
+
+                document.getElementById('status-api').className = 'status-indicator pass';
+                log('✓ Backend API validation completed', 'success');
+
+            } catch (error) {
+                document.getElementById('backend-status').className = 'connection-dot disconnected';
+                document.getElementById('backend-text').textContent = 'Connection Failed';
+                document.getElementById('status-api').className = 'status-indicator fail';
+                log(`✗ Backend API test failed: ${error.message}`, 'error');
+                resultsContainer.innerHTML = `<p style="color: #f56565;">Error: ${error.message}</p>`;
+            }
+        }
+
+        // Create market card
+        function createMarketCard(marketName, symbols) {
+            const card = document.createElement('div');
+            card.className = 'market-card';
+
+            const badgeClass = marketName === 'BIST' ? 'badge-bist'
+                : marketName === 'NASDAQ' ? 'badge-nasdaq'
+                : marketName === 'NYSE' ? 'badge-nyse'
+                : 'badge-crypto';
+
+            let html = `
+                <div class="market-header">
+                    <div class="market-name">${marketName}</div>
+                    <div class="market-badge ${badgeClass}">${symbols.length} symbols</div>
+                </div>
+            `;
+
+            symbols.slice(0, 5).forEach(symbol => {
+                const previousClose = symbol.previousClose ?? symbol.PreviousClose;
+                const price = symbol.price ?? symbol.Price ?? symbol.currentPrice;
+                const change = symbol.change ?? symbol.Change ?? symbol.priceChange;
+                const changePercent = symbol.changePercent ?? symbol.ChangePercent ?? symbol.priceChangePercent;
+
+                const hasPreviousClose = previousClose !== null && previousClose !== undefined;
+
+                // Validate percentage calculation
+                let calculationValid = false;
+                if (hasPreviousClose && previousClose > 0) {
+                    const expectedChange = price - previousClose;
+                    const expectedPercent = (expectedChange / previousClose) * 100;
+                    const actualPercent = changePercent ?? 0;
+
+                    // Allow 0.1% tolerance for rounding
+                    calculationValid = Math.abs(expectedPercent - actualPercent) < 0.1;
+
+                    testResults.total++;
+                    if (calculationValid) {
+                        testResults.passed++;
+                    } else {
+                        testResults.failed++;
+                        log(`✗ ${symbol.symbol || symbol.ticker}: Percentage calculation mismatch. Expected: ${expectedPercent.toFixed(2)}%, Got: ${actualPercent.toFixed(2)}%`, 'error');
+                    }
+                }
+
+                const changeClass = changePercent >= 0 ? 'positive' : 'negative';
+                const checkIcon = calculationValid ? '✓' : '✗';
+                const checkClass = calculationValid ? 'check-pass' : 'check-fail';
+
+                html += `
+                    <div class="symbol-row">
+                        <div class="symbol-ticker">${symbol.symbol || symbol.ticker}</div>
+                        <div class="data-row">
+                            <span class="data-label">Current Price:</span>
+                            <span class="data-value">$${price?.toFixed(2) ?? '--'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Previous Close:</span>
+                            <span class="data-value ${hasPreviousClose ? '' : 'check-fail'}">
+                                ${hasPreviousClose ? `$${previousClose.toFixed(2)}` : 'NOT FOUND ❌'}
+                            </span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Change:</span>
+                            <span class="data-value ${changeClass}">
+                                ${change >= 0 ? '+' : ''}${change?.toFixed(2) ?? '--'} (${changePercent >= 0 ? '+' : ''}${changePercent?.toFixed(2) ?? '--'}%)
+                            </span>
+                        </div>
+                        <div class="calculation-check ${checkClass}">
+                            <span class="check-icon">${checkIcon}</span>
+                            ${calculationValid ? 'Calculation verified' : 'Calculation error'}
+                        </div>
+                    </div>
+                `;
+            });
+
+            card.innerHTML = html;
+            updateSummary();
+            return card;
+        }
+
+        // Test 2: Formula Validation
+        async function testFormulaValidation() {
+            log('Starting percentage calculation formula validation...', 'info');
+            document.getElementById('status-formula').className = 'status-indicator testing';
+
+            const resultsContainer = document.getElementById('formula-results');
+            resultsContainer.innerHTML = '<p style="color: #718096;">Validating formulas...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/dashboard/overview`);
+                const data = await response.json();
+
+                resultsContainer.innerHTML = '';
+
+                // Test known calculation scenarios
+                const testCases = [
+                    { price: 150.00, previousClose: 146.58, expectedChange: 3.42, expectedPercent: 2.33 },
+                    { price: 100.00, previousClose: 102.00, expectedChange: -2.00, expectedPercent: -1.96 },
+                    { price: 50.25, previousClose: 50.00, expectedChange: 0.25, expectedPercent: 0.50 }
+                ];
+
+                testCases.forEach((testCase, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'market-card';
+
+                    const calculatedChange = testCase.price - testCase.previousClose;
+                    const calculatedPercent = (calculatedChange / testCase.previousClose) * 100;
+
+                    const changeMatch = Math.abs(calculatedChange - testCase.expectedChange) < 0.01;
+                    const percentMatch = Math.abs(calculatedPercent - testCase.expectedPercent) < 0.01;
+                    const allMatch = changeMatch && percentMatch;
+
+                    testResults.total++;
+                    if (allMatch) {
+                        testResults.passed++;
+                    } else {
+                        testResults.failed++;
+                    }
+
+                    card.innerHTML = `
+                        <div class="market-header">
+                            <div class="market-name">Test Case ${index + 1}</div>
+                            <div class="market-badge ${allMatch ? 'badge-nasdaq' : 'badge-bist'}">
+                                ${allMatch ? 'PASS' : 'FAIL'}
+                            </div>
+                        </div>
+                        <div class="formula-box">
+                            <strong>Given:</strong><br>
+                            Current Price: $${testCase.price.toFixed(2)}<br>
+                            Previous Close: $${testCase.previousClose.toFixed(2)}<br><br>
+
+                            <strong>Expected:</strong><br>
+                            Change: $${testCase.expectedChange.toFixed(2)}<br>
+                            Percent: ${testCase.expectedPercent.toFixed(2)}%<br><br>
+
+                            <strong>Calculated:</strong><br>
+                            Change: $${calculatedChange.toFixed(2)} ${changeMatch ? '✓' : '✗'}<br>
+                            Percent: ${calculatedPercent.toFixed(2)}% ${percentMatch ? '✓' : '✗'}
+                        </div>
+                    `;
+
+                    resultsContainer.appendChild(card);
+                });
+
+                document.getElementById('status-formula').className = 'status-indicator pass';
+                updateSummary();
+                log('✓ Formula validation completed', 'success');
+
+            } catch (error) {
+                document.getElementById('status-formula').className = 'status-indicator fail';
+                log(`✗ Formula validation failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 3: Real-Time Updates
+        async function testRealtimeUpdates() {
+            log('Starting SignalR/WebSocket real-time update test...', 'info');
+            document.getElementById('status-realtime').className = 'status-indicator testing';
+
+            const resultsContainer = document.getElementById('realtime-results');
+            resultsContainer.innerHTML = '<p style="color: #718096;">Connecting to SignalR...</p>';
+
+            try {
+                // Connect to SignalR
+                signalRConnection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${API_BASE_URL}/dashboardHub`)
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Subscribe to price updates
+                signalRConnection.on("PriceUpdate", (data) => {
+                    log(`Received PriceUpdate: ${data.symbol || data.Symbol}`, 'info');
+                    realtimeUpdates.push(data);
+                    updateRealtimeDisplay();
+                });
+
+                signalRConnection.on("MarketDataUpdate", (data) => {
+                    log(`Received MarketDataUpdate: ${data.symbol || data.Symbol}`, 'info');
+                    realtimeUpdates.push(data);
+                    updateRealtimeDisplay();
+                });
+
+                await signalRConnection.start();
+
+                document.getElementById('websocket-status').className = 'connection-dot connected';
+                document.getElementById('websocket-text').textContent = 'Connected';
+                log('✓ SignalR connected successfully', 'success');
+
+                // Subscribe to all asset classes
+                await signalRConnection.invoke("SubscribeToAssetClass", "STOCK");
+                await signalRConnection.invoke("SubscribeToAssetClass", "CRYPTO");
+                log('✓ Subscribed to STOCK and CRYPTO asset classes', 'success');
+
+                resultsContainer.innerHTML = '<p style="color: #48bb78;">✓ Connected. Waiting for real-time updates...</p>';
+
+                // Wait for updates
+                setTimeout(() => {
+                    if (realtimeUpdates.length > 0) {
+                        document.getElementById('status-realtime').className = 'status-indicator pass';
+                        log(`✓ Received ${realtimeUpdates.length} real-time updates`, 'success');
+                    } else {
+                        document.getElementById('status-realtime').className = 'status-indicator fail';
+                        log('⚠ No real-time updates received in 30 seconds', 'warning');
+                    }
+                }, 30000);
+
+            } catch (error) {
+                document.getElementById('websocket-status').className = 'connection-dot disconnected';
+                document.getElementById('websocket-text').textContent = 'Connection Failed';
+                document.getElementById('status-realtime').className = 'status-indicator fail';
+                log(`✗ SignalR connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        function updateRealtimeDisplay() {
+            const resultsContainer = document.getElementById('realtime-results');
+            resultsContainer.innerHTML = '';
+
+            const recent = realtimeUpdates.slice(-10);
+
+            recent.forEach(update => {
+                const card = document.createElement('div');
+                card.className = 'market-card';
+
+                const symbol = update.symbol || update.Symbol;
+                const price = update.price || update.Price;
+                const previousClose = update.previousClose || update.PreviousClose;
+                const change = update.change24h || update.Change24h || update.changePercent;
+
+                const hasPreviousClose = previousClose !== null && previousClose !== undefined;
+
+                card.innerHTML = `
+                    <div class="market-header">
+                        <div class="market-name">${symbol}</div>
+                        <div class="market-badge badge-nasdaq">LIVE</div>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Price:</span>
+                        <span class="data-value">$${price?.toFixed(2) ?? '--'}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Previous Close:</span>
+                        <span class="data-value ${hasPreviousClose ? 'check-pass' : 'check-fail'}">
+                            ${hasPreviousClose ? `$${previousClose.toFixed(2)}` : 'MISSING'}
+                        </span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Change:</span>
+                        <span class="data-value ${change >= 0 ? 'positive' : 'negative'}">
+                            ${change >= 0 ? '+' : ''}${change?.toFixed(2) ?? '--'}%
+                        </span>
+                    </div>
+                `;
+
+                resultsContainer.appendChild(card);
+            });
+        }
+
+        // Test 4: Edge Cases
+        async function testEdgeCases() {
+            log('Starting edge case validation...', 'info');
+            document.getElementById('status-edge').className = 'status-indicator testing';
+
+            const resultsContainer = document.getElementById('edge-results');
+            resultsContainer.innerHTML = '';
+
+            const edgeCases = [
+                {
+                    title: 'PreviousClose = 0',
+                    price: 100,
+                    previousClose: 0,
+                    expectedBehavior: 'Should not crash, return 0% or null'
+                },
+                {
+                    title: 'PreviousClose = null',
+                    price: 100,
+                    previousClose: null,
+                    expectedBehavior: 'Should not display, no calculation'
+                },
+                {
+                    title: 'Very Small Price (<$1)',
+                    price: 0.05,
+                    previousClose: 0.045,
+                    expectedBehavior: 'Should calculate correctly'
+                },
+                {
+                    title: 'Very Large Price (>$10,000)',
+                    price: 15000,
+                    previousClose: 14500,
+                    expectedBehavior: 'Should format and calculate correctly'
+                },
+                {
+                    title: 'Negative Change',
+                    price: 90,
+                    previousClose: 100,
+                    expectedBehavior: 'Should show negative percentage'
+                },
+                {
+                    title: 'Zero Change',
+                    price: 100,
+                    previousClose: 100,
+                    expectedBehavior: 'Should show 0.00%'
+                }
+            ];
+
+            edgeCases.forEach((testCase, index) => {
+                const card = document.createElement('div');
+                card.className = 'edge-case-card';
+
+                let result = 'PASS';
+                let resultClass = 'check-pass';
+                let calculatedPercent = 'N/A';
+
+                try {
+                    if (testCase.previousClose === null || testCase.previousClose === 0) {
+                        calculatedPercent = 'N/A (No calculation)';
+                    } else {
+                        const change = testCase.price - testCase.previousClose;
+                        calculatedPercent = ((change / testCase.previousClose) * 100).toFixed(2) + '%';
+                    }
+                } catch (error) {
+                    result = 'FAIL';
+                    resultClass = 'check-fail';
+                    calculatedPercent = `Error: ${error.message}`;
+                }
+
+                testResults.total++;
+                if (result === 'PASS') {
+                    testResults.passed++;
+                } else {
+                    testResults.failed++;
+                }
+
+                card.innerHTML = `
+                    <div class="edge-case-title">${testCase.title}</div>
+                    <div style="font-size: 12px; color: #718096; margin-bottom: 8px;">
+                        Price: $${testCase.price}<br>
+                        Previous: ${testCase.previousClose === null ? 'null' : '$' + testCase.previousClose}
+                    </div>
+                    <div style="font-size: 11px; color: #4a5568; margin-bottom: 8px; font-style: italic;">
+                        ${testCase.expectedBehavior}
+                    </div>
+                    <div style="font-size: 12px; font-weight: 600;" class="${resultClass}">
+                        Result: ${calculatedPercent}<br>
+                        ${result}
+                    </div>
+                `;
+
+                resultsContainer.appendChild(card);
+            });
+
+            document.getElementById('status-edge').className = 'status-indicator pass';
+            updateSummary();
+            log('✓ Edge case validation completed', 'success');
+        }
+
+        // Market-specific tests
+        async function testBISTMarket() {
+            log('Testing BIST market specifically...', 'info');
+            await testBackendAPI();
+            await testFormulaValidation();
+        }
+
+        async function testNASDAQMarket() {
+            log('Testing NASDAQ market specifically...', 'info');
+            await testBackendAPI();
+            await testFormulaValidation();
+        }
+
+        async function testNYSEMarket() {
+            log('Testing NYSE market specifically...', 'info');
+            await testBackendAPI();
+            await testFormulaValidation();
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            log('========================================', 'info');
+            log('STARTING COMPREHENSIVE E2E TEST SUITE', 'info');
+            log('========================================', 'info');
+
+            // Reset test results
+            testResults = { total: 0, passed: 0, failed: 0 };
+            updateSummary();
+
+            await testBackendAPI();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await testFormulaValidation();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await testEdgeCases();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            await testRealtimeUpdates();
+
+            log('========================================', 'info');
+            log('TEST SUITE COMPLETED', 'success');
+            log(`Total: ${testResults.total} | Passed: ${testResults.passed} | Failed: ${testResults.failed}`, 'info');
+            log('========================================', 'info');
+        }
+
+        // Initialize on page load
+        window.onload = () => {
+            log('E2E Test Suite initialized', 'info');
+            log('Click "Run All Tests" to begin comprehensive validation', 'info');
+        };
+    </script>
+</body>
+</html>

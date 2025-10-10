@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>myTrader Frontend Validation Test</title>
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #0f1419; color: #f7fafc; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; background: #1c2128; border-radius: 8px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #48bb78; color: white; }
+        .error { background: #f56565; color: white; }
+        .info { background: #4299e1; color: white; }
+        .warning { background: #ed8936; color: white; }
+        #messages { max-height: 300px; overflow-y: auto; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 myTrader Frontend Validation Test</h1>
+
+        <div class="test-section">
+            <h2>📡 API Endpoints Test</h2>
+            <button class="btn-primary" onclick="testApiEndpoints()">Test API Endpoints</button>
+            <div id="api-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔌 WebSocket Connection Test</h2>
+            <button class="btn-primary" onclick="testWebSocket()">Test WebSocket Connection</button>
+            <button class="btn-danger" onclick="disconnectWebSocket()">Disconnect</button>
+            <div id="websocket-status"></div>
+            <div id="messages"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Data Validation Test</h2>
+            <button class="btn-primary" onclick="testDataFiltering()">Test Data Filtering</button>
+            <div id="data-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📈 Live Updates Test</h2>
+            <p>This will monitor for live price updates for 30 seconds:</p>
+            <button class="btn-success" onclick="monitorLiveUpdates()">Monitor Live Updates (30s)</button>
+            <div id="live-updates"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>✅ Test Summary</h2>
+            <div id="test-summary"></div>
+        </div>
+    </div>
+
+    <script>
+        let connection = null;
+        let testResults = {
+            apiEndpoints: false,
+            websocketConnection: false,
+            dataFiltering: false,
+            liveUpdates: false
+        };
+
+        const log = (message, type = 'info') => {
+            const messagesDiv = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+            messagesDiv.innerHTML += `<div class="test-result ${type}">[${timestamp}] ${message}</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        };
+
+        const updateStatus = (elementId, message, type = 'info') => {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="test-result ${type}">${message}</div>`;
+        };
+
+        async function testApiEndpoints() {
+            log('🔍 Testing API endpoints...', 'info');
+            updateStatus('api-results', '🔄 Testing API endpoints...', 'info');
+
+            try {
+                // Test crypto endpoint
+                const cryptoResponse = await fetch('http://localhost:5002/api/v1/market-data/crypto');
+                if (!cryptoResponse.ok) throw new Error(`Crypto API failed: ${cryptoResponse.status}`);
+                const cryptoData = await cryptoResponse.json();
+
+                log(`✅ Crypto API: ${cryptoData.length} symbols returned`, 'success');
+
+                // Test market overview
+                const overviewResponse = await fetch('http://localhost:5002/api/market-data/overview');
+                if (!overviewResponse.ok) throw new Error(`Overview API failed: ${overviewResponse.status}`);
+                const overviewData = await overviewResponse.json();
+
+                log('✅ Market Overview API: Working', 'success');
+
+                testResults.apiEndpoints = true;
+                updateStatus('api-results', '✅ All API endpoints are working correctly', 'success');
+
+            } catch (error) {
+                log(`❌ API Test Failed: ${error.message}`, 'error');
+                updateStatus('api-results', `❌ API Test Failed: ${error.message}`, 'error');
+                testResults.apiEndpoints = false;
+            }
+        }
+
+        async function testWebSocket() {
+            log('🚀 Testing WebSocket connection...', 'info');
+            updateStatus('websocket-status', '🔄 Connecting to WebSocket...', 'info');
+
+            try {
+                if (connection) {
+                    await connection.stop();
+                }
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5002/hubs/market-data")
+                    .configureLogging(signalR.LogLevel.Information)
+                    .build();
+
+                connection.on("PriceUpdate", (data) => {
+                    log(`📈 Price Update Received: ${JSON.stringify(data)}`, 'success');
+                });
+
+                connection.onclose((error) => {
+                    log(`🔌 Connection closed: ${error || 'Clean disconnect'}`, 'warning');
+                    updateStatus('websocket-status', '🔌 Connection closed', 'warning');
+                });
+
+                await connection.start();
+                log('✅ WebSocket connected successfully!', 'success');
+                updateStatus('websocket-status', '✅ WebSocket connected successfully', 'success');
+
+                // Subscribe to crypto symbols
+                const cryptoSymbols = ['BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD'];
+                await connection.invoke("SubscribeToPriceUpdates", "CRYPTO", cryptoSymbols);
+                log(`📡 Subscribed to symbols: ${cryptoSymbols.join(', ')}`, 'success');
+
+                testResults.websocketConnection = true;
+
+            } catch (error) {
+                log(`❌ WebSocket Test Failed: ${error.message}`, 'error');
+                updateStatus('websocket-status', `❌ WebSocket Test Failed: ${error.message}`, 'error');
+                testResults.websocketConnection = false;
+            }
+        }
+
+        async function disconnectWebSocket() {
+            if (connection) {
+                await connection.stop();
+                connection = null;
+                log('🔌 WebSocket disconnected', 'info');
+                updateStatus('websocket-status', '🔌 WebSocket disconnected', 'info');
+            }
+        }
+
+        async function testDataFiltering() {
+            log('🔍 Testing data filtering...', 'info');
+            updateStatus('data-results', '🔄 Testing data filtering...', 'info');
+
+            try {
+                const response = await fetch('http://localhost:5002/api/v1/market-data/crypto');
+                const data = await response.json();
+
+                // Expected filtered symbols (what should appear in UI)
+                const expectedSymbols = ['BTCUSD', 'ETHUSD', 'ADAUSD', 'SOLUSD', 'AVAXUSD'];
+                const actualSymbols = data.map(item => item.symbol);
+
+                log(`📊 Total symbols in API: ${actualSymbols.length}`, 'info');
+                log(`📊 API symbols: ${actualSymbols.join(', ')}`, 'info');
+                log(`🎯 Expected filtered symbols: ${expectedSymbols.join(', ')}`, 'info');
+
+                // Check if the filtered symbols are available
+                const availableFilteredSymbols = expectedSymbols.filter(symbol =>
+                    actualSymbols.includes(symbol)
+                );
+
+                log(`✅ Available filtered symbols: ${availableFilteredSymbols.join(', ')}`, 'success');
+
+                if (availableFilteredSymbols.length >= 3) {
+                    testResults.dataFiltering = true;
+                    updateStatus('data-results', `✅ Data filtering working: ${availableFilteredSymbols.length} symbols available`, 'success');
+                } else {
+                    updateStatus('data-results', `⚠️ Only ${availableFilteredSymbols.length} filtered symbols available`, 'warning');
+                }
+
+            } catch (error) {
+                log(`❌ Data Filtering Test Failed: ${error.message}`, 'error');
+                updateStatus('data-results', `❌ Data Filtering Test Failed: ${error.message}`, 'error');
+                testResults.dataFiltering = false;
+            }
+        }
+
+        function monitorLiveUpdates() {
+            log('⏱️ Starting 30-second live updates monitoring...', 'info');
+            updateStatus('live-updates', '🔄 Monitoring live updates for 30 seconds...', 'info');
+
+            let updateCount = 0;
+            const startTime = Date.now();
+
+            if (!connection || connection.state !== 'Connected') {
+                updateStatus('live-updates', '❌ WebSocket not connected. Please connect first.', 'error');
+                return;
+            }
+
+            const originalHandler = connection.handlers['PriceUpdate'];
+
+            connection.on("PriceUpdate", (data) => {
+                updateCount++;
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                log(`📈 Update #${updateCount} at ${elapsed}s: ${data.symbol || 'Unknown'} = ${data.price || 'N/A'}`, 'success');
+            });
+
+            setTimeout(() => {
+                const elapsedTime = Math.round((Date.now() - startTime) / 1000);
+                if (updateCount > 0) {
+                    testResults.liveUpdates = true;
+                    updateStatus('live-updates', `✅ Received ${updateCount} live updates in ${elapsedTime} seconds`, 'success');
+                    log(`✅ Live updates test completed: ${updateCount} updates received`, 'success');
+                } else {
+                    updateStatus('live-updates', `⚠️ No live updates received in ${elapsedTime} seconds`, 'warning');
+                    log('⚠️ No live updates received during monitoring period', 'warning');
+                }
+                updateTestSummary();
+            }, 30000);
+        }
+
+        function updateTestSummary() {
+            const summaryDiv = document.getElementById('test-summary');
+            const totalTests = Object.keys(testResults).length;
+            const passedTests = Object.values(testResults).filter(Boolean).length;
+
+            let summary = `<h3>Test Results: ${passedTests}/${totalTests} Passed</h3>`;
+
+            for (const [test, passed] of Object.entries(testResults)) {
+                const status = passed ? '✅' : '❌';
+                const testName = test.replace(/([A-Z])/g, ' $1').toLowerCase();
+                summary += `<div class="test-result ${passed ? 'success' : 'error'}">${status} ${testName}</div>`;
+            }
+
+            if (passedTests === totalTests) {
+                summary += '<div class="test-result success">🎉 All critical fixes implemented successfully!</div>';
+            } else {
+                summary += '<div class="test-result warning">⚠️ Some issues still need attention</div>';
+            }
+
+            summaryDiv.innerHTML = summary;
+        }
+
+        // Initialize test summary on load
+        window.onload = () => {
+            updateTestSummary();
+        };
+    </script>
+</body>
+</html>

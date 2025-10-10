@@ -1,0 +1,546 @@
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MyTrader.Core.DTOs;
+using System.Text.Json;
+
+namespace MyTrader.Infrastructure.Caching;
+
+/// <summary>
+/// Multi-tier caching service for market data optimization
+/// L1: In-Memory Cache (ultra-fast, limited size)
+/// L2: Redis Cache (fast, distributed)
+/// L3: Database (source of truth)
+/// </summary>
+public interface IMarketDataCachingService
+{
+    Task<T?> GetAsync<T>(string key) where T : class;
+    Task SetAsync<T>(string key, T value, TimeSpan? expiry = null) where T : class;
+    Task InvalidateAsync(string key);
+    Task InvalidatePatternAsync(string pattern);
+    Task<Dictionary<string, T?>> GetBatchAsync<T>(IEnumerable<string> keys) where T : class;
+    Task SetBatchAsync<T>(Dictionary<string, T> keyValuePairs, TimeSpan? expiry = null) where T : class;
+
+    // Specialized methods for market data
+    Task<OptimizedMarketOverviewDto?> GetMarketOverviewAsync();
+    Task SetMarketOverviewAsync(OptimizedMarketOverviewDto overview);
+    Task<List<CompactSymbolDto>?> GetPopularSymbolsAsync(int limit, string? assetClass = null);
+    Task SetPopularSymbolsAsync(List<CompactSymbolDto> symbols, int limit, string? assetClass = null);
+    Task<OptimizedBatchMarketDataDto?> GetBatchMarketDataAsync(List<Guid> symbolIds);
+    Task SetBatchMarketDataAsync(OptimizedBatchMarketDataDto data, List<Guid> symbolIds);
+}
+
+public class MarketDataCachingService : IMarketDataCachingService
+{
+    private readonly IMemoryCache _memoryCache;
+    private readonly IDistributedCache _distributedCache;
+    private readonly ILogger<MarketDataCachingService> _logger;
+    private readonly MarketDataCacheOptions _options;
+
+    // Cache key prefixes
+    private const string PREFIX_OVERVIEW = "overview";
+    private const string PREFIX_SYMBOLS = "symbols";
+    private const string PREFIX_POPULAR = "popular";
+    private const string PREFIX_BATCH = "batch";
+    private const string PREFIX_MOVERS = "movers";
+    private const string PREFIX_NEWS = "news";
+    private const string PREFIX_SEARCH = "search";
+
+    public MarketDataCachingService(
+        IMemoryCache memoryCache,
+        IDistributedCache distributedCache,
+        ILogger<MarketDataCachingService> logger,
+        IOptions<MarketDataCacheOptions> options)
+    {
+        _memoryCache = memoryCache;
+        _distributedCache = distributedCache;
+        _logger = logger;
+        _options = options.Value;
+    }
+
+    public async Task<T?> GetAsync<T>(string key) where T : class
+    {
+        try
+        {
+            // L1: Check in-memory cache first (fastest)
+            if (_memoryCache.TryGetValue(key, out T? memoryValue))
+            {
+                _logger.LogDebug("Cache hit (L1): {Key}", key);
+                return memoryValue;
+            }
+
+            // L2: Check Redis cache (fast, distributed)
+            var distributedValue = await _distributedCache.GetStringAsync(key);
+            if (!string.IsNullOrEmpty(distributedValue))
+            {
+                _logger.LogDebug("Cache hit (L2): {Key}", key);
+
+                var deserializedValue = JsonSerializer.Deserialize<T>(distributedValue);
+
+                // Store in L1 cache for faster subsequent access
+                var l1Expiry = TimeSpan.FromMinutes(_options.L1CacheMinutes);
+                _memoryCache.Set(key, deserializedValue, l1Expiry);
+
+                return deserializedValue;
+            }
+
+            _logger.LogDebug("Cache miss: {Key}", key);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting cache value for key: {Key}", key);
+            return null;
+        }
+    }
+
+    public async Task SetAsync<T>(string key, T value, TimeSpan? expiry = null) where T : class
+    {
+        try
+        {
+            var actualExpiry = expiry ?? TimeSpan.FromMinutes(_options.DefaultCacheMinutes);
+
+            // Set in L1 cache (in-memory)
+            var l1Expiry = TimeSpan.FromMinutes(Math.Min(_options.L1CacheMinutes, (int)actualExpiry.TotalMinutes));
+            _memoryCache.Set(key, value, l1Expiry);
+
+            // Set in L2 cache (Redis)
+            var serializedValue = JsonSerializer.Serialize(value);
+            var distributedOptions = new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = actualExpiry
+            };
+
+            await _distributedCache.SetStringAsync(key, serializedValue, distributedOptions);
+
+            _logger.LogDebug("Cache set: {Key}, Expiry: {Expiry}", key, actualExpiry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting cache value for key: {Key}", key);
+        }
+    }
+
+    public async Task InvalidateAsync(string key)
+    {
+        try
+        {
+            // Remove from L1 cache
+            _memoryCache.Remove(key);
+
+            // Remove from L2 cache
+            await _distributedCache.RemoveAsync(key);
+
+            _logger.LogDebug("Cache invalidated: {Key}", key);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error invalidating cache for key: {Key}", key);
+        }
+    }
+
+    public async Task InvalidatePatternAsync(string pattern)
+    {
+        try
+        {
+            var database = _redis.GetDatabase();
+            var server = _redis.GetServer(_redis.GetEndPoints().First());
+
+            var keys = server.Keys(pattern: pattern);
+
+            var tasks = new List<Task>();
+            foreach (var key in keys)
+            {
+                tasks.Add(database.KeyDeleteAsync(key));
+                _memoryCache.Remove(key.ToString());
+            }
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogDebug("Cache pattern invalidated: {Pattern}", pattern);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error invalidating cache pattern: {Pattern}", pattern);
+        }
+    }
+
+    public async Task<Dictionary<string, T?>> GetBatchAsync<T>(IEnumerable<string> keys) where T : class
+    {
+        var result = new Dictionary<string, T?>();
+        var keysToFetch = new List<string>();
+
+        // Check L1 cache first
+        foreach (var key in keys)
+        {
+            if (_memoryCache.TryGetValue(key, out T? value))
+            {
+                result[key] = value;
+            }
+            else
+            {
+                keysToFetch.Add(key);
+                result[key] = null;
+            }
+        }
+
+        if (keysToFetch.Count == 0)
+            return result;
+
+        try
+        {
+            // Batch fetch from Redis
+            var database = _redis.GetDatabase();
+            var redisTasks = keysToFetch.Select(key => database.StringGetAsync(key)).ToArray();
+            var redisValues = await Task.WhenAll(redisTasks);
+
+            for (int i = 0; i < keysToFetch.Count; i++)
+            {
+                var key = keysToFetch[i];
+                var redisValue = redisValues[i];
+
+                if (redisValue.HasValue)
+                {
+                    var deserializedValue = JsonSerializer.Deserialize<T>(redisValue);
+                    result[key] = deserializedValue;
+
+                    // Cache in L1 for faster subsequent access
+                    var l1Expiry = TimeSpan.FromMinutes(_options.L1CacheMinutes);
+                    _memoryCache.Set(key, deserializedValue, l1Expiry);
+                }
+            }
+
+            _logger.LogDebug("Batch cache operation completed: {KeyCount} keys", keys.Count());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in batch cache operation");
+        }
+
+        return result;
+    }
+
+    public async Task SetBatchAsync<T>(Dictionary<string, T> keyValuePairs, TimeSpan? expiry = null) where T : class
+    {
+        try
+        {
+            var actualExpiry = expiry ?? TimeSpan.FromMinutes(_options.DefaultCacheMinutes);
+            var l1Expiry = TimeSpan.FromMinutes(Math.Min(_options.L1CacheMinutes, (int)actualExpiry.TotalMinutes));
+
+            // Set in L1 cache
+            foreach (var kvp in keyValuePairs)
+            {
+                _memoryCache.Set(kvp.Key, kvp.Value, l1Expiry);
+            }
+
+            // Batch set in Redis
+            var database = _redis.GetDatabase();
+            var redisTasks = keyValuePairs.Select(kvp =>
+                database.StringSetAsync(kvp.Key, JsonSerializer.Serialize(kvp.Value), actualExpiry)
+            ).ToArray();
+
+            await Task.WhenAll(redisTasks);
+
+            _logger.LogDebug("Batch cache set completed: {KeyCount} keys", keyValuePairs.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in batch cache set operation");
+        }
+    }
+
+    // ============================================
+    // SPECIALIZED MARKET DATA METHODS
+    // ============================================
+
+    public async Task<OptimizedMarketOverviewDto?> GetMarketOverviewAsync()
+    {
+        var key = BuildKey(PREFIX_OVERVIEW, "main");
+        return await GetAsync<OptimizedMarketOverviewDto>(key);
+    }
+
+    public async Task SetMarketOverviewAsync(OptimizedMarketOverviewDto overview)
+    {
+        var key = BuildKey(PREFIX_OVERVIEW, "main");
+        await SetAsync(key, overview, TimeSpan.FromSeconds(_options.OverviewCacheSeconds));
+    }
+
+    public async Task<List<CompactSymbolDto>?> GetPopularSymbolsAsync(int limit, string? assetClass = null)
+    {
+        var key = BuildKey(PREFIX_POPULAR, $"{assetClass ?? "all"}_{limit}");
+        return await GetAsync<List<CompactSymbolDto>>(key);
+    }
+
+    public async Task SetPopularSymbolsAsync(List<CompactSymbolDto> symbols, int limit, string? assetClass = null)
+    {
+        var key = BuildKey(PREFIX_POPULAR, $"{assetClass ?? "all"}_{limit}");
+        await SetAsync(key, symbols, TimeSpan.FromMinutes(_options.PopularSymbolsCacheMinutes));
+    }
+
+    public async Task<OptimizedBatchMarketDataDto?> GetBatchMarketDataAsync(List<Guid> symbolIds)
+    {
+        // For batch data, we might want to cache individual symbols
+        // and reconstruct the batch response
+        var symbolKeys = symbolIds.Select(id => BuildKey(PREFIX_BATCH, id.ToString())).ToList();
+        var cachedData = await GetBatchAsync<CompactMarketDataDto>(symbolKeys);
+
+        var successfulData = cachedData.Values.Where(d => d != null).ToList();
+
+        if (successfulData.Count == symbolIds.Count)
+        {
+            // All symbols found in cache
+            return new OptimizedBatchMarketDataDto
+            {
+                MarketData = successfulData!,
+                Metadata = new BatchMetadata
+                {
+                    RequestedSymbols = symbolIds.Count,
+                    SuccessfulSymbols = successfulData.Count,
+                    FailedSymbols = 0
+                },
+                CachedAt = DateTime.UtcNow
+            };
+        }
+
+        return null; // Partial cache hit - better to fetch fresh data
+    }
+
+    public async Task SetBatchMarketDataAsync(OptimizedBatchMarketDataDto data, List<Guid> symbolIds)
+    {
+        // Cache individual symbols for flexible batch reconstruction
+        var individualData = new Dictionary<string, CompactMarketDataDto>();
+
+        foreach (var marketData in data.MarketData)
+        {
+            var key = BuildKey(PREFIX_BATCH, marketData.SymbolId.ToString());
+            individualData[key] = marketData;
+        }
+
+        await SetBatchAsync(individualData, TimeSpan.FromSeconds(_options.RealtimeDataCacheSeconds));
+    }
+
+    // ============================================
+    // CACHE INVALIDATION METHODS
+    // ============================================
+
+    public async Task InvalidateMarketOverviewAsync()
+    {
+        await InvalidatePatternAsync(BuildPattern(PREFIX_OVERVIEW));
+    }
+
+    public async Task InvalidateSymbolDataAsync(Guid symbolId)
+    {
+        await InvalidateAsync(BuildKey(PREFIX_BATCH, symbolId.ToString()));
+        await InvalidatePatternAsync(BuildPattern(PREFIX_POPULAR));
+        await InvalidatePatternAsync(BuildPattern(PREFIX_MOVERS));
+    }
+
+    public async Task InvalidateAllMarketDataAsync()
+    {
+        var patterns = new[]
+        {
+            BuildPattern(PREFIX_OVERVIEW),
+            BuildPattern(PREFIX_SYMBOLS),
+            BuildPattern(PREFIX_POPULAR),
+            BuildPattern(PREFIX_BATCH),
+            BuildPattern(PREFIX_MOVERS)
+        };
+
+        var tasks = patterns.Select(InvalidatePatternAsync);
+        await Task.WhenAll(tasks);
+    }
+
+    // ============================================
+    // CACHE WARMING METHODS
+    // ============================================
+
+    public async Task WarmCacheAsync()
+    {
+        _logger.LogInformation("Starting cache warming process");
+
+        try
+        {
+            // Warm popular symbols cache
+            var popularTasks = new[]
+            {
+                WarmPopularSymbolsAsync(20, null),
+                WarmPopularSymbolsAsync(20, "CRYPTO"),
+                WarmPopularSymbolsAsync(20, "STOCK"),
+                WarmPopularSymbolsAsync(50, null)
+            };
+
+            await Task.WhenAll(popularTasks);
+
+            _logger.LogInformation("Cache warming completed successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during cache warming");
+        }
+    }
+
+    private async Task WarmPopularSymbolsAsync(int limit, string? assetClass)
+    {
+        try
+        {
+            // This would integrate with your actual data service
+            // For now, we'll create sample data
+            var symbols = new List<CompactSymbolDto>();
+
+            // Generate sample symbols for warming
+            for (int i = 0; i < limit; i++)
+            {
+                symbols.Add(new CompactSymbolDto
+                {
+                    Id = Guid.NewGuid(),
+                    Ticker = $"WARM{i}",
+                    DisplayName = $"Warm Symbol {i}",
+                    AssetClass = assetClass ?? "CRYPTO",
+                    IsPopular = true,
+                    IsActive = true
+                });
+            }
+
+            await SetPopularSymbolsAsync(symbols, limit, assetClass);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error warming popular symbols cache for limit={Limit}, assetClass={AssetClass}",
+                limit, assetClass);
+        }
+    }
+
+    // ============================================
+    // PRIVATE HELPER METHODS
+    // ============================================
+
+    private static string BuildKey(string prefix, string suffix)
+    {
+        return $"market_data:{prefix}:{suffix}";
+    }
+
+    private static string BuildPattern(string prefix)
+    {
+        return $"market_data:{prefix}:*";
+    }
+}
+
+/// <summary>
+/// Configuration options for market data caching
+/// </summary>
+public class MarketDataCacheOptions
+{
+    public const string SectionName = "MarketDataCache";
+
+    /// <summary>
+    /// Default cache duration in minutes
+    /// </summary>
+    public int DefaultCacheMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// L1 (in-memory) cache duration in minutes
+    /// </summary>
+    public int L1CacheMinutes { get; set; } = 2;
+
+    /// <summary>
+    /// Market overview cache duration in seconds
+    /// </summary>
+    public int OverviewCacheSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Popular symbols cache duration in minutes
+    /// </summary>
+    public int PopularSymbolsCacheMinutes { get; set; } = 15;
+
+    /// <summary>
+    /// Real-time market data cache duration in seconds
+    /// </summary>
+    public int RealtimeDataCacheSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// News data cache duration in minutes
+    /// </summary>
+    public int NewsCacheMinutes { get; set; } = 10;
+
+    /// <summary>
+    /// Search results cache duration in minutes
+    /// </summary>
+    public int SearchCacheMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Top movers cache duration in minutes
+    /// </summary>
+    public int TopMoversCacheMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Leaderboard cache duration in minutes
+    /// </summary>
+    public int LeaderboardCacheMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// Maximum in-memory cache size in MB
+    /// </summary>
+    public int MaxMemoryCacheSizeMB { get; set; } = 100;
+
+    /// <summary>
+    /// Enable cache compression for large objects
+    /// </summary>
+    public bool EnableCompression { get; set; } = true;
+
+    /// <summary>
+    /// Redis connection string
+    /// </summary>
+    public string RedisConnectionString { get; set; } = "localhost:6379";
+
+    /// <summary>
+    /// Redis database number for market data
+    /// </summary>
+    public int RedisDatabase { get; set; } = 0;
+}
+
+/// <summary>
+/// Background service for cache maintenance and warming
+/// </summary>
+public class MarketDataCacheMaintenanceService : BackgroundService
+{
+    private readonly IMarketDataCachingService _cachingService;
+    private readonly ILogger<MarketDataCacheMaintenanceService> _logger;
+    private readonly MarketDataCacheOptions _options;
+
+    public MarketDataCacheMaintenanceService(
+        IMarketDataCachingService cachingService,
+        ILogger<MarketDataCacheMaintenanceService> logger,
+        IOptions<MarketDataCacheOptions> options)
+    {
+        _cachingService = cachingService;
+        _logger = logger;
+        _options = options.Value;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Initial cache warming
+        await _cachingService.WarmCacheAsync();
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                // Warm cache every 30 minutes
+                await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
+
+                if (!stoppingToken.IsCancellationRequested)
+                {
+                    await _cachingService.WarmCacheAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in cache maintenance service");
+                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            }
+        }
+    }
+}
