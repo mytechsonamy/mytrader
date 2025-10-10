@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MyTrader.Api.Hubs;
 using MyTrader.Core.Models;
 using MyTrader.Core.Enums;
+using MyTrader.Core.Interfaces;
 using MarketStatus = MyTrader.Core.Enums.MarketStatus;
 using MyTrader.Services.Market;
 using System.Collections.Concurrent;
@@ -16,12 +17,17 @@ namespace MyTrader.Api.Services;
 public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 {
     private readonly IBinanceWebSocketService _binanceService;
-    private readonly IHubContext<DashboardHub> _hubContext;
+    private readonly YahooFinancePollingService _yahooFinanceService;
+    private readonly IServiceProvider _serviceProvider; // Changed to IServiceProvider for optional DataSourceRouter
+    private readonly IHubContext<DashboardHub> _dashboardHubContext;
+    private readonly IHubContext<MarketDataHub> _marketDataHubContext;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMarketHoursService _marketHoursService;
     private readonly ILogger<MultiAssetDataBroadcastService> _logger;
     private readonly ConcurrentDictionary<string, DateTime> _lastBroadcastTimes;
     private readonly Timer _metricsTimer;
     private bool _disposed;
+    private MyTrader.Core.Services.IDataSourceRouter? _dataSourceRouter; // Optional - only if Alpaca enabled
 
     // Broadcast throttling configuration
     private readonly TimeSpan _minBroadcastInterval = TimeSpan.FromMilliseconds(50); // Max 20 updates per second per symbol
@@ -35,13 +41,21 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
     public MultiAssetDataBroadcastService(
         IBinanceWebSocketService binanceService,
-        IHubContext<DashboardHub> hubContext,
+        YahooFinancePollingService yahooFinanceService,
+        IServiceProvider serviceProvider,
+        IHubContext<DashboardHub> dashboardHubContext,
+        IHubContext<MarketDataHub> marketDataHubContext,
         IServiceScopeFactory scopeFactory,
+        IMarketHoursService marketHoursService,
         ILogger<MultiAssetDataBroadcastService> logger)
     {
         _binanceService = binanceService;
-        _hubContext = hubContext;
+        _yahooFinanceService = yahooFinanceService;
+        _serviceProvider = serviceProvider;
+        _dashboardHubContext = dashboardHubContext;
+        _marketDataHubContext = marketDataHubContext;
         _scopeFactory = scopeFactory;
+        _marketHoursService = marketHoursService;
         _logger = logger;
         _lastBroadcastTimes = new ConcurrentDictionary<string, DateTime>();
         _broadcastSemaphore = new SemaphoreSlim(_maxConcurrentBroadcasts, _maxConcurrentBroadcasts);
@@ -56,13 +70,32 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
         try
         {
-            // Subscribe to Binance service events
+            // Subscribe to Binance service events (crypto)
             _binanceService.PriceUpdated += OnBinancePriceUpdated;
+
+            // Try to get DataSourceRouter (optional - only if Alpaca streaming is enabled)
+            _dataSourceRouter = _serviceProvider.GetService<MyTrader.Core.Services.IDataSourceRouter>();
+
+            if (_dataSourceRouter != null)
+            {
+                // Subscribe to routed stock price events from DataSourceRouter
+                _dataSourceRouter.PriceDataRouted += OnRoutedStockPriceUpdated;
+                _logger.LogInformation("Connected to DataSourceRouter for Alpaca/Yahoo routing");
+
+                // Also subscribe to Yahoo directly so it can notify the router
+                _yahooFinanceService.StockPriceUpdated += OnYahooStockPriceForRouter;
+            }
+            else
+            {
+                // Fallback: Subscribe directly to Yahoo Finance service events (legacy mode)
+                _yahooFinanceService.StockPriceUpdated += OnStockPriceUpdated;
+                _logger.LogInformation("DataSourceRouter not available, using direct Yahoo Finance integration");
+            }
 
             // Start metrics timer
             _metricsTimer.Change(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
 
-            _logger.LogInformation("MultiAssetDataBroadcastService started successfully");
+            _logger.LogInformation("MultiAssetDataBroadcastService started successfully - listening to Binance (crypto) and stock data sources");
         }
         catch (Exception ex)
         {
@@ -80,8 +113,18 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             // Stop metrics timer
             _metricsTimer.Change(Timeout.Infinite, Timeout.Infinite);
 
-            // Unsubscribe from Binance service events
+            // Unsubscribe from service events
             _binanceService.PriceUpdated -= OnBinancePriceUpdated;
+
+            if (_dataSourceRouter != null)
+            {
+                _dataSourceRouter.PriceDataRouted -= OnRoutedStockPriceUpdated;
+                _yahooFinanceService.StockPriceUpdated -= OnYahooStockPriceForRouter;
+            }
+            else
+            {
+                _yahooFinanceService.StockPriceUpdated -= OnStockPriceUpdated;
+            }
 
             // Wait for any ongoing broadcasts to complete
             for (int i = 0; i < _maxConcurrentBroadcasts; i++)
@@ -128,6 +171,99 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
         _ = Task.Run(async () => await BroadcastPriceUpdateAsync(multiAssetUpdate));
     }
 
+    private async void OnStockPriceUpdated(StockPriceData stockUpdate)
+    {
+        // Legacy handler for direct Yahoo integration (when DataSourceRouter is not available)
+        _logger.LogDebug("Received stock price update for {Symbol} ({AssetClass}): ${Price} from {Source}",
+            stockUpdate.Symbol, stockUpdate.AssetClass, stockUpdate.Price, stockUpdate.Source);
+
+        // Enrich with market status information
+        EnrichWithMarketStatus(stockUpdate);
+
+        // Convert to multi-asset format for broadcasting
+        var multiAssetUpdate = new MultiAssetPriceUpdate
+        {
+            Type = "PriceUpdate",
+            AssetClass = stockUpdate.AssetClass,
+            Symbol = stockUpdate.Symbol,
+            Price = stockUpdate.Price,
+            Change24h = stockUpdate.PriceChange, // ✅ FIX: Use price change amount, not percent
+            Volume = stockUpdate.Volume,
+            MarketStatus = stockUpdate.MarketStatus,
+            Timestamp = stockUpdate.Timestamp,
+            Source = $"YAHOO_{stockUpdate.Market}",
+            Metadata = new Dictionary<string, object>
+            {
+                { "market", stockUpdate.Market },
+                { "priceChange", stockUpdate.PriceChange },
+                { "priceChangePercent", stockUpdate.PriceChangePercent },
+                { "originalTimestamp", stockUpdate.Timestamp },
+                { "dataSource", stockUpdate.Source },
+                { "nextOpenTime", stockUpdate.NextOpenTime },
+                { "nextCloseTime", stockUpdate.NextCloseTime },
+                { "marketClosureReason", stockUpdate.MarketClosureReason ?? string.Empty }
+            }
+        };
+
+        _ = Task.Run(async () => await BroadcastPriceUpdateAsync(multiAssetUpdate));
+    }
+
+    /// <summary>
+    /// Handler for routed stock price data from DataSourceRouter (Alpaca/Yahoo)
+    /// </summary>
+    private async void OnRoutedStockPriceUpdated(StockPriceData stockUpdate)
+    {
+        _logger.LogDebug("Received routed stock price update for {Symbol}: ${Price} from {Source}",
+            stockUpdate.Symbol, stockUpdate.Price, stockUpdate.Source);
+
+        // Enrich with market status information
+        EnrichWithMarketStatus(stockUpdate);
+
+        // Convert to multi-asset format for broadcasting
+        var multiAssetUpdate = new MultiAssetPriceUpdate
+        {
+            Type = "PriceUpdate",
+            AssetClass = stockUpdate.AssetClass,
+            Symbol = stockUpdate.Symbol,
+            Price = stockUpdate.Price,
+            Change24h = stockUpdate.PriceChange, // ✅ FIX: Use price change amount, not percent
+            Volume = stockUpdate.Volume,
+            MarketStatus = stockUpdate.MarketStatus,
+            Timestamp = stockUpdate.Timestamp,
+            Source = stockUpdate.Source, // "ALPACA" or "YAHOO_FALLBACK"
+            Metadata = new Dictionary<string, object>
+            {
+                { "market", stockUpdate.Market },
+                { "priceChange", stockUpdate.PriceChange },
+                { "priceChangePercent", stockUpdate.PriceChangePercent },
+                { "originalTimestamp", stockUpdate.Timestamp },
+                { "dataSource", stockUpdate.Source },
+                { "isRealTime", stockUpdate.IsRealTime },
+                { "qualityScore", stockUpdate.QualityScore },
+                { "nextOpenTime", stockUpdate.NextOpenTime },
+                { "nextCloseTime", stockUpdate.NextCloseTime },
+                { "marketClosureReason", stockUpdate.MarketClosureReason ?? string.Empty }
+            }
+        };
+
+        _ = Task.Run(async () => await BroadcastPriceUpdateAsync(multiAssetUpdate));
+    }
+
+    /// <summary>
+    /// Handler for Yahoo price data that forwards to DataSourceRouter
+    /// </summary>
+    private void OnYahooStockPriceForRouter(StockPriceData stockUpdate)
+    {
+        if (_dataSourceRouter != null)
+        {
+            // Mark as Yahoo fallback source
+            stockUpdate.Source = "YAHOO_FALLBACK";
+            stockUpdate.QualityScore = 80; // Lower quality score for fallback
+
+            _dataSourceRouter.OnYahooPriceUpdate(stockUpdate);
+        }
+    }
+
     private async Task BroadcastPriceUpdateAsync(MultiAssetPriceUpdate priceUpdate)
     {
         if (!await _broadcastSemaphore.WaitAsync(TimeSpan.FromSeconds(5)))
@@ -146,17 +282,27 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
             // Send to symbol-specific group with new standard event names
             var symbolGroup = $"{priceUpdate.AssetClass}_{priceUpdate.Symbol}";
+            
+            // Broadcast to both DashboardHub and MarketDataHub
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(symbolGroup).SendAsync("PriceUpdate", priceUpdate)));
+                _dashboardHubContext.Clients.Group(symbolGroup).SendAsync("PriceUpdate", priceUpdate)));
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(symbolGroup).SendAsync("MarketDataUpdate", priceUpdate)));
+                _dashboardHubContext.Clients.Group(symbolGroup).SendAsync("MarketDataUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(symbolGroup).SendAsync("PriceUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(symbolGroup).SendAsync("MarketDataUpdate", priceUpdate)));
 
             // Send to asset class group for dashboard updates with new standard event names
             var assetClassGroup = $"AssetClass_{priceUpdate.AssetClass}";
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(assetClassGroup).SendAsync("PriceUpdate", priceUpdate)));
+                _dashboardHubContext.Clients.Group(assetClassGroup).SendAsync("PriceUpdate", priceUpdate)));
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(assetClassGroup).SendAsync("MarketDataUpdate", priceUpdate)));
+                _dashboardHubContext.Clients.Group(assetClassGroup).SendAsync("MarketDataUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(assetClassGroup).SendAsync("PriceUpdate", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(assetClassGroup).SendAsync("MarketDataUpdate", priceUpdate)));
 
             // Legacy format for backward compatibility with ReceivePriceUpdate and ReceiveMarketData events
             var legacyUpdate = new
@@ -171,25 +317,43 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
 
             // Legacy events for backward compatibility with better error handling
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(symbolGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+                _dashboardHubContext.Clients.Group(symbolGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(assetClassGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+                _dashboardHubContext.Clients.Group(assetClassGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(symbolGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+                _dashboardHubContext.Clients.Group(symbolGroup).SendAsync("ReceiveMarketData", priceUpdate)));
             broadcastTasks.Add(SafeBroadcastAsync(() =>
-                _hubContext.Clients.Group(assetClassGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+                _dashboardHubContext.Clients.Group(assetClassGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+            
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(symbolGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(assetClassGroup).SendAsync("ReceivePriceUpdate", legacyUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(symbolGroup).SendAsync("ReceiveMarketData", priceUpdate)));
+            broadcastTasks.Add(SafeBroadcastAsync(() =>
+                _marketDataHubContext.Clients.Group(assetClassGroup).SendAsync("ReceiveMarketData", priceUpdate)));
 
             // Additional legacy crypto-specific groups for backward compatibility
             if (priceUpdate.AssetClass == AssetClassCode.CRYPTO)
             {
                 broadcastTasks.Add(SafeBroadcastAsync(() =>
-                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("PriceUpdate", legacyUpdate)));
+                    _dashboardHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("PriceUpdate", legacyUpdate)));
                 broadcastTasks.Add(SafeBroadcastAsync(() =>
-                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceivePriceUpdate", legacyUpdate)));
+                    _dashboardHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceivePriceUpdate", legacyUpdate)));
                 broadcastTasks.Add(SafeBroadcastAsync(() =>
-                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("MarketDataUpdate", priceUpdate)));
+                    _dashboardHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("MarketDataUpdate", priceUpdate)));
                 broadcastTasks.Add(SafeBroadcastAsync(() =>
-                    _hubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceiveMarketData", priceUpdate)));
+                    _dashboardHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceiveMarketData", priceUpdate)));
+                    
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _marketDataHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("PriceUpdate", legacyUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _marketDataHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceivePriceUpdate", legacyUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _marketDataHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("MarketDataUpdate", priceUpdate)));
+                broadcastTasks.Add(SafeBroadcastAsync(() =>
+                    _marketDataHubContext.Clients.Group($"Symbol_{priceUpdate.Symbol}").SendAsync("ReceiveMarketData", priceUpdate)));
             }
 
             // Execute all broadcasts concurrently with timeout
@@ -298,6 +462,41 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error logging metrics");
+        }
+    }
+
+    /// <summary>
+    /// Enriches stock price data with current market hours and status information
+    /// </summary>
+    private void EnrichWithMarketStatus(StockPriceData stockUpdate)
+    {
+        try
+        {
+            // Determine exchange from symbol
+            var exchange = _marketHoursService.GetExchangeForSymbol(stockUpdate.Symbol);
+            stockUpdate.Exchange = exchange;
+
+            // Get market status
+            var marketStatus = _marketHoursService.GetMarketStatus(exchange);
+
+            // Enrich the DTO with market status information
+            stockUpdate.MarketStatus = marketStatus.State;
+            stockUpdate.LastUpdateTime = marketStatus.LastCheckTime;
+            stockUpdate.NextOpenTime = marketStatus.NextOpenTime;
+            stockUpdate.NextCloseTime = marketStatus.NextCloseTime;
+            stockUpdate.MarketClosureReason = marketStatus.ClosureReason;
+
+            _logger.LogTrace("Enriched {Symbol} with market status: {State} (Exchange: {Exchange})",
+                stockUpdate.Symbol, marketStatus.State, exchange);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to enrich market status for {Symbol}, using defaults",
+                stockUpdate.Symbol);
+
+            // Set safe defaults on error
+            stockUpdate.MarketStatus = MarketStatus.UNKNOWN;
+            stockUpdate.LastUpdateTime = DateTime.UtcNow;
         }
     }
 
