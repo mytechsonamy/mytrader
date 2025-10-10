@@ -111,6 +111,81 @@ public class YahooFinanceApiService
     }
 
     /// <summary>
+    /// Get intraday market data for a symbol from Yahoo Finance with specified interval
+    /// </summary>
+    public async Task<YahooFinanceResult<List<HistoricalMarketData>>> GetIntradayDataAsync(
+        string symbol,
+        DateTime startDate,
+        DateTime endDate,
+        string interval = "5m",
+        string market = "NASDAQ",
+        CancellationToken cancellationToken = default)
+    {
+        await EnforceRateLimitAsync(cancellationToken);
+
+        try
+        {
+            var yahooSymbol = ConvertToYahooSymbol(symbol, market);
+            var url = BuildIntradayDataUrl(yahooSymbol, startDate, endDate, interval);
+
+            _logger.LogDebug("Fetching {Interval} data for {Symbol} from {StartDate} to {EndDate}",
+                interval, yahooSymbol, startDate.ToString("yyyy-MM-dd HH:mm"), endDate.ToString("yyyy-MM-dd HH:mm"));
+
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Yahoo Finance API error for {Symbol} ({Interval}): {StatusCode} - {Error}",
+                    yahooSymbol, interval, response.StatusCode, errorContent);
+
+                return new YahooFinanceResult<List<HistoricalMarketData>>
+                {
+                    Success = false,
+                    ErrorMessage = $"API error {response.StatusCode}: {errorContent}",
+                    Symbol = symbol
+                };
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var intradayData = ParseIntradayDataResponse(content, symbol, market, interval);
+
+            _logger.LogDebug("Successfully fetched {Count} {Interval} records for {Symbol}",
+                intradayData.Count, interval, yahooSymbol);
+
+            return new YahooFinanceResult<List<HistoricalMarketData>>
+            {
+                Success = true,
+                Data = intradayData,
+                Symbol = symbol,
+                RecordsCount = intradayData.Count
+            };
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning("Request timeout for {Symbol} ({Interval}): {Message}", symbol, interval, ex.Message);
+            return new YahooFinanceResult<List<HistoricalMarketData>>
+            {
+                Success = false,
+                ErrorMessage = "Request timeout",
+                Symbol = symbol,
+                IsRetryable = true
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching {Interval} data for {Symbol}", interval, symbol);
+            return new YahooFinanceResult<List<HistoricalMarketData>>
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+                Symbol = symbol,
+                IsRetryable = IsRetryableError(ex)
+            };
+        }
+    }
+
+    /// <summary>
     /// Get latest quote for real-time validation
     /// </summary>
     public async Task<YahooFinanceResult<decimal?>> GetLatestPriceAsync(
@@ -183,7 +258,7 @@ public class YahooFinanceApiService
         return market.ToUpper() switch
         {
             "BIST" => $"{symbol}.IS",  // BIST symbols need .IS suffix
-            "CRYPTO" => $"{symbol}-USD", // Crypto pairs
+            "CRYPTO" => symbol.EndsWith("-USD") ? symbol : $"{symbol}-USD", // Crypto pairs - check if already has -USD
             "NASDAQ" or "NYSE" => symbol, // US symbols as-is
             _ => symbol
         };
@@ -196,6 +271,15 @@ public class YahooFinanceApiService
 
         return $"https://query1.finance.yahoo.com/v7/finance/download/{yahooSymbol}?" +
                $"period1={start}&period2={end}&interval=1d&events=history&includeAdjustedClose=true";
+    }
+
+    private string BuildIntradayDataUrl(string yahooSymbol, DateTime startDate, DateTime endDate, string interval)
+    {
+        var start = ((DateTimeOffset)startDate).ToUnixTimeSeconds();
+        var end = ((DateTimeOffset)endDate).ToUnixTimeSeconds();
+
+        return $"https://query1.finance.yahoo.com/v8/finance/chart/{yahooSymbol}?" +
+               $"period1={start}&period2={end}&interval={interval}&includePrePost=false";
     }
 
     private string BuildQuoteUrl(string yahooSymbol)
@@ -236,13 +320,24 @@ public class YahooFinanceApiService
                     DataCollectedAt = DateTime.UtcNow
                 };
 
-                // Calculate derived fields
-                if (record.ClosePrice.HasValue && record.OpenPrice.HasValue)
+                // ✅ FIX: Calculate derived fields using previous record's close as previous close
+                if (record.ClosePrice.HasValue)
                 {
-                    record.PreviousClose = record.OpenPrice; // Approximation
-                    record.PriceChange = record.ClosePrice.Value - record.OpenPrice.Value;
-                    record.PriceChangePercent = record.OpenPrice.Value != 0 ?
-                        (record.PriceChange / record.OpenPrice.Value * 100) : 0;
+                    // Use previous record's close as this record's previous close
+                    if (records.Count > 0 && records[^1].ClosePrice.HasValue)
+                    {
+                        record.PreviousClose = records[^1].ClosePrice.Value;
+                        record.PriceChange = record.ClosePrice.Value - record.PreviousClose.Value;
+                        record.PriceChangePercent = record.PreviousClose.Value != 0 ?
+                            (record.PriceChange / record.PreviousClose.Value * 100) : 0;
+                    }
+                    else
+                    {
+                        // First record: no previous close available
+                        record.PreviousClose = null;
+                        record.PriceChange = 0;
+                        record.PriceChangePercent = 0;
+                    }
                 }
 
                 // Set data quality score
@@ -258,6 +353,116 @@ public class YahooFinanceApiService
         }
 
         return records;
+    }
+
+    private List<HistoricalMarketData> ParseIntradayDataResponse(string jsonContent, string originalSymbol, string market, string interval)
+    {
+        var records = new List<HistoricalMarketData>();
+
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonContent);
+            var chart = doc.RootElement.GetProperty("chart");
+
+            if (!chart.GetProperty("result").EnumerateArray().Any())
+            {
+                _logger.LogWarning("No chart result data found for {Symbol}", originalSymbol);
+                return records;
+            }
+
+            var result = chart.GetProperty("result")[0];
+            var timestamps = result.GetProperty("timestamp").EnumerateArray().Select(t => t.GetInt64()).ToArray();
+            var indicators = result.GetProperty("indicators");
+            var quote = indicators.GetProperty("quote")[0];
+
+            var opens = quote.TryGetProperty("open", out var openProp) ? openProp.EnumerateArray().Select(ParseJsonDecimal).ToArray() : new decimal?[timestamps.Length];
+            var highs = quote.TryGetProperty("high", out var highProp) ? highProp.EnumerateArray().Select(ParseJsonDecimal).ToArray() : new decimal?[timestamps.Length];
+            var lows = quote.TryGetProperty("low", out var lowProp) ? lowProp.EnumerateArray().Select(ParseJsonDecimal).ToArray() : new decimal?[timestamps.Length];
+            var closes = quote.TryGetProperty("close", out var closeProp) ? closeProp.EnumerateArray().Select(ParseJsonDecimal).ToArray() : new decimal?[timestamps.Length];
+            var volumes = quote.TryGetProperty("volume", out var volumeProp) ? volumeProp.EnumerateArray().Select(ParseJsonDecimal).ToArray() : new decimal?[timestamps.Length];
+
+            for (int i = 0; i < timestamps.Length; i++)
+            {
+                var timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamps[i]).DateTime;
+
+                var record = new HistoricalMarketData
+                {
+                    SymbolTicker = originalSymbol,
+                    DataSource = "YAHOO",
+                    MarketCode = market,
+                    TradeDate = DateOnly.FromDateTime(timestamp),
+                    Timestamp = timestamp,
+                    Timeframe = GetTimeframeFromInterval(interval),
+                    OpenPrice = opens[i],
+                    HighPrice = highs[i],
+                    LowPrice = lows[i],
+                    ClosePrice = closes[i],
+                    Volume = volumes[i],
+                    Currency = GetCurrencyForMarket(market),
+                    SourcePriority = GetSourcePriority(market),
+                    DataCollectedAt = DateTime.UtcNow
+                };
+
+                // ✅ FIX: Calculate derived fields using previous record's close as previous close
+                if (record.ClosePrice.HasValue)
+                {
+                    // Use previous record's close as this record's previous close
+                    if (records.Count > 0 && records[^1].ClosePrice.HasValue)
+                    {
+                        record.PreviousClose = records[^1].ClosePrice.Value;
+                        record.PriceChange = record.ClosePrice.Value - record.PreviousClose.Value;
+                        record.PriceChangePercent = record.PreviousClose.Value != 0 ?
+                            (record.PriceChange / record.PreviousClose.Value * 100) : 0;
+                    }
+                    else
+                    {
+                        // First record: no previous close available
+                        record.PreviousClose = null;
+                        record.PriceChange = 0;
+                        record.PriceChangePercent = 0;
+                    }
+                }
+
+                // Set data quality score
+                record.DataQualityScore = CalculateDataQualityScore(record);
+
+                records.Add(record);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse intraday JSON response for {Symbol}", originalSymbol);
+        }
+
+        return records;
+    }
+
+    private static decimal? ParseJsonDecimal(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Null || element.ValueKind == JsonValueKind.Undefined)
+            return null;
+
+        if (element.ValueKind == JsonValueKind.Number)
+            return (decimal)element.GetDouble();
+
+        return null;
+    }
+
+    private static string GetTimeframeFromInterval(string interval)
+    {
+        return interval switch
+        {
+            "1m" => "1MIN",
+            "2m" => "2MIN",
+            "5m" => "5MIN",
+            "15m" => "15MIN",
+            "30m" => "30MIN",
+            "60m" or "1h" => "1HOUR",
+            "1d" => "DAILY",
+            "1wk" => "WEEKLY",
+            "1mo" => "MONTHLY",
+            _ => interval.ToUpper()
+        };
     }
 
     private decimal? ParseQuoteResponse(string jsonContent)
