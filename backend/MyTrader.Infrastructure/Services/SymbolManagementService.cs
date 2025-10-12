@@ -59,11 +59,25 @@ public class SymbolManagementService : ISymbolManagementService
             }
 
             // Filter by market (legacy venue field OR new relationship)
+            // Support comma-separated market values (e.g., "NASDAQ,NYSE")
             if (!string.IsNullOrWhiteSpace(market))
             {
-                query = query.Where(s =>
-                    s.Venue == market ||
-                    (s.Market != null && s.Market.Code == market));
+                var markets = market.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                if (markets.Length == 1)
+                {
+                    // Single market - use simple comparison
+                    query = query.Where(s =>
+                        s.Venue == market ||
+                        (s.Market != null && s.Market.Code == market));
+                }
+                else
+                {
+                    // Multiple markets - use Contains check
+                    query = query.Where(s =>
+                        markets.Contains(s.Venue) ||
+                        (s.Market != null && markets.Contains(s.Market.Code)));
+                }
             }
 
             // Order by broadcast priority (highest first)
@@ -443,12 +457,23 @@ public class SymbolManagementService : ISymbolManagementService
                     (s.AssetClassEntity != null && s.AssetClassEntity.Code == assetClass));
             }
 
-            // Filter by market
+            // Filter by market (support comma-separated values)
             if (!string.IsNullOrWhiteSpace(market))
             {
-                query = query.Where(s =>
-                    s.Venue == market ||
-                    (s.Market != null && s.Market.Code == market));
+                var markets = market.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                if (markets.Length == 1)
+                {
+                    query = query.Where(s =>
+                        s.Venue == market ||
+                        (s.Market != null && s.Market.Code == market));
+                }
+                else
+                {
+                    query = query.Where(s =>
+                        markets.Contains(s.Venue) ||
+                        (s.Market != null && markets.Contains(s.Market.Code)));
+                }
             }
 
             // Filter by last broadcast time (use PriceUpdatedAt as proxy)

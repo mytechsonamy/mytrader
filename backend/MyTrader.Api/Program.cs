@@ -156,9 +156,12 @@ builder.Services.AddCors(options =>
         }
         else
         {
-            // Production - restrict to specific origins including web frontend ports
+            // Production - restrict to specific origins including production domain
             corsBuilder.WithOrigins(
-                           // Web frontend origins
+                           // Production domain
+                           "https://mytrader.tech", "https://www.mytrader.tech",
+                           "http://mytrader.tech", "http://www.mytrader.tech",  // Allow HTTP for redirects
+                           // Web frontend origins (for local testing)
                            "http://localhost:3000", "https://localhost:3000",   // React dev server
                            "http://localhost:5173", "https://localhost:5173",   // Vite dev server
                            "http://localhost:4173", "https://localhost:4173",   // Vite preview
@@ -375,6 +378,16 @@ builder.Services.AddSingleton<MyTrader.Core.Interfaces.IMarketHoursService, MyTr
 // Register YahooFinancePollingService as singleton (required by MultiAssetDataBroadcastService)
 builder.Services.AddSingleton<YahooFinancePollingService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<YahooFinancePollingService>());
+
+// Register AlpacaStreamingService for NASDAQ/NYSE real-time data (only if enabled in config)
+builder.Services.AddSingleton<MyTrader.Infrastructure.Services.AlpacaStreamingService>();
+builder.Services.AddSingleton<MyTrader.Infrastructure.Services.IAlpacaStreamingService>(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.AlpacaStreamingService>());
+builder.Services.AddHostedService(provider =>
+    provider.GetRequiredService<MyTrader.Infrastructure.Services.AlpacaStreamingService>());
+
+// Register DataSourceRouter for intelligent Alpaca (primary) / Yahoo (fallback) routing
+builder.Services.AddSingleton<MyTrader.Core.Services.IDataSourceRouter, MyTrader.Core.Services.DataSourceRouter>();
 
 // Register enhanced multi-asset data broadcast service (replaces old MarketDataBroadcastService)
 builder.Services.AddHostedService<MyTrader.Api.Services.MultiAssetDataBroadcastService>();

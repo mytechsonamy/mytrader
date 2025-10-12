@@ -47,8 +47,25 @@ TestResult*/
 .env
 .env.*
 !.env.example
+!.env.production.template
+
+# Production secrets (NEVER commit these!)
+.env.production
+appsettings.Production.json
+
+# Backups
+backups/
+*.sql
+*.sql.gz
+
+# SSL Certificates
+certbot/
+*.pem
+*.key
+*.crt
 
 # Keep Claude config
 !.claude/
 !.claude/**
 
+*.tar.gz

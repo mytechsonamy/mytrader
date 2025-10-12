@@ -39,7 +39,10 @@
       "Bash(dotnet ef database update:*)",
       "Bash(dotnet ef migrations add:*)",
       "Bash(docker logs:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
