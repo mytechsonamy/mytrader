@@ -163,6 +163,7 @@ builder.Services.AddCors(options =>
                            "http://mytrader.tech", "http://www.mytrader.tech",  // Allow HTTP for redirects
                            // Web frontend origins (for local testing)
                            "http://localhost:3000", "https://localhost:3000",   // React dev server
+                           "http://localhost:3002", "https://localhost:3002",   // Vite dev server (actual)
                            "http://localhost:5173", "https://localhost:5173",   // Vite dev server
                            "http://localhost:4173", "https://localhost:4173",   // Vite preview
                            "http://localhost:8080", "https://localhost:8080",   // Alternative web ports
@@ -378,6 +379,9 @@ builder.Services.AddSingleton<MyTrader.Core.Interfaces.IMarketHoursService, MyTr
 // Register YahooFinancePollingService as singleton (required by MultiAssetDataBroadcastService)
 builder.Services.AddSingleton<YahooFinancePollingService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<YahooFinancePollingService>());
+
+// Register StockDataPollingService for BIST, NASDAQ, NYSE stock data polling (10-second interval)
+builder.Services.AddHostedService<MyTrader.Api.Services.StockDataPollingService>();
 
 // Register AlpacaStreamingService for NASDAQ/NYSE real-time data (only if enabled in config)
 builder.Services.AddSingleton<MyTrader.Infrastructure.Services.AlpacaStreamingService>();

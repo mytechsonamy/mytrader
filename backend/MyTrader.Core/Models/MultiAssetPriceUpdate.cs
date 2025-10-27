@@ -43,6 +43,21 @@ public class MultiAssetPriceUpdate
     public decimal Volume { get; set; }
 
     /// <summary>
+    /// 24-hour high price
+    /// </summary>
+    public decimal? High { get; set; }
+
+    /// <summary>
+    /// 24-hour low price
+    /// </summary>
+    public decimal? Low { get; set; }
+
+    /// <summary>
+    /// Opening price
+    /// </summary>
+    public decimal? Open { get; set; }
+
+    /// <summary>
     /// Current market status
     /// </summary>
     public Enums.MarketStatus MarketStatus { get; set; }

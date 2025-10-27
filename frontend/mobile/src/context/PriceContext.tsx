@@ -422,15 +422,29 @@ export const PriceProvider: React.FC<PriceProviderProps> = ({ children }) => {
   }, [enhancedPrices]);
 
   const getPriceBySymbol = useCallback((symbol: string, assetClass?: AssetClassType): UnifiedMarketDataDto | null => {
-    // Find symbol in tracked symbols
+    // First, try direct lookup by symbol (since we index by both symbolId AND symbol)
+    const directPrice = enhancedPrices[symbol];
+    if (directPrice && (!assetClass || directPrice.assetClass === assetClass)) {
+      console.log(`[PriceContext] Found price for ${symbol} via direct lookup:`, directPrice.price);
+      return directPrice;
+    }
+
+    // Fallback: Find symbol in tracked symbols and lookup by symbolId
     const trackedSymbol = trackedSymbols.find(s =>
       s.symbol === symbol && (!assetClass || s.assetClassName === assetClass)
     );
 
     if (trackedSymbol) {
-      return enhancedPrices[trackedSymbol.id] || null;
+      const price = enhancedPrices[trackedSymbol.id];
+      if (price) {
+        console.log(`[PriceContext] Found price for ${symbol} via trackedSymbols lookup:`, price.price);
+      } else {
+        console.warn(`[PriceContext] Symbol ${symbol} found in trackedSymbols but no price data`);
+      }
+      return price || null;
     }
 
+    console.warn(`[PriceContext] No price found for symbol: ${symbol}, assetClass: ${assetClass}`);
     return null;
   }, [enhancedPrices, trackedSymbols]);
 

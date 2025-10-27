@@ -149,6 +149,19 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             return;
         }
 
+        // Calculate previousClose from current price and percent change
+        // Formula: previousClose = currentPrice / (1 + (changePercent / 100))
+        decimal previousClose = 0m;
+        if (priceUpdate.PriceChange != 0)
+        {
+            previousClose = priceUpdate.Price / (1 + (priceUpdate.PriceChange / 100m));
+        }
+        else
+        {
+            // If no change, previous close equals current price
+            previousClose = priceUpdate.Price;
+        }
+
         // Convert to multi-asset format for enhanced broadcasting
         var multiAssetUpdate = new MultiAssetPriceUpdate
         {
@@ -157,7 +170,11 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             Symbol = priceUpdate.Symbol,
             Price = priceUpdate.Price,
             Change24h = priceUpdate.PriceChange, // This is already a percentage from Binance
+            PreviousClose = previousClose, // ✅ FIXED: Calculate and add previous close for crypto
             Volume = priceUpdate.Volume,
+            High = priceUpdate.High, // 24h High
+            Low = priceUpdate.Low,   // 24h Low
+            Open = priceUpdate.Open, // Open price
             MarketStatus = MyTrader.Core.Enums.MarketStatus.OPEN, // Crypto markets are always open
             Timestamp = priceUpdate.Timestamp,
             Source = "BINANCE",
@@ -165,7 +182,11 @@ public class MultiAssetDataBroadcastService : IHostedService, IDisposable
             {
                 { "exchange", "BINANCE" },
                 { "originalTimestamp", priceUpdate.Timestamp },
-                { "percentChange24h", priceUpdate.PriceChange }
+                { "percentChange24h", priceUpdate.PriceChange },
+                { "previousClose", previousClose }, // ✅ FIXED: Add to metadata as well
+                { "high24h", priceUpdate.High },
+                { "low24h", priceUpdate.Low },
+                { "openPrice", priceUpdate.Open }
             }
         };
 

@@ -25,6 +25,9 @@ public class PriceUpdateData
     public decimal Price { get; set; }
     public decimal PriceChange { get; set; }
     public decimal Volume { get; set; }
+    public decimal High { get; set; }
+    public decimal Low { get; set; }
+    public decimal Open { get; set; }
     public DateTime Timestamp { get; set; }
 }
 
@@ -399,11 +402,14 @@ public class BinanceWebSocketService : BackgroundService, IBinanceWebSocketServi
             var price = decimal.Parse(tickerData["c"]?.ToString() ?? "0"); // Current price
             var priceChange = decimal.Parse(tickerData["P"]?.ToString() ?? "0"); // Price change percentage
             var volume = decimal.Parse(tickerData["v"]?.ToString() ?? "0"); // Volume
-            
+            var high = decimal.Parse(tickerData["h"]?.ToString() ?? "0"); // 24h High
+            var low = decimal.Parse(tickerData["l"]?.ToString() ?? "0"); // 24h Low
+            var open = decimal.Parse(tickerData["o"]?.ToString() ?? "0"); // Open price
+
             if (string.IsNullOrEmpty(symbol)) return Task.CompletedTask;
 
-            _logger.LogDebug("Received ticker data for {Symbol}: Price={Price}, Change={Change}%", 
-                symbol, price, priceChange);
+            _logger.LogDebug("Received ticker data for {Symbol}: Price={Price}, Change={Change}%, High={High}, Low={Low}",
+                symbol, price, priceChange, high, low);
 
             // Fire event for price update
             var update = new PriceUpdateData
@@ -412,6 +418,9 @@ public class BinanceWebSocketService : BackgroundService, IBinanceWebSocketServi
                 Price = price,
                 PriceChange = priceChange,
                 Volume = volume,
+                High = high,
+                Low = low,
+                Open = open,
                 Timestamp = DateTime.UtcNow
             };
 

@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '../components/ui';
 import AuthenticatedLayout from '../components/layout/AuthenticatedLayout';
 import { useMarketOverview } from '../hooks/useMarketData';
+import { useWebSocketPrices } from '../context/WebSocketPriceContext';
 import { formatCurrency, formatPercentage, cn } from '../utils';
 import type { MarketData } from '../types';
 
@@ -17,17 +18,56 @@ const StrategyTest: React.FC = () => {
   const name = searchParams.get('name') || symbol;
 
   const { data: marketData } = useMarketOverview();
+  const { prices, subscribeToSymbol, unsubscribeFromSymbol, isConnected } = useWebSocketPrices();
   const [selectedStrategy, setSelectedStrategy] = useState<string>('momentum');
   const [timeframe, setTimeframe] = useState<string>('1d');
   const [amount, setAmount] = useState<string>('10000');
 
-  // Get current market data for the symbol
-  const currentMarketData = React.useMemo(() => {
-    if (!marketData || !symbol) return null;
+  // Subscribe to symbol when page loads
+  useEffect(() => {
+    if (symbol && isConnected) {
+      console.log('[StrategyTest] Subscribing to symbol:', symbol);
+      subscribeToSymbol(symbol).catch(err => {
+        console.error('[StrategyTest] Failed to subscribe to symbol:', err);
+      });
 
-    const dataArray = Object.values(marketData as Record<string, MarketData>);
-    return dataArray.find((item: MarketData) => item.symbol === symbol);
-  }, [marketData, symbol]);
+      // Cleanup: unsubscribe when component unmounts or symbol changes
+      return () => {
+        console.log('[StrategyTest] Unsubscribing from symbol:', symbol);
+        unsubscribeFromSymbol(symbol).catch(err => {
+          console.error('[StrategyTest] Failed to unsubscribe from symbol:', err);
+        });
+      };
+    }
+  }, [symbol, isConnected, subscribeToSymbol, unsubscribeFromSymbol]);
+
+  // Get current market data for the symbol - prioritize WebSocket data
+  const currentMarketData = React.useMemo(() => {
+    if (!symbol) return null;
+
+    // First, try to get real-time WebSocket data
+    const wsData = prices[symbol];
+    if (wsData) {
+      return {
+        symbol: symbol,
+        price: wsData.price,
+        change: wsData.change,
+        changePercent: wsData.changePercent,
+        volume: wsData.volume,
+        high: wsData.high || wsData.price * 1.05, // Use real high from WebSocket or approximate
+        low: wsData.low || wsData.price * 0.95,   // Use real low from WebSocket or approximate
+        open: wsData.open || wsData.price,        // Use real open from WebSocket or current price
+      } as MarketData;
+    }
+
+    // Fall back to initial market data if WebSocket hasn't updated yet
+    if (marketData) {
+      const dataArray = Object.values(marketData as Record<string, MarketData>);
+      return dataArray.find((item: MarketData) => item.symbol === symbol) || null;
+    }
+
+    return null;
+  }, [symbol, prices, marketData]);
 
   if (!symbol) {
     return (
@@ -74,6 +114,18 @@ const StrategyTest: React.FC = () => {
         {currentMarketData && (
           <Card className="bg-gradient-to-br from-brand-50 to-brand-100 border-brand-200">
             <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-text-tertiary">Live Market Data</h3>
+                <div className="flex items-center space-x-2">
+                  <div className={cn(
+                    'h-2 w-2 rounded-full',
+                    isConnected ? 'bg-positive-500 animate-pulse' : 'bg-negative-500'
+                  )}></div>
+                  <span className="text-xs text-text-tertiary">
+                    {isConnected ? 'Live' : 'Disconnected'}
+                  </span>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm font-medium text-text-tertiary mb-1">Current Price</p>

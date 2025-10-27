@@ -22,7 +22,7 @@ public class StockDataPollingService : BackgroundService
     private readonly ConcurrentDictionary<string, DateTime> _lastBroadcastTimes;
     private readonly PeriodicTimer _pollingTimer;
     
-    private const int PollingIntervalSeconds = 60; // 1 minute
+    private const int PollingIntervalSeconds = 10; // 10 seconds for faster updates
     private long _totalPolls;
     private long _successfulPolls;
     private long _failedPolls;
@@ -202,7 +202,7 @@ public class StockDataPollingService : BackgroundService
 
             foreach (var price in prices)
             {
-                // Create price update message
+                // Create price update message with high/low/open values
                 var priceUpdate = new
                 {
                     type = "PriceUpdate",
@@ -212,7 +212,11 @@ public class StockDataPollingService : BackgroundService
                     price = price.Price,
                     change = price.PriceChange,
                     changePercent = price.PriceChangePercent,
+                    previousClose = price.PreviousClose,
                     volume = price.Volume,
+                    high = price.HighPrice,
+                    low = price.LowPrice,
+                    open = price.OpenPrice,
                     timestamp = price.DataTimestamp,
                     isRealTime = price.IsRealTime,
                     dataDelayMinutes = price.DataDelayMinutes,
@@ -235,13 +239,18 @@ public class StockDataPollingService : BackgroundService
                 broadcastTasks.Add(_dashboardHubContext.Clients.Group(marketGroup)
                     .SendAsync("PriceUpdate", priceUpdate, cancellationToken));
 
-                // Legacy format for backward compatibility
+                // Legacy format for backward compatibility (updated with all fields)
                 var legacyUpdate = new
                 {
                     symbol = price.Ticker,
                     price = price.Price,
                     change = price.PriceChange,
+                    changePercent = price.PriceChangePercent,
+                    previousClose = price.PreviousClose,
                     volume = price.Volume,
+                    high = price.HighPrice,
+                    low = price.LowPrice,
+                    open = price.OpenPrice,
                     timestamp = price.DataTimestamp,
                     assetClass = "STOCK"
                 };

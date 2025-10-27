@@ -14,6 +14,9 @@ interface PriceData {
   change: number;
   changePercent: number;
   volume: number;
+  high?: number;
+  low?: number;
+  open?: number;
   lastUpdate: string;
 }
 
@@ -41,8 +44,13 @@ export const WebSocketPriceProvider: React.FC<{ children: React.ReactNode }> = (
   useEffect(() => {
     console.log('[WebSocketPriceContext] Initializing WebSocket connection');
 
+    // Get backend URL from environment variable
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+    const wsUrl = `${backendUrl}/hubs/market-data`;
+    console.log('[WebSocketPriceContext] WebSocket URL:', wsUrl);
+
     const wsService = createWebSocketService({
-      url: 'http://localhost:5002/hubs/market-data',
+      url: wsUrl,
       onMarketDataUpdate: (data: MarketDataDto) => {
         console.log('[WebSocketPriceContext] Received market data update:', data.symbol, data.price);
 
@@ -62,6 +70,9 @@ export const WebSocketPriceProvider: React.FC<{ children: React.ReactNode }> = (
           change: normalized.changePercent, // Use percent as change for now
           changePercent: normalized.changePercent,
           volume: normalized.volume,
+          high: data.high || undefined,
+          low: data.low || undefined,
+          open: data.open || undefined,
           lastUpdate: data.lastUpdate || new Date().toISOString(),
         };
 
